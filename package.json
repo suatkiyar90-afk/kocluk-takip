@@ -1,0 +1,39 @@
+{
+  "name": "kocluk-takip",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "seed": "tsx --env-file=.env.local seed.ts",
+    "seed:curriculum": "tsx --env-file=.env.local db/seed-curriculum.ts"
+  },
+  "dependencies": {
+    "@auth/drizzle-adapter": "^1.11.3",
+    "@hookform/resolvers": "^3.9.0",
+    "@uploadthing/react": "^7.3.3",
+    "drizzle-orm": "^0.33.0",
+    "next": "^16.3.5",
+    "next-auth": "^5.0.0-beta.32",
+    "pg": "^8.12.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.53.0",
+    "sonner": "^1.5.0",
+    "uploadthing": "^7.7.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.5",
+    "@types/pg": "^8.11.8",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.6.1",
+    "drizzle-kit": "^0.24.2",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^3.4.19",
+    "tsx": "^4.23.13",
+    "typescript": "^5.6.2"
+  }
+}
