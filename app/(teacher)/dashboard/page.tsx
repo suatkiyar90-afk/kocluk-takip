@@ -37,7 +37,7 @@ export default async function TeacherDashboardPage() {
           </p>
         </header>
 
-        {!result.success ? (
+        {result.success === false ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
             {result.message}
           </div>

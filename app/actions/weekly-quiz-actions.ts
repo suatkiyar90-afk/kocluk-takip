@@ -123,6 +123,22 @@ export async function saveWeeklyQuizEntries(
       }
 
       if (filled.length > 0) {
+        const setValues = {
+          correct: sql`excluded.correct`,
+          wrong: sql`excluded.wrong`,
+          blank: sql`excluded.blank`,
+          updatedAt: sql`now()`,
+        } as {
+          studentId?: string;
+          weekStart?: string;
+          examType?: "TYT" | "AYT";
+          subjectId?: string;
+          correct: unknown;
+          wrong: unknown;
+          blank: unknown;
+          updatedAt?: unknown;
+        };
+
         const inserted = await tx
           .insert(weeklyQuestionEntries)
           .values(
@@ -143,12 +159,7 @@ export async function saveWeeklyQuizEntries(
               weeklyQuestionEntries.examType,
               weeklyQuestionEntries.subjectId,
             ],
-            set: {
-              correct: sql`excluded.correct`,
-              wrong: sql`excluded.wrong`,
-              blank: sql`excluded.blank`,
-              updatedAt: sql`now()`,
-            },
+            set: setValues,
           })
           .returning({ id: weeklyQuestionEntries.id });
 

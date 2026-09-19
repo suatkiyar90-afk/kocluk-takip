@@ -28,15 +28,18 @@ export const weeklyQuestionEntries = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [
-    uniqueIndex("weekly_entries_unique").on(
+  (t) => ({
+    weeklyEntriesUnique: uniqueIndex("weekly_entries_unique").on(
       t.studentId,
       t.weekStart,
       t.examType,
       t.subjectId,
     ),
-    index("weekly_entries_student_week_idx").on(t.studentId, t.weekStart),
-  ],
+    weeklyEntriesStudentWeekIdx: index("weekly_entries_student_week_idx").on(
+      t.studentId,
+      t.weekStart,
+    ),
+  }),
 );
 
 export const userRoleEnum = pgEnum("user_role", [
@@ -72,10 +75,10 @@ export const accounts = pgTable(
     id_token: text("id_token"),
     session_state: text("session_state"),
   },
-  (t) => [
-    primaryKey({ columns: [t.provider, t.providerAccountId] }),
-    index("accounts_user_id_idx").on(t.userId),
-  ],
+  (t) => ({
+    accountsPk: primaryKey({ columns: [t.provider, t.providerAccountId] }),
+    accountsUserIdIdx: index("accounts_user_id_idx").on(t.userId),
+  }),
 );
 
 export const sessions = pgTable(
@@ -85,7 +88,9 @@ export const sessions = pgTable(
     userId: uuid("user_id").notNull(),
     expires: timestamp("expires", { withTimezone: true }).notNull(),
   },
-  (t) => [index("sessions_user_id_idx").on(t.userId)],
+  (t) => ({
+    sessionsUserIdIdx: index("sessions_user_id_idx").on(t.userId),
+  }),
 );
 
 export const verificationTokens = pgTable(
@@ -95,7 +100,9 @@ export const verificationTokens = pgTable(
     token: text("token").notNull(),
     expires: timestamp("expires", { withTimezone: true }).notNull(),
   },
-  (t) => [primaryKey({ columns: [t.identifier, t.token] })],
+  (t) => ({
+    verificationTokensPk: primaryKey({ columns: [t.identifier, t.token] }),
+  }),
 );
 
 export const teacherStudents = pgTable(
@@ -108,10 +115,15 @@ export const teacherStudents = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (t) => [
-    uniqueIndex("teacher_students_unique").on(t.teacherId, t.studentId),
-    index("teacher_students_student_idx").on(t.studentId),
-  ],
+  (t) => ({
+    teacherStudentsUnique: uniqueIndex("teacher_students_unique").on(
+      t.teacherId,
+      t.studentId,
+    ),
+    teacherStudentsStudentIdx: index("teacher_students_student_idx").on(
+      t.studentId,
+    ),
+  }),
 );
 
 export const coachingFeedbacks = pgTable(
@@ -126,14 +138,16 @@ export const coachingFeedbacks = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (t) => [
-    uniqueIndex("coaching_feedbacks_unique").on(
+  (t) => ({
+    coachingFeedbacksUnique: uniqueIndex("coaching_feedbacks_unique").on(
       t.studentId,
       t.teacherId,
       t.weekStart,
     ),
-    index("coaching_feedbacks_student_week_idx").on(t.studentId, t.weekStart),
-  ],
+    coachingFeedbacksStudentWeekIdx: index(
+      "coaching_feedbacks_student_week_idx",
+    ).on(t.studentId, t.weekStart),
+  }),
 );
 
 export const questionImages = pgTable(
@@ -148,9 +162,12 @@ export const questionImages = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (t) => [
-    index("question_images_student_week_idx").on(t.studentId, t.weekStart),
-  ],
+  (t) => ({
+    questionImagesStudentWeekIdx: index("question_images_student_week_idx").on(
+      t.studentId,
+      t.weekStart,
+    ),
+  }),
 );
 
 export const curriculumTopics = pgTable(
@@ -163,14 +180,17 @@ export const curriculumTopics = pgTable(
     topicName: text("topic_name").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
   },
-  (t) => [
-    uniqueIndex("curriculum_topics_unique").on(
+  (t) => ({
+    curriculumTopicsUnique: uniqueIndex("curriculum_topics_unique").on(
       t.examType,
       t.subjectId,
       t.topicName,
     ),
-    index("curriculum_topics_subject_idx").on(t.examType, t.subjectId),
-  ],
+    curriculumTopicsSubjectIdx: index("curriculum_topics_subject_idx").on(
+      t.examType,
+      t.subjectId,
+    ),
+  }),
 );
 
 export const topicStatusEnum = pgEnum("topic_status", [
@@ -192,10 +212,15 @@ export const studentTopicProgress = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (t) => [
-    uniqueIndex("student_topic_progress_unique").on(t.studentId, t.topicId),
-    index("student_topic_progress_student_idx").on(t.studentId),
-  ],
+  (t) => ({
+    studentTopicProgressUnique: uniqueIndex("student_topic_progress_unique").on(
+      t.studentId,
+      t.topicId,
+    ),
+    studentTopicProgressStudentIdx: index(
+      "student_topic_progress_student_idx",
+    ).on(t.studentId),
+  }),
 );
 
 export const qaThreadStatusEnum = pgEnum("qa_thread_status", [
@@ -219,10 +244,13 @@ export const qaThreads = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (t) => [
-    index("qa_threads_student_status_idx").on(t.studentId, t.status),
-    index("qa_threads_student_idx").on(t.studentId),
-  ],
+  (t) => ({
+    qaThreadsStudentStatusIdx: index("qa_threads_student_status_idx").on(
+      t.studentId,
+      t.status,
+    ),
+    qaThreadsStudentIdx: index("qa_threads_student_idx").on(t.studentId),
+  }),
 );
 
 export type WeeklyQuestionEntry = typeof weeklyQuestionEntries.$inferSelect;

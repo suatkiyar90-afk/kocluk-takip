@@ -32,7 +32,7 @@ export default async function QuizEntryPage() {
           </div>
         )}
 
-        {result.success ? (
+        {result.success === true ? (
           <QuizEntryClient
             initialEntries={result.data.entries}
             weekStart={result.data.weekStart}

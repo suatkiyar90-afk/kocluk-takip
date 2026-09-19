@@ -34,7 +34,7 @@ export function FeedbackForm({
 
   const onSubmit = handleSubmit(async (values) => {
     const result = await saveCoachingFeedback(values);
-    if (result.success) {
+    if (result.success === true) {
       toast.success("Dönüt kaydedildi.");
       reset(values, { keepDirty: false });
     } else {

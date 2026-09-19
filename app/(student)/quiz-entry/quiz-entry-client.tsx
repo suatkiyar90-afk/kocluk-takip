@@ -16,7 +16,7 @@ export function QuizEntryClient({
 }: QuizEntryClientProps) {
   const handleSubmit = async (values: WeeklyQuizFormValues) => {
     const result = await saveWeeklyQuizEntries(values);
-    if (result.success) {
+    if (result.success === true) {
       const total = values.categories.reduce(
         (sum, row) => sum + row.correct + row.wrong + row.blank,
         0,
