@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 
 const TEST_ACCOUNTS = [
+  { label: "Yönetici", username: "admin", password: "test123" },
   { label: "Öğretmen", username: "teacher", password: "test123" },
   { label: "Öğrenci", username: "student", password: "test123" },
 ];
@@ -70,7 +71,7 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
               htmlFor="username"
               className="mb-1.5 block text-sm font-semibold text-gray-700"
             >
-              Kullanıcı Adı
+              Kullanıcı Adı (e-posta)
             </label>
             <input
               id="username"

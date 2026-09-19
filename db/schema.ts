@@ -55,6 +55,8 @@ export const users = pgTable("users", {
   emailVerified: timestamp("email_verified", { withTimezone: true }),
   image: text("image"),
   role: userRoleEnum("role").notNull().default("student"),
+  passwordHash: text("password_hash"),
+  weeklyTarget: integer("weekly_target").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

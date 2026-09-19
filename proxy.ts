@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 
+const HOME_BY_ROLE: Record<string, string> = {
+  admin: "/admin",
+  teacher: "/dashboard",
+  student: "/quiz-entry",
+};
+
+function homeFor(role?: string): string {
+  return HOME_BY_ROLE[role ?? ""] ?? "/login";
+}
+
 export const proxy = auth((request) => {
   const session = request.auth;
   const { pathname } = request.nextUrl;
@@ -8,8 +18,7 @@ export const proxy = auth((request) => {
 
   if (pathname.startsWith("/login")) {
     if (session?.user) {
-      const home = role === "teacher" || role === "admin" ? "/dashboard" : "/quiz-entry";
-      return NextResponse.redirect(new URL(home, request.url));
+      return NextResponse.redirect(new URL(homeFor(role), request.url));
     }
     return NextResponse.next();
   }
@@ -22,11 +31,21 @@ export const proxy = auth((request) => {
     return NextResponse.redirect(loginUrl);
   }
 
+  if (pathname.startsWith("/admin")) {
+    if (role !== "admin") {
+      return NextResponse.redirect(new URL(homeFor(role), request.url));
+    }
+    return NextResponse.next();
+  }
+
   const isTeacherArea =
     pathname.startsWith("/dashboard") || pathname.startsWith("/students");
 
-  if (isTeacherArea && role === "student") {
-    return NextResponse.redirect(new URL("/quiz-entry", request.url));
+  if (isTeacherArea && role !== "teacher") {
+    if (role === "admin") {
+      return NextResponse.next();
+    }
+    return NextResponse.redirect(new URL(homeFor(role), request.url));
   }
 
   const isStudentArea =
@@ -35,7 +54,11 @@ export const proxy = auth((request) => {
     pathname.startsWith("/mufredat");
 
   if (isStudentArea && role !== "student") {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(new URL(homeFor(role), request.url));
+  }
+
+  if (pathname === "/") {
+    return NextResponse.redirect(new URL(homeFor(role), request.url));
   }
 
   return NextResponse.next();

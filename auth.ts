@@ -1,11 +1,10 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
+import { eq } from "drizzle-orm";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db } from "@/db";
 import { accounts, sessions, users, verificationTokens } from "@/db/schema";
-
-const TEACHER_ID = "11111111-2222-3333-4444-555555555555";
-const STUDENT_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: DrizzleAdapter(db, {
@@ -20,9 +19,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET,
   providers: [
     Credentials({
-      name: "Test Girişi",
+      name: "Giriş",
       credentials: {
-        username: { label: "Kullanıcı Adı", type: "text" },
+        username: { label: "Kullanıcı Adı (e-posta)", type: "text" },
         password: { label: "Şifre", type: "password" },
       },
       async authorize(credentials) {
@@ -33,15 +32,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        if (username === "teacher" && password === "test123") {
-          return { id: TEACHER_ID, name: "Test Öğretmen", role: "teacher" };
+        const rows = await db
+          .select()
+          .from(users)
+          .where(eq(users.email, username))
+          .limit(1);
+        const user = rows[0];
+
+        if (!user?.passwordHash || !user.email) {
+          return null;
         }
 
-        if (username === "student" && password === "test123") {
-          return { id: STUDENT_ID, name: "Test Öğrenci", role: "student" };
+        const valid = await bcrypt.compare(password, user.passwordHash);
+        if (!valid) {
+          return null;
         }
 
-        return null;
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        };
       },
     }),
   ],
