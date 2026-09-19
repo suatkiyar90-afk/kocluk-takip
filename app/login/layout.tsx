@@ -1,4 +1,5 @@
 import "../globals.css";
+import { SchoolWatermark } from "@/components/brand/school-logo";
 
 export const metadata = {
   title: "Giriş Yap | Koçluk Takip",
@@ -11,7 +12,10 @@ export default function LoginLayout({
 }) {
   return (
     <html lang="tr">
-      <body>{children}</body>
+      <body>
+        <SchoolWatermark />
+        {children}
+      </body>
     </html>
   );
 }

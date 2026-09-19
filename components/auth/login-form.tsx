@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import { SchoolLogo } from "@/components/brand/school-logo";
 
 const TEST_ACCOUNTS = [
   { label: "Yönetici", username: "admin", password: "test123" },
@@ -67,7 +68,8 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
     <main className="flex min-h-dvh items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-105 rounded-3xl border border-gray-200 bg-white p-6 shadow-lg shadow-gray-200/60 sm:p-8">
         <header className="text-center">
-          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">
+          <SchoolLogo className="mx-auto w-28 sm:w-32" />
+          <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-gray-900">
             Koçluk Takip
           </h1>
           <p className="mt-1.5 text-sm text-gray-500">
