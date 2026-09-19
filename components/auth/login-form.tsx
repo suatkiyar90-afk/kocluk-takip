@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 
 const TEST_ACCOUNTS = [
@@ -15,7 +14,6 @@ interface LoginFormProps {
 }
 
 export function LoginForm({ callbackUrl }: LoginFormProps) {
-  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -36,18 +34,30 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
         redirect: false,
         username,
         password,
+        callbackUrl: "/",
         ...(target ? { redirectTo: target } : {}),
       });
+
+      if (res?.error) {
+        setError(
+          res.error
+            .toLowerCase()
+            .includes("credentials")
+            ? "Kullanıcı adı veya şifre hatalı."
+            : "Giriş yapılamadı.",
+        );
+        return;
+      }
 
       if (!res?.ok) {
         setError("Kullanıcı adı veya şifre hatalı.");
         return;
       }
 
-      router.push(res.url ?? target ?? "/login");
-      router.refresh();
+      const destination = res.url ?? target ?? "/";
+      window.location.assign(destination);
     } catch {
-      setError("Kullanıcı adı veya şifre hatalı.");
+      setError("Giriş sırasında bir hata oluştu. Lütfen tekrar deneyin.");
     } finally {
       setLoading(false);
     }

@@ -28,27 +28,30 @@ export type AdminActionResult<T> =
       message: string;
     };
 
+const UNAUTHORIZED_MESSAGE = "Oturum açmanız gerekiyor.";
+const NOT_ADMIN_MESSAGE = "Bu işlem için yönetici yetkisi gerekli.";
+
 async function getAdminUserId(): Promise<
   | { ok: true; adminId: string }
   | { ok: false; message: string }
 > {
   const session = await auth();
   if (!session?.user?.id) {
-    return { ok: false, message: "Oturum aÃ§manÄ±z gerekiyor." };
+    return { ok: false, message: UNAUTHORIZED_MESSAGE };
   }
   if (session.user.role !== "admin") {
     return {
       ok: false,
-      message: "Bu iÅŸlem iÃ§in yÃ¶netici yetkisi gerekli.",
+      message: NOT_ADMIN_MESSAGE,
     };
   }
   return { ok: true, adminId: session.user.id };
 }
 
 const createUserSchema = z.object({
-  name: z.string().trim().min(1, "Ad boÅŸ olamaz.").max(100),
-  email: z.string().trim().toLowerCase().email("GeÃ§erli bir e-posta girin."),
-  password: z.string().min(6, "Åifre en az 6 karakter olmalÄ±.").max(200),
+  name: z.string().trim().min(1, "Ad boş olamaz.").max(100),
+  email: z.string().trim().toLowerCase().email("Geçerli bir e-posta girin."),
+  password: z.string().min(6, "Şifre en az 6 karakter olmalı.").max(200),
   role: z.enum(["teacher", "student"]),
   weeklyTarget: z.coerce
     .number()
@@ -86,7 +89,7 @@ export async function adminCreateUser(
       return {
         success: false,
         status: "CONFLICT",
-        message: "Bu e-posta ile kayÄ±tlÄ± bir kullanÄ±cÄ± zaten var.",
+        message: "Bu e-posta ile kayıtlı bir kullanıcı zaten var.",
       };
     }
 
@@ -103,7 +106,7 @@ export async function adminCreateUser(
       })
       .returning({ id: users.id });
 
-    const roleLabel = role === "teacher" ? "Ã–ÄŸretmen" : "Ã–ÄŸrenci";
+    const roleLabel = role === "teacher" ? "Öğretmen" : "Öğrenci";
     return {
       success: true,
       data: { id: inserted[0].id },
@@ -114,7 +117,7 @@ export async function adminCreateUser(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanÄ± hatasÄ±.",
+        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
     };
   }
 }
@@ -165,14 +168,14 @@ export async function adminListUsers(): Promise<
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanÄ± hatasÄ±.",
+        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
     };
   }
 }
 
 const assignTeacherSchema = z.object({
-  teacherId: z.string().uuid("GeÃ§erli bir Ã¶ÄŸretmen seÃ§in."),
-  studentId: z.string().uuid("GeÃ§erli bir Ã¶ÄŸrenci seÃ§in."),
+  teacherId: z.string().uuid("Geçerli bir öğretmen seçin."),
+  studentId: z.string().uuid("Geçerli bir öğrenci seçin."),
 });
 
 export async function adminAssignTeacher(
@@ -203,7 +206,7 @@ export async function adminAssignTeacher(
       return {
         success: false,
         status: "VALIDATION_FAILED",
-        message: "SeÃ§ilen Ã¶ÄŸretmen bulunamadÄ±.",
+        message: "Seçilen öğretmen bulunamadı.",
       };
     }
 
@@ -216,7 +219,7 @@ export async function adminAssignTeacher(
       return {
         success: false,
         status: "VALIDATION_FAILED",
-        message: "SeÃ§ilen Ã¶ÄŸrenci bulunamadÄ±.",
+        message: "Seçilen öğrenci bulunamadı.",
       };
     }
 
@@ -235,7 +238,7 @@ export async function adminAssignTeacher(
       return {
         success: true,
         data: { assigned: false },
-        message: "Bu Ã¶ÄŸrenci zaten seÃ§ilen Ã¶ÄŸretmene atanmÄ±ÅŸ.",
+        message: "Bu öğrenci zaten seçilen öğretmene atanmış.",
       };
     }
 
@@ -247,14 +250,14 @@ export async function adminAssignTeacher(
     return {
       success: true,
       data: { assigned: true },
-      message: "Ã–ÄŸrenci Ã¶ÄŸretmene atandÄ±.",
+      message: "Öğrenci öğretmene atandı.",
     };
   } catch (err) {
     return {
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanÄ± hatasÄ±.",
+        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
     };
   }
 }
