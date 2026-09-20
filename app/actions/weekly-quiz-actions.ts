@@ -9,7 +9,7 @@ import {
   users,
   weeklyQuestionEntries,
 } from "@/db/schema";
-import { getCurrentWeekMonday } from "@/lib/week-utils";
+import { parseMonday } from "@/lib/week-utils";
 import {
   netScore,
   weeklyQuizSchema,
@@ -76,6 +76,7 @@ export type SaveWeeklyQuizResult =
 
 export async function saveWeeklyQuizEntries(
   payload: unknown,
+  weekStartArg?: string,
 ): Promise<SaveWeeklyQuizResult> {
   const authCtx = await getStudentId();
   if (authCtx.ok === false) {
@@ -96,7 +97,9 @@ export async function saveWeeklyQuizEntries(
     };
   }
 
-  const weekStart = getCurrentWeekMonday();
+  const weekStart = parseMonday(
+    weekStartArg ?? parsed.data.weekStart,
+  );
   const rows = parsed.data.categories;
   const filled = rows.filter((r) => r.correct + r.wrong + r.blank > 0);
   const cleared = rows.filter((r) => r.correct + r.wrong + r.blank === 0);
@@ -183,7 +186,9 @@ export async function saveWeeklyQuizEntries(
   }
 }
 
-export async function getThisWeeksEntries(): Promise<ThisWeeksEntriesResult> {
+export async function getThisWeeksEntries(
+  weekStartArg?: string,
+): Promise<ThisWeeksEntriesResult> {
   const authCtx = await getStudentId();
   if (authCtx.ok === false) {
     return {
@@ -194,7 +199,7 @@ export async function getThisWeeksEntries(): Promise<ThisWeeksEntriesResult> {
   }
   const studentId = authCtx.studentId;
 
-  const weekStart = getCurrentWeekMonday();
+  const weekStart = parseMonday(weekStartArg);
 
   try {
     const rows = await db
@@ -256,7 +261,9 @@ function roundNet(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export async function getStudentOverview(): Promise<StudentOverviewResult> {
+export async function getStudentOverview(
+  weekStartArg?: string,
+): Promise<StudentOverviewResult> {
   const authCtx = await getStudentId();
   if (authCtx.ok === false) {
     return {
@@ -267,7 +274,7 @@ export async function getStudentOverview(): Promise<StudentOverviewResult> {
   }
   const studentId = authCtx.studentId;
 
-  const weekStart = getCurrentWeekMonday();
+  const weekStart = parseMonday(weekStartArg);
 
   try {
     const [entryRows, feedbackRows] = await Promise.all([

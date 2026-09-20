@@ -9,7 +9,7 @@ import {
   users,
   weeklyQuestionEntries,
 } from "@/db/schema";
-import { getCurrentWeekMonday } from "@/lib/week-utils";
+import { getCurrentWeekMonday, parseMonday } from "@/lib/week-utils";
 import {
   ALL_SUBJECTS,
   netScore,
@@ -180,6 +180,7 @@ export async function getAssignedStudents(): Promise<
 
 export async function getStudentWeeklySummary(
   studentId: string,
+  weekStartArg?: string,
 ): Promise<TeacherActionResult<WeeklySummaryData>> {
   const ctx = await getTeacherId();
   if (ctx.ok === false) {
@@ -195,7 +196,7 @@ export async function getStudentWeeklySummary(
       };
     }
 
-    const weekStart = getCurrentWeekMonday();
+    const weekStart = parseMonday(weekStartArg);
 
     const [profileRows, rows, feedbackRows] = await Promise.all([
       db
@@ -295,6 +296,7 @@ export async function getStudentWeeklySummary(
 
 export async function saveCoachingFeedback(
   input: unknown,
+  weekStartArg?: string,
 ): Promise<
   TeacherActionResult<{ id: number; comment: string; weekStart: string }>
 > {
@@ -313,7 +315,7 @@ export async function saveCoachingFeedback(
   }
 
   const { studentId, comment } = parsed.data;
-  const weekStart = getCurrentWeekMonday();
+  const weekStart = parseMonday(weekStartArg);
 
   try {
     if (!(await isAssigned(ctx.teacherId, studentId))) {

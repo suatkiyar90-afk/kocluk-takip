@@ -3,14 +3,25 @@ import {
   getStudentOverview,
   getThisWeeksEntries,
 } from "@/app/actions/weekly-quiz-actions";
+import { parseMonday } from "@/lib/week-utils";
 import { QuizEntryClient } from "./quiz-entry-client";
 import { WeeklyOverviewCard } from "@/components/student/weekly-overview-card";
 import { StudentNav } from "@/components/student/student-nav";
+import { WeekPicker } from "@/components/ui/week-picker";
 
-export default async function QuizEntryPage() {
+interface QuizEntryPageProps {
+  searchParams?: Promise<{ week?: string }>;
+}
+
+export default async function QuizEntryPage({
+  searchParams,
+}: QuizEntryPageProps) {
+  const resolvedParams = searchParams ? await searchParams : undefined;
+  const weekStart = parseMonday(resolvedParams?.week);
+
   const [result, overview] = await Promise.all([
-    getThisWeeksEntries(),
-    getStudentOverview(),
+    getThisWeeksEntries(weekStart),
+    getStudentOverview(weekStart),
   ]);
 
   return (
@@ -26,14 +37,19 @@ export default async function QuizEntryPage() {
           </p>
         </header>
 
+        <div className="mb-6">
+          <WeekPicker monday={weekStart} />
+        </div>
+
         {overview.success && (
           <div className="mb-6">
-            <WeeklyOverviewCard data={overview.data} />
+            <WeeklyOverviewCard key={weekStart} data={overview.data} />
           </div>
         )}
 
         {result.success === true ? (
           <QuizEntryClient
+            key={weekStart}
             initialEntries={result.data.entries}
             weekStart={result.data.weekStart}
           />

@@ -11,6 +11,8 @@ import {
   getStudentCurriculumProgress,
 } from "@/app/actions/curriculum-actions";
 import { CurriculumProgress } from "@/components/curriculum/curriculum-progress";
+import { parseMonday } from "@/lib/week-utils";
+import { WeekPicker } from "@/components/ui/week-picker";
 
 function formatDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
@@ -69,13 +71,18 @@ function SubjectRow({ s }: { s: SubjectSummary }) {
 
 interface StudentDetailPageProps {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ week?: string }>;
 }
 
 export default async function StudentDetailPage({
   params,
+  searchParams,
 }: StudentDetailPageProps) {
   const { id } = await params;
-  const result = await getStudentWeeklySummary(id);
+  const resolvedParams = searchParams ? await searchParams : undefined;
+  const weekStart = parseMonday(resolvedParams?.week);
+
+  const result = await getStudentWeeklySummary(id, weekStart);
   const qaResult = await listStudentThreads(id);
   const curriculumResult = await getStudentCurriculumProgress(id);
 
@@ -97,7 +104,7 @@ export default async function StudentDetailPage({
     );
   }
 
-  const { student, weekStart, subjects, totals, feedback } = result.data;
+  const { student, subjects, totals, feedback } = result.data;
   const tyt = subjects.filter((s) => s.examType === "TYT");
   const ayt = subjects.filter((s) => s.examType === "AYT");
   const tytNet = tyt.reduce((sum, s) => sum + s.net, 0);
@@ -121,6 +128,10 @@ export default async function StudentDetailPage({
             Hafta: {formatDate(weekStart)}
           </p>
         </header>
+
+        <div className="mb-6">
+          <WeekPicker monday={weekStart} />
+        </div>
 
         <div className="grid grid-cols-3 gap-2">
           <div className="rounded-2xl border border-gray-200 bg-white p-3 text-center shadow-sm">
@@ -206,8 +217,10 @@ export default async function StudentDetailPage({
 
         <div className="mt-8">
           <FeedbackForm
+            key={weekStart}
             studentId={student.id}
             initialComment={feedback?.comment}
+            weekStart={weekStart}
           />
         </div>
       </div>

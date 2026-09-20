@@ -12,11 +12,13 @@ import { saveCoachingFeedback } from "@/app/actions/teacher-actions";
 interface FeedbackFormProps {
   studentId: string;
   initialComment?: string;
+  weekStart?: string;
 }
 
 export function FeedbackForm({
   studentId,
   initialComment,
+  weekStart,
 }: FeedbackFormProps) {
   const {
     register,
@@ -33,7 +35,7 @@ export function FeedbackForm({
   const commentLength = (watch("comment") ?? "").length;
 
   const onSubmit = handleSubmit(async (values) => {
-    const result = await saveCoachingFeedback(values);
+    const result = await saveCoachingFeedback(values, weekStart);
     if (result.success === true) {
       toast.success("Dönüt kaydedildi.");
       reset(values, { keepDirty: false });
