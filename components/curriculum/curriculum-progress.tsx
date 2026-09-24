@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { CurriculumSnapshot } from "@/app/actions/curriculum-actions";
 
 const STATUS_DOT: Record<string, string> = {
@@ -49,6 +52,17 @@ export function CurriculumSubjectGroup({
   title: string;
   groups: CurriculumSnapshot["tyt"];
 }) {
+  const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
+
+  function toggle(key: string) {
+    setOpenKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   return (
     <section>
       <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
@@ -56,6 +70,8 @@ export function CurriculumSubjectGroup({
       </h2>
       <div className="space-y-2">
         {groups.map((g) => {
+          const key = `${title}:${g.subjectId}`;
+          const isOpen = openKeys.has(key);
           const subjectPct =
             g.totalTopics > 0
               ? Math.round((g.doneTopics / g.totalTopics) * 100)
@@ -63,35 +79,61 @@ export function CurriculumSubjectGroup({
           return (
             <div
               key={g.subjectId}
-              className="rounded-xl border border-gray-100 bg-gray-50 p-3"
+              className="rounded-xl border border-gray-100 bg-gray-50"
             >
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-gray-900">
+              <button
+                type="button"
+                onClick={() => toggle(key)}
+                aria-expanded={isOpen}
+                className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-3 text-left transition hover:bg-gray-100/70 touch-manipulation"
+              >
+                <p className="min-w-0 truncate text-sm font-semibold text-gray-900">
                   {g.subjectName}
                 </p>
-                <span className="text-xs font-bold text-indigo-700">
-                  {g.doneTopics}/{g.totalTopics} (%{subjectPct})
-                </span>
-              </div>
-              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
-                <div
-                  className="h-full rounded-full bg-indigo-500"
-                  style={{ width: `${subjectPct}%` }}
-                />
-              </div>
-              <div className="mt-2.5 flex flex-wrap gap-1.5">
-                {g.topics.map((t) => (
-                  <span
-                    key={t.topicId}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 text-[11px] font-medium text-gray-600 ring-1 ring-gray-200"
-                  >
-                    <span
-                      className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[t.status]}`}
-                    />
-                    {t.topicName}
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="text-xs font-bold text-indigo-700">
+                    {g.doneTopics}/{g.totalTopics} (%{subjectPct})
                   </span>
-                ))}
-              </div>
+                  <svg
+                    className={`h-4 w-4 text-gray-400 transition-transform ${
+                      isOpen ? "rotate-180" : ""
+                    }`}
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </span>
+              </button>
+
+              {isOpen && (
+                <div className="px-3 pb-3">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                    <div
+                      className="h-full rounded-full bg-indigo-500"
+                      style={{ width: `${subjectPct}%` }}
+                    />
+                  </div>
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {g.topics.map((t) => (
+                      <span
+                        key={t.topicId}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 text-[11px] font-medium text-gray-600 ring-1 ring-gray-200"
+                      >
+                        <span
+                          className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[t.status]}`}
+                        />
+                        {t.topicName}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
