@@ -1,9 +1,7 @@
 import Link from "next/link";
 import { Toaster } from "sonner";
-import {
-  getStudentWeeklySummary,
-  type SubjectSummary,
-} from "@/app/actions/teacher-actions";
+import { getStudentWeeklySummary } from "@/app/actions/teacher-actions";
+import { getWeeklyReportByStudent } from "@/app/actions/quiz-actions";
 import { FeedbackForm } from "@/components/coaching/feedback-form";
 import { TeacherQASection } from "@/components/qa/teacher-qa-section";
 import { listStudentThreads } from "@/app/actions/qa-actions";
@@ -15,6 +13,10 @@ import { parseMonday } from "@/lib/week-utils";
 import { WeekPicker } from "@/components/ui/week-picker";
 import { getStudentMockExams } from "@/app/actions/mock-exam-actions";
 import { MockExamHistory } from "@/components/exams/mock-exam-history";
+import { TopicAnalysis } from "@/components/reports/topic-analysis";
+import { netScore } from "@/components/quiz-entry/weekly-quiz-schema";
+
+const DAY_LABELS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
 
 function formatDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
@@ -27,48 +29,6 @@ function formatDate(iso: string): string {
 
 function formatNet(n: number): string {
   return n.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
-}
-
-function SubjectRow({ s }: { s: SubjectSummary }) {
-  const pct = s.maxQuestions > 0 ? (s.solved / s.maxQuestions) * 100 : 0;
-  const overTarget = s.maxQuestions > 0 && s.solved > s.maxQuestions;
-  return (
-    <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-gray-900">
-          {s.subjectName}
-        </p>
-        <span className="text-xs font-bold text-indigo-700">
-          Net: {formatNet(s.net)}
-        </span>
-      </div>
-      <div className="mt-2 flex items-center gap-3 text-xs font-semibold">
-        <span className="text-green-700">D {s.correct}</span>
-        <span className="text-red-600">Y {s.wrong}</span>
-        <span className="text-stone-500">B {s.blank}</span>
-        <span
-          className={`ml-auto flex items-center gap-1 ${
-            overTarget ? "text-green-700" : "text-gray-400"
-          }`}
-        >
-          {s.solved}/{s.maxQuestions}
-          {overTarget && <span title="Hedef aşıldı">✓</span>}
-        </span>
-      </div>
-      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
-        <div
-          className={`h-full rounded-full transition-[width] ${
-            overTarget ? "bg-green-500" : "bg-indigo-500"
-          }`}
-          style={{ width: `${Math.min(pct, 100)}%` }}
-        />
-      </div>
-      <p className="mt-1 text-[11px] font-medium text-gray-400">
-        Hedef: {s.maxQuestions} soru
-        {overTarget && " · Hedeften fazla çözüldü"}
-      </p>
-    </div>
-  );
 }
 
 interface StudentDetailPageProps {
@@ -85,6 +45,7 @@ export default async function StudentDetailPage({
   const weekStart = parseMonday(resolvedParams?.week);
 
   const result = await getStudentWeeklySummary(id, weekStart);
+  const reportResult = await getWeeklyReportByStudent(id, weekStart);
   const qaResult = await listStudentThreads(id);
   const curriculumResult = await getStudentCurriculumProgress(id);
   const examsResult = await getStudentMockExams(id);
@@ -107,11 +68,30 @@ export default async function StudentDetailPage({
     );
   }
 
-  const { student, subjects, totals, feedback } = result.data;
-  const tyt = subjects.filter((s) => s.examType === "TYT");
-  const ayt = subjects.filter((s) => s.examType === "AYT");
-  const tytNet = tyt.reduce((sum, s) => sum + s.net, 0);
-  const aytNet = ayt.reduce((sum, s) => sum + s.net, 0);
+  const { student, feedback } = result.data;
+  const report = reportResult.success === true ? reportResult.data : null;
+  const reportError =
+    reportResult.success === false ? reportResult.message : null;
+
+  const totalCorrect = report
+    ? report.days.reduce((sum, day) => sum + day.correct, 0)
+    : 0;
+  const totalWrong = report
+    ? report.days.reduce((sum, day) => sum + day.wrong, 0)
+    : 0;
+  const totalBlank = report
+    ? report.days.reduce((sum, day) => sum + day.blank, 0)
+    : 0;
+  const totalSolved = totalCorrect + totalWrong + totalBlank;
+  const totalNet = Math.round(netScore(totalCorrect, totalWrong) * 100) / 100;
+  const weeklyTarget = student.weeklyTarget;
+  const targetPct =
+    weeklyTarget > 0 ? Math.round((totalSolved / weeklyTarget) * 100) : null;
+  const remaining = Math.max(weeklyTarget - totalSolved, 0);
+  const maxDaySolved = report
+    ? Math.max(...report.days.map((day) => day.solved), 1)
+    : 1;
+  const targetReached = targetPct !== null && targetPct >= 100;
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-8">
@@ -136,61 +116,120 @@ export default async function StudentDetailPage({
           <WeekPicker monday={weekStart} />
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
-          <div className="rounded-2xl border border-gray-200 bg-white p-3 text-center shadow-sm">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-              TYT Net
-            </p>
-            <p className="mt-1 text-base font-bold text-indigo-700">
-              {formatNet(tytNet)}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-gray-200 bg-white p-3 text-center shadow-sm">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-              AYT Net
-            </p>
-            <p className="mt-1 text-base font-bold text-indigo-700">
-              {formatNet(aytNet)}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-gray-200 bg-white p-3 text-center shadow-sm">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-              Soru
-            </p>
-            <p className="mt-1 text-base font-bold text-gray-900">
-              {totals.solved}
-            </p>
-          </div>
-        </div>
+        <section>
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
+            Haftalık Özet
+          </h2>
+          {reportError !== null ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+              {reportError}
+            </div>
+          ) : report !== null ? (
+            <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                    Çözülen
+                  </p>
+                  <p className="mt-1 text-lg font-bold text-gray-900">
+                    {totalSolved}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                    Doğru / Yanlış
+                  </p>
+                  <p className="mt-1 text-lg font-bold">
+                    <span className="text-green-700">{totalCorrect}</span>
+                    <span className="mx-1 text-gray-300">/</span>
+                    <span className="text-red-600">{totalWrong}</span>
+                  </p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                    Net
+                  </p>
+                  <p className="mt-1 text-lg font-bold text-indigo-700">
+                    {formatNet(totalNet)}
+                  </p>
+                </div>
+              </div>
 
-        {totals.solved === 0 ? (
-          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-700">
-            Bu hafta için henüz soru verisi girilmemiş.
-          </div>
-        ) : (
-          <div className="mt-6 space-y-6">
-            <section>
-              <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
-                TYT
-              </h2>
-              <div className="space-y-2">
-                {tyt.map((s) => (
-                  <SubjectRow key={s.subjectId} s={s} />
-                ))}
+              <div className="mt-4">
+                <div className="flex items-center justify-between text-xs font-semibold">
+                  <span className="text-gray-500">Haftalık Hedef</span>
+                  <span className="text-gray-900">
+                    {totalSolved} / {weeklyTarget} soru
+                  </span>
+                </div>
+                <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-gray-200">
+                  <div
+                    className={`h-full rounded-full transition-[width] ${
+                      targetReached ? "bg-green-500" : "bg-indigo-500"
+                    }`}
+                    style={{
+                      width: `${Math.min(targetPct !== null ? targetPct : 0, 100)}%`,
+                    }}
+                  />
+                </div>
+                <p className="mt-1.5 text-[11px] font-medium text-gray-500">
+                  {weeklyTarget <= 0
+                    ? "Haftalık hedef tanımlanmamış."
+                    : targetReached
+                      ? `Haftalık hedef tamamlandı (%${targetPct}).`
+                      : `Hedefin %${targetPct ?? 0} tamamlandı · ${remaining} soru kaldı.`}
+                </p>
               </div>
-            </section>
-            <section>
-              <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
-                AYT
-              </h2>
-              <div className="space-y-2">
-                {ayt.map((s) => (
-                  <SubjectRow key={s.subjectId} s={s} />
-                ))}
+
+              <div className="mt-4 grid grid-cols-7 gap-1.5">
+                {report.days.map((day) => {
+                  const dow = new Date(`${day.date}T00:00:00`).getDay();
+                  const heightPct =
+                    day.solved > 0
+                      ? Math.max((day.solved / maxDaySolved) * 100, 10)
+                      : 0;
+                  return (
+                    <div
+                      key={day.date}
+                      className="flex flex-col items-center gap-1"
+                    >
+                      <div className="flex h-14 w-full items-end justify-center rounded-lg bg-gray-50 p-0.5">
+                        <div
+                          className={`w-full rounded-md ${
+                            day.solved > 0 ? "bg-indigo-500" : "bg-transparent"
+                          }`}
+                          style={{ height: `${heightPct}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-semibold text-gray-400">
+                        {DAY_LABELS[dow]}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-            </section>
-          </div>
-        )}
+
+              {totalSolved === 0 && (
+                <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-center text-xs font-medium text-amber-700">
+                  Bu hafta için henüz günlük soru kaydı girilmemiş.
+                </p>
+              )}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="mt-6">
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
+            Konu Bazlı Analiz
+          </h2>
+          {reportError !== null ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+              {reportError}
+            </div>
+          ) : report !== null ? (
+            <TopicAnalysis key={weekStart} topics={report.byTopic} />
+          ) : null}
+        </section>
 
         <section className="mt-6">
           <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
