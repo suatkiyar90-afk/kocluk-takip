@@ -222,6 +222,41 @@ export const curriculumTopics = pgTable(
   }),
 );
 
+export const dailyQuestionEntries = pgTable(
+  "daily_question_entries",
+  {
+    id: serial("id").primaryKey(),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    examType: examTypeEnum("exam_type").notNull(),
+    subjectId: text("subject_id").notNull(),
+    topicId: integer("topic_id")
+      .notNull()
+      .references(() => curriculumTopics.id, { onDelete: "cascade" }),
+    correct: integer("correct").notNull().default(0),
+    wrong: integer("wrong").notNull().default(0),
+    blank: integer("blank").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    dailyEntriesUnique: uniqueIndex("daily_entries_unique").on(
+      t.studentId,
+      t.date,
+      t.examType,
+      t.subjectId,
+      t.topicId,
+    ),
+    dailyEntriesStudentDateIdx: index("daily_entries_student_date_idx").on(
+      t.studentId,
+      t.date,
+    ),
+  }),
+);
+
 export const topicStatusEnum = pgEnum("topic_status", [
   "baslamadi",
   "calisiliyor",
@@ -284,6 +319,8 @@ export const qaThreads = pgTable(
 
 export type WeeklyQuestionEntry = typeof weeklyQuestionEntries.$inferSelect;
 export type NewWeeklyQuestionEntry = typeof weeklyQuestionEntries.$inferInsert;
+export type DailyQuestionEntry = typeof dailyQuestionEntries.$inferSelect;
+export type NewDailyQuestionEntry = typeof dailyQuestionEntries.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type MockExam = typeof mockExams.$inferSelect;
 export type NewMockExam = typeof mockExams.$inferInsert;

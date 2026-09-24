@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const LINKS = [
-  { href: "/quiz-entry", label: "Haftalık Takip" },
+  { href: "/quiz-entry", label: "Günlük Giriş" },
   { href: "/deneme-sinavi", label: "Denemeler" },
   { href: "/mufredat", label: "Müfredat" },
   { href: "/ask", label: "Soru Sor" },
