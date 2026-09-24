@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   adminAssignTeacher,
@@ -51,6 +52,12 @@ export function AdminPanel({
         <p className="mt-1 text-sm text-gray-500">
           Öğretmen ve öğrenci hesaplarını yönetin, koç atamalarını yapın.
         </p>
+        <Link
+          href="/admin/import-exams"
+          className="mt-3 inline-flex h-11 items-center justify-center rounded-xl bg-indigo-600 px-4 text-sm font-bold text-white shadow-lg shadow-indigo-600/25 transition active:scale-[0.98] touch-manipulation"
+        >
+          Deneme Sınavı Sonucu Yükle
+        </Link>
       </header>
 
       <nav className="mb-6 grid grid-cols-3 gap-1 rounded-2xl border border-gray-200 bg-white p-1 shadow-sm">
@@ -92,6 +99,7 @@ function CreateUserForm({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [studentNumber, setStudentNumber] = useState("");
   const [weeklyTarget, setWeeklyTarget] = useState("50");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +115,7 @@ function CreateUserForm({
         email,
         password,
         role,
+        studentNumber,
         weeklyTarget,
       });
       if (result.success === true) {
@@ -114,6 +123,7 @@ function CreateUserForm({
         setName("");
         setEmail("");
         setPassword("");
+        setStudentNumber("");
         onCreated();
       } else {
         setError(result.message);
@@ -185,19 +195,36 @@ function CreateUserForm({
         </div>
 
         {role === "student" ? (
-          <div>
-            <label htmlFor="student-target" className={labelClass}>
-              Haftalık Hedef (soru sayısı)
-            </label>
-            <input
-              id="student-target"
-              type="number"
-              min={0}
-              value={weeklyTarget}
-              onChange={(e) => setWeeklyTarget(e.target.value)}
-              className={inputClass}
-            />
-          </div>
+          <>
+            <div>
+              <label htmlFor="student-number" className={labelClass}>
+                Öğrenci Numarası
+              </label>
+              <input
+                id="student-number"
+                type="text"
+                value={studentNumber}
+                onChange={(e) => setStudentNumber(e.target.value)}
+                className={inputClass}
+                placeholder="Örn. 1234 (deneme sınavı eşleştirmesinde kullanılır)"
+                autoComplete="off"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="student-target" className={labelClass}>
+                Haftalık Hedef (soru sayısı)
+              </label>
+              <input
+                id="student-target"
+                type="number"
+                min={0}
+                value={weeklyTarget}
+                onChange={(e) => setWeeklyTarget(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+          </>
         ) : null}
 
         {error ? (
@@ -301,7 +328,7 @@ function AssignForm({
             >
               {students.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name} ({s.email ?? "e-posta yok"}) — Haftalık: {s.weeklyTarget}
+                  {s.name} ({s.email ?? "e-posta yok"}) — No: {s.studentNumber ?? "-"} — Haftalık: {s.weeklyTarget}
                 </option>
               ))}
             </select>

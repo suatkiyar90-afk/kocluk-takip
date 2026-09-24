@@ -13,6 +13,8 @@ import {
 import { CurriculumProgress } from "@/components/curriculum/curriculum-progress";
 import { parseMonday } from "@/lib/week-utils";
 import { WeekPicker } from "@/components/ui/week-picker";
+import { getStudentMockExams } from "@/app/actions/mock-exam-actions";
+import { MockExamHistory } from "@/components/exams/mock-exam-history";
 
 function formatDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
@@ -85,6 +87,7 @@ export default async function StudentDetailPage({
   const result = await getStudentWeeklySummary(id, weekStart);
   const qaResult = await listStudentThreads(id);
   const curriculumResult = await getStudentCurriculumProgress(id);
+  const examsResult = await getStudentMockExams(id);
 
   if (result.success === false) {
     return (
@@ -188,6 +191,19 @@ export default async function StudentDetailPage({
             </section>
           </div>
         )}
+
+        <section className="mt-6">
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
+            Deneme Sınavı Geçmişi
+          </h2>
+          {examsResult.success === false ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+              {examsResult.message}
+            </div>
+          ) : (
+            <MockExamHistory records={examsResult.data} />
+          )}
+        </section>
 
         <section className="mt-6">
           {qaResult.success === false ? (

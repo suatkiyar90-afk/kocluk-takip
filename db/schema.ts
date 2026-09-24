@@ -1,5 +1,6 @@
 import {
   date,
+  doublePrecision,
   index,
   integer,
   pgEnum,
@@ -52,6 +53,7 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull().default(""),
   email: text("email"),
+  studentNumber: text("student_number").unique(),
   emailVerified: timestamp("email_verified", { withTimezone: true }),
   image: text("image"),
   role: userRoleEnum("role").notNull().default("student"),
@@ -61,6 +63,31 @@ export const users = pgTable("users", {
     .defaultNow()
     .notNull(),
 });
+
+export const mockExams = pgTable(
+  "mock_exams",
+  {
+    id: serial("id").primaryKey(),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    examName: text("exam_name").notNull(),
+    examDate: date("exam_date").notNull(),
+    tytNet: doublePrecision("tyt_net").notNull().default(0),
+    aytNet: doublePrecision("ayt_net").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    mockExamsUnique: uniqueIndex("mock_exams_unique").on(
+      t.studentId,
+      t.examName,
+      t.examDate,
+    ),
+    mockExamsStudentIdx: index("mock_exams_student_idx").on(t.studentId),
+  }),
+);
 
 export const accounts = pgTable(
   "accounts",
@@ -258,6 +285,8 @@ export const qaThreads = pgTable(
 export type WeeklyQuestionEntry = typeof weeklyQuestionEntries.$inferSelect;
 export type NewWeeklyQuestionEntry = typeof weeklyQuestionEntries.$inferInsert;
 export type User = typeof users.$inferSelect;
+export type MockExam = typeof mockExams.$inferSelect;
+export type NewMockExam = typeof mockExams.$inferInsert;
 export type CoachingFeedback = typeof coachingFeedbacks.$inferSelect;
 export type NewCoachingFeedback = typeof coachingFeedbacks.$inferInsert;
 export type QuestionImage = typeof questionImages.$inferSelect;

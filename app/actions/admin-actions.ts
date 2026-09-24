@@ -17,6 +17,7 @@ export interface AdminStudent {
   id: string;
   name: string;
   email: string | null;
+  studentNumber: string | null;
   weeklyTarget: number;
 }
 
@@ -53,6 +54,15 @@ const createUserSchema = z.object({
   email: z.string().trim().toLowerCase().email("Geçerli bir e-posta girin."),
   password: z.string().min(6, "Şifre en az 6 karakter olmalı.").max(200),
   role: z.enum(["teacher", "student"]),
+  studentNumber: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .refine(
+      (v) => v === undefined || v === null || v === "" || /^[A-Za-z0-9\-/._]{1,50}$/.test(v),
+      "Öğrenci numarası geçersiz.",
+    ),
   weeklyTarget: z.coerce
     .number()
     .int()
@@ -77,7 +87,9 @@ export async function adminCreateUser(
       message: parsed.error.issues.map((i) => i.message).join(", "),
     };
   }
-  const { name, email, password, role, weeklyTarget } = parsed.data;
+  const { name, email, password, role, studentNumber, weeklyTarget } = parsed.data;
+  const normalizedStudentNumber =
+    role === "student" && studentNumber ? studentNumber.trim() : null;
 
   try {
     const existing = await db
@@ -93,6 +105,21 @@ export async function adminCreateUser(
       };
     }
 
+    if (normalizedStudentNumber) {
+      const existingNumber = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.studentNumber, normalizedStudentNumber))
+        .limit(1);
+      if (existingNumber.length > 0) {
+        return {
+          success: false,
+          status: "CONFLICT",
+          message: "Bu öğrenci numarası başka bir kullanıcıya ait.",
+        };
+      }
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
 
     const inserted = await db
@@ -101,6 +128,7 @@ export async function adminCreateUser(
         name,
         email,
         role,
+        studentNumber: normalizedStudentNumber,
         passwordHash,
         weeklyTarget: role === "student" ? weeklyTarget : 0,
       })
@@ -137,6 +165,7 @@ export async function adminListUsers(): Promise<
         name: users.name,
         email: users.email,
         role: users.role,
+        studentNumber: users.studentNumber,
         weeklyTarget: users.weeklyTarget,
       })
       .from(users)
@@ -155,6 +184,7 @@ export async function adminListUsers(): Promise<
         id: r.id,
         name: r.name,
         email: r.email,
+        studentNumber: r.studentNumber,
         weeklyTarget: r.weeklyTarget,
       }));
 
