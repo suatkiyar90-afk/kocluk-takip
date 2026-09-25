@@ -60,7 +60,7 @@ function CountStepper({
       >
         {meta.label}
       </p>
-      <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-1.5">
+      <div className="grid grid-cols-[2.75rem_minmax(5rem,1fr)_2.75rem] items-center gap-1.5">
         <button
           type="button"
           aria-label={`${meta.label} azalt`}
@@ -83,7 +83,7 @@ function CountStepper({
             const n = e.currentTarget.valueAsNumber;
             onChange(Number.isNaN(n) ? 0 : n);
           }}
-          className="h-11 w-full rounded-xl border border-gray-200 bg-white text-center text-lg font-bold text-gray-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
+          className="h-11 w-full min-w-[5rem] rounded-xl border border-gray-200 bg-white px-3 text-center text-lg font-bold text-gray-900 outline-none transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
         />
         <button
           type="button"
@@ -230,7 +230,7 @@ export function DailyEntryForm({ date, subjects }: DailyEntryFormProps) {
         </select>
       </div>
 
-      <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
+      <div className="mt-5 space-y-3">
         <CountStepper field="correct" value={correct} onChange={setCorrect} />
         <CountStepper field="wrong" value={wrong} onChange={setWrong} />
         <CountStepper field="blank" value={blank} onChange={setBlank} />
