@@ -10,15 +10,35 @@ export interface MockExamRecord {
   id: number;
   examName: string;
   examDate: string;
-  tytNet: number;
-  aytNet: number;
+  turkceNet: number;
+  tarihNet: number;
+  cografyaNet: number;
+  felsefeNet: number;
+  dinNet: number;
+  matematikNet: number;
+  geometriNet: number;
+  fizikNet: number;
+  kimyaNet: number;
+  biyolojiNet: number;
+  toplamNet: number;
+  tytPuani: number;
 }
 
 export interface ImportedExamRow {
   studentName: string;
   studentNumber: string;
-  tytNet: number;
-  aytNet: number;
+  turkceNet: number;
+  tarihNet: number;
+  cografyaNet: number;
+  felsefeNet: number;
+  dinNet: number;
+  matematikNet: number;
+  geometriNet: number;
+  fizikNet: number;
+  kimyaNet: number;
+  biyolojiNet: number;
+  toplamNet: number;
+  tytPuani: number;
 }
 
 export type ImportMockExamsResult =
@@ -151,6 +171,8 @@ function numericKey(value: string): string | null {
   return null;
 }
 
+const scoreField = z.coerce.number().min(-200).max(1000).optional();
+
 const importMockExamsInputSchema = z.object({
   examName: z
     .string()
@@ -168,8 +190,18 @@ const importMockExamsInputSchema = z.object({
           .trim()
           .min(1, "Öğrenci numarası boş olamaz.")
           .max(50, "Öğrenci numarası çok uzun."),
-        tytNet: z.coerce.number().min(-200).max(300).optional(),
-        aytNet: z.coerce.number().min(-200).max(300).optional(),
+        turkceNet: scoreField,
+        tarihNet: scoreField,
+        cografyaNet: scoreField,
+        felsefeNet: scoreField,
+        dinNet: scoreField,
+        matematikNet: scoreField,
+        geometriNet: scoreField,
+        fizikNet: scoreField,
+        kimyaNet: scoreField,
+        biyolojiNet: scoreField,
+        toplamNet: scoreField,
+        tytPuani: scoreField,
       }),
     )
     .max(5000, "Tek dosyada en fazla 5000 satır olabilir."),
@@ -224,8 +256,18 @@ export async function importMockExams(
       studentId: string;
       studentName: string;
       studentNumber: string;
-      tytNet: number;
-      aytNet: number;
+      turkceNet: number;
+      tarihNet: number;
+      cografyaNet: number;
+      felsefeNet: number;
+      dinNet: number;
+      matematikNet: number;
+      geometriNet: number;
+      fizikNet: number;
+      kimyaNet: number;
+      biyolojiNet: number;
+      toplamNet: number;
+      tytPuani: number;
     }> = [];
     const unmatchedNumbers: string[] = [];
 
@@ -246,8 +288,18 @@ export async function importMockExams(
         studentId: student.id,
         studentName: student.name || "İsimsiz öğrenci",
         studentNumber: student.studentNumber ?? normalized,
-        tytNet: row.tytNet ?? 0,
-        aytNet: row.aytNet ?? 0,
+        turkceNet: row.turkceNet ?? 0,
+        tarihNet: row.tarihNet ?? 0,
+        cografyaNet: row.cografyaNet ?? 0,
+        felsefeNet: row.felsefeNet ?? 0,
+        dinNet: row.dinNet ?? 0,
+        matematikNet: row.matematikNet ?? 0,
+        geometriNet: row.geometriNet ?? 0,
+        fizikNet: row.fizikNet ?? 0,
+        kimyaNet: row.kimyaNet ?? 0,
+        biyolojiNet: row.biyolojiNet ?? 0,
+        toplamNet: row.toplamNet ?? 0,
+        tytPuani: row.tytPuani ?? 0,
       });
     }
 
@@ -260,22 +312,52 @@ export async function importMockExams(
             studentId: r.studentId,
             examName,
             examDate,
-            tytNet: r.tytNet,
-            aytNet: r.aytNet,
+            turkceNet: r.turkceNet,
+            tarihNet: r.tarihNet,
+            cografyaNet: r.cografyaNet,
+            felsefeNet: r.felsefeNet,
+            dinNet: r.dinNet,
+            matematikNet: r.matematikNet,
+            geometriNet: r.geometriNet,
+            fizikNet: r.fizikNet,
+            kimyaNet: r.kimyaNet,
+            biyolojiNet: r.biyolojiNet,
+            toplamNet: r.toplamNet,
+            tytPuani: r.tytPuani,
           })),
         )
         .onConflictDoUpdate({
           target: [mockExams.studentId, mockExams.examName, mockExams.examDate],
           set: {
-            tytNet: sql`excluded.tyt_net`,
-            aytNet: sql`excluded.ayt_net`,
+            turkceNet: sql`excluded.turkce_net`,
+            tarihNet: sql`excluded.tarih_net`,
+            cografyaNet: sql`excluded.cografya_net`,
+            felsefeNet: sql`excluded.felsefe_net`,
+            dinNet: sql`excluded.din_net`,
+            matematikNet: sql`excluded.matematik_net`,
+            geometriNet: sql`excluded.geometri_net`,
+            fizikNet: sql`excluded.fizik_net`,
+            kimyaNet: sql`excluded.kimya_net`,
+            biyolojiNet: sql`excluded.biyoloji_net`,
+            toplamNet: sql`excluded.toplam_net`,
+            tytPuani: sql`excluded.tyt_puani`,
           } as {
             id?: number;
             studentId?: string;
             examName?: string;
             examDate?: string;
-            tytNet?: unknown;
-            aytNet?: unknown;
+            turkceNet?: unknown;
+            tarihNet?: unknown;
+            cografyaNet?: unknown;
+            felsefeNet?: unknown;
+            dinNet?: unknown;
+            matematikNet?: unknown;
+            geometriNet?: unknown;
+            fizikNet?: unknown;
+            kimyaNet?: unknown;
+            biyolojiNet?: unknown;
+            toplamNet?: unknown;
+            tytPuani?: unknown;
             createdAt?: Date;
           },
         })
@@ -333,8 +415,18 @@ export async function getMyMockExams(): Promise<MockExamsResult> {
         id: r.id,
         examName: r.examName,
         examDate: r.examDate,
-        tytNet: r.tytNet,
-        aytNet: r.aytNet,
+        turkceNet: r.turkceNet,
+        tarihNet: r.tarihNet,
+        cografyaNet: r.cografyaNet,
+        felsefeNet: r.felsefeNet,
+        dinNet: r.dinNet,
+        matematikNet: r.matematikNet,
+        geometriNet: r.geometriNet,
+        fizikNet: r.fizikNet,
+        kimyaNet: r.kimyaNet,
+        biyolojiNet: r.biyolojiNet,
+        toplamNet: r.toplamNet,
+        tytPuani: r.tytPuani,
       })),
     };
   } catch (err) {
@@ -376,8 +468,18 @@ export async function getStudentMockExams(
         id: r.id,
         examName: r.examName,
         examDate: r.examDate,
-        tytNet: r.tytNet,
-        aytNet: r.aytNet,
+        turkceNet: r.turkceNet,
+        tarihNet: r.tarihNet,
+        cografyaNet: r.cografyaNet,
+        felsefeNet: r.felsefeNet,
+        dinNet: r.dinNet,
+        matematikNet: r.matematikNet,
+        geometriNet: r.geometriNet,
+        fizikNet: r.fizikNet,
+        kimyaNet: r.kimyaNet,
+        biyolojiNet: r.biyolojiNet,
+        toplamNet: r.toplamNet,
+        tytPuani: r.tytPuani,
       })),
     };
   } catch (err) {

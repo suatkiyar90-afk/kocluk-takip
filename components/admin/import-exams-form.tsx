@@ -10,49 +10,43 @@ const inputClass =
   "h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-base text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200";
 const labelClass = "mb-1.5 block text-sm font-semibold text-gray-700";
 
-const NUMBER_KEYS = new Set([
-  "okul_no",
-  "okulno",
-  "ogrenci_no",
-  "ogrencino",
-  "ogr_no",
-  "ogrno",
-  "student_no",
-  "studentno",
-  "student_number",
-  "numara",
-  "no",
-  "sira_no",
-  "sira",
-  "ogrenci_numarasi",
-]);
+const COLUMN_INDEX = {
+  studentNumber: 2,
+  turkceNet: 7,
+  tarihNet: 10,
+  cografyaNet: 13,
+  felsefeNet: 16,
+  dinNet: 19,
+  matematikNet: 22,
+  geometriNet: 25,
+  fizikNet: 28,
+  kimyaNet: 31,
+  biyolojiNet: 34,
+  toplamNet: 37,
+  tytPuani: 38,
+} as const;
 
-const TYT_KEYS = new Set(["tyt", "tyt_net", "tytnet", "tyt_n", "tytn"]);
-const AYT_KEYS = new Set(["ayt", "ayt_net", "aytnet", "ayt_n", "aytn"]);
-const EXAM_NAME_KEYS = new Set(["deneme_adi", "deneme", "sinav_adi", "sinav", "exam_name"]);
-const DATE_KEYS = new Set(["tarih", "sinav_tarihi", "deneme_tarihi", "exam_date"]);
+type NetField = Exclude<keyof typeof COLUMN_INDEX, "studentNumber">;
 
-function normalizeKey(k: unknown): string {
-  return String(k ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_\-./()]+/g, "_")
-    .replace(/ğ/g, "g")
-    .replace(/ü/g, "u")
-    .replace(/ş/g, "s")
-    .replace(/ı/g, "i")
-    .replace(/ç/g, "c")
-    .replace(/ö/g, "o");
-}
+const NET_FIELDS: NetField[] = [
+  "turkceNet",
+  "tarihNet",
+  "cografyaNet",
+  "felsefeNet",
+  "dinNet",
+  "matematikNet",
+  "geometriNet",
+  "fizikNet",
+  "kimyaNet",
+  "biyolojiNet",
+  "toplamNet",
+  "tytPuani",
+];
 
 function toNet(v: unknown): number | undefined {
   if (v === null || v === undefined || v === "") return undefined;
   const n = typeof v === "number" ? v : parseFloat(String(v).replace(",", "."));
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : undefined;
-}
-
-function findKey(keys: Set<string>, headers: string[]): number {
-  return headers.findIndex((h) => keys.has(normalizeKey(h)));
 }
 
 function toISODateLocal(d: Date): string {
@@ -68,8 +62,18 @@ function todayISO(): string {
 
 interface ParsedRow {
   studentNumber: string;
-  tytNet?: number;
-  aytNet?: number;
+  turkceNet?: number;
+  tarihNet?: number;
+  cografyaNet?: number;
+  felsefeNet?: number;
+  dinNet?: number;
+  matematikNet?: number;
+  geometriNet?: number;
+  fizikNet?: number;
+  kimyaNet?: number;
+  biyolojiNet?: number;
+  toplamNet?: number;
+  tytPuani?: number;
 }
 
 export function ImportExamsForm() {
@@ -89,8 +93,8 @@ export function ImportExamsForm() {
 
   const preview = useMemo(
     () => ({
-      ok: parsedRows.filter((r) => r.tytNet !== undefined || r.aytNet !== undefined).length,
-      noNet: parsedRows.filter((r) => r.tytNet === undefined && r.aytNet === undefined).length,
+      ok: parsedRows.filter((r) => NET_FIELDS.some((f) => r[f] !== undefined)).length,
+      noNet: parsedRows.filter((r) => NET_FIELDS.every((f) => r[f] === undefined)).length,
     }),
     [parsedRows],
   );
@@ -114,66 +118,59 @@ export function ImportExamsForm() {
           setError("Belge okunamadı: geçerli bir Excel/CSV dosyası seçin.");
           return;
         }
-        const jsonRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+        const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+          header: 1,
           defval: null,
         });
-        if (jsonRows.length === 0) {
+        if (matrix.length === 0) {
           setError("Belgede veri bulunamadı.");
           return;
         }
 
-        const headers = Object.keys(jsonRows[0]);
-        const numberIdx = findKey(NUMBER_KEYS, headers);
-        const tytIdx = findKey(TYT_KEYS, headers);
-        const aytIdx = findKey(AYT_KEYS, headers);
-        const examNameIdx = findKey(EXAM_NAME_KEYS, headers);
-        const dateIdx = findKey(DATE_KEYS, headers);
-
-        if (numberIdx === -1) {
-          setError(
-            "'Okul No' / 'OgrenciNo' sütunu bulunamadı. Dosyada öğrenci numarası sütunu olmalı.",
-          );
-          return;
+        // Edesis/Özdebir dosyalarında ilk 2-3 satır karmaşık bir başlıktır.
+        // Öğrenci verisi, 3. sütunda (index 2) öğrenci numarası görünen satırda başlar.
+        let startIdx = -1;
+        const scanLimit = Math.min(matrix.length, 10);
+        for (let i = 0; i < scanLimit; i++) {
+          const cell = matrix[i]?.[COLUMN_INDEX.studentNumber];
+          if (cell === null || cell === undefined || cell === "") continue;
+          if (/^\d+$/.test(String(cell).trim())) {
+            startIdx = i;
+            break;
+          }
         }
-        if (tytIdx === -1 && aytIdx === -1) {
-          setError("'TYT' veya 'AYT' net sütunu bulunamadı.");
-          return;
-        }
+        if (startIdx === -1) startIdx = Math.min(3, matrix.length);
 
-        const rows = jsonRows.map((r) => {
-          const rawNumber = r[headers[numberIdx]];
+        const rows: ParsedRow[] = [];
+        for (const cells of matrix.slice(startIdx)) {
+          const rawNumber = cells?.[COLUMN_INDEX.studentNumber];
           const studentNumber =
             typeof rawNumber === "number" || typeof rawNumber === "string"
               ? String(rawNumber).trim()
               : "";
-          return {
+          if (!studentNumber) continue;
+          rows.push({
             studentNumber,
-            tytNet: tytIdx === -1 ? undefined : toNet(r[headers[tytIdx]]),
-            aytNet: aytIdx === -1 ? undefined : toNet(r[headers[aytIdx]]),
-          };
-        });
-        const filtered = rows.filter((r) => r.studentNumber !== "");
-
-        if (!examName && examNameIdx !== -1) {
-          const firstVal = jsonRows[0][headers[examNameIdx]];
-          if (typeof firstVal === "string" && firstVal.trim() !== "") {
-            setExamName(firstVal.trim());
-          }
-        }
-        if (dateIdx !== -1) {
-          const firstVal = jsonRows[0][headers[dateIdx]];
-          if (firstVal instanceof Date) {
-            setExamDate(toISODateLocal(firstVal));
-          } else if (typeof firstVal === "string" && /^\d{4}-\d{2}-\d{2}$/.test(firstVal)) {
-            setExamDate(firstVal);
-          }
+            turkceNet: toNet(cells[COLUMN_INDEX.turkceNet]),
+            tarihNet: toNet(cells[COLUMN_INDEX.tarihNet]),
+            cografyaNet: toNet(cells[COLUMN_INDEX.cografyaNet]),
+            felsefeNet: toNet(cells[COLUMN_INDEX.felsefeNet]),
+            dinNet: toNet(cells[COLUMN_INDEX.dinNet]),
+            matematikNet: toNet(cells[COLUMN_INDEX.matematikNet]),
+            geometriNet: toNet(cells[COLUMN_INDEX.geometriNet]),
+            fizikNet: toNet(cells[COLUMN_INDEX.fizikNet]),
+            kimyaNet: toNet(cells[COLUMN_INDEX.kimyaNet]),
+            biyolojiNet: toNet(cells[COLUMN_INDEX.biyolojiNet]),
+            toplamNet: toNet(cells[COLUMN_INDEX.toplamNet]),
+            tytPuani: toNet(cells[COLUMN_INDEX.tytPuani]),
+          });
         }
 
-        if (filtered.length === 0) {
+        if (rows.length === 0) {
           setError("Dosyada öğrenci numarası içeren satır bulunamadı.");
           return;
         }
-        setParsedRows(filtered);
+        setParsedRows(rows);
       })
       .catch(() => {
         setError("Dosya okunurken bir hata oluştu.");
@@ -219,8 +216,9 @@ export function ImportExamsForm() {
       <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-gray-900">Deneme Sınavı Sonucu Yükle</h2>
         <p className="mt-0.5 text-xs text-gray-500">
-          Excel veya CSV dosyası seçin. Dosyadaki &quot;Okul No&quot; sütunu öğrenci
-          numarasıyla eşleştirilir, TYT/AYT netleri kaydedilir.
+          Edesis/Özdebir Excel dosyası seçin. İlk 2-3 satırlık başlık otomatik
+          atlanır; 3. sütundaki öğrenci numarası sistemdeki kayıtlarla
+          eşleştirilir, tüm branş netleri ve TYT puanı kaydedilir.
         </p>
 
         <div className="mt-5 space-y-4">
@@ -327,8 +325,8 @@ export function ImportExamsForm() {
                   <tr className="bg-gray-50 text-left text-[11px] font-bold uppercase tracking-wide text-gray-400">
                     <th className="px-3 py-2">Öğrenci</th>
                     <th className="px-3 py-2">No</th>
-                    <th className="px-3 py-2 text-right">TYT</th>
-                    <th className="px-3 py-2 text-right">AYT</th>
+                    <th className="px-3 py-2 text-right">Toplam</th>
+                    <th className="px-3 py-2 text-right">TYT Puanı</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -337,10 +335,10 @@ export function ImportExamsForm() {
                       <td className="px-3 py-2 font-semibold text-gray-900">{r.studentName}</td>
                       <td className="px-3 py-2 text-xs text-gray-500">{r.studentNumber}</td>
                       <td className="px-3 py-2 text-right font-semibold text-indigo-700">
-                        {r.tytNet.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}
+                        {r.toplamNet.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}
                       </td>
                       <td className="px-3 py-2 text-right font-semibold text-indigo-700">
-                        {r.aytNet.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}
+                        {r.tytPuani.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}
                       </td>
                     </tr>
                   ))}
