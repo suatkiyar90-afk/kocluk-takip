@@ -1,5 +1,8 @@
 import { Toaster } from "sonner";
-import { getMyWeeklyTargets } from "@/app/actions/weekly-target-actions";
+import {
+  getMyWeeklyFeedback,
+  getMyWeeklyTargets,
+} from "@/app/actions/weekly-target-actions";
 import { parseMonday } from "@/lib/week-utils";
 import { WeekPicker } from "@/components/ui/week-picker";
 import { StudentNav } from "@/components/student/student-nav";
@@ -26,7 +29,13 @@ export default async function WeeklyTargetsPage({
   const resolvedParams = searchParams ? await searchParams : undefined;
   const weekStart = parseMonday(resolvedParams?.week);
 
-  const result = await getMyWeeklyTargets(weekStart);
+  const [result, feedbackResult] = await Promise.all([
+    getMyWeeklyTargets(weekStart),
+    getMyWeeklyFeedback(weekStart),
+  ]);
+
+  const coachComment =
+    feedbackResult.success === true ? feedbackResult.data.comment : null;
 
   const targets = result.success === true ? result.data : null;
   const totalTarget = targets
@@ -55,6 +64,27 @@ export default async function WeeklyTargetsPage({
 
       <div className="space-y-4">
         <WeekPicker monday={weekStart} />
+
+        <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="rounded-md bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700 ring-1 ring-blue-200">
+              Dönüt
+            </span>
+            <h2 className="text-sm font-bold text-blue-900">
+              Koçun Bu Haftaki Notu
+            </h2>
+          </div>
+          {coachComment ? (
+            <p className="mt-2.5 text-sm leading-relaxed whitespace-pre-wrap text-blue-950">
+              {coachComment}
+            </p>
+          ) : (
+            <p className="mt-2.5 text-sm italic text-gray-400">
+              Koç öğretmeniniz bu hafta için henüz bir değerlendirme notu
+              eklemedi.
+            </p>
+          )}
+        </section>
 
         {result.success === false ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">

@@ -1,10 +1,11 @@
 "use server";
 
 import { z } from "zod";
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import {
+  coachingFeedbacks,
   curriculumTopics,
   dailyQuestionEntries,
   teacherStudents,
@@ -373,6 +374,40 @@ export async function getMyWeeklyTargets(
   try {
     const views = await buildTargetViews(ctx.studentId, parseMonday(weekStartArg));
     return { success: true, data: views };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message:
+        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+    };
+  }
+}
+
+export async function getMyWeeklyFeedback(
+  weekStartArg?: string,
+): Promise<WeeklyTargetActionResult<{ comment: string | null }>> {
+  const ctx = await getStudentId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  const weekStart = parseMonday(weekStartArg);
+
+  try {
+    const rows = await db
+      .select({ comment: coachingFeedbacks.comment })
+      .from(coachingFeedbacks)
+      .where(
+        and(
+          eq(coachingFeedbacks.studentId, ctx.studentId),
+          eq(coachingFeedbacks.weekStart, weekStart),
+        ),
+      )
+      .orderBy(desc(coachingFeedbacks.createdAt))
+      .limit(1);
+
+    return { success: true, data: { comment: rows[0]?.comment ?? null } };
   } catch (err) {
     return {
       success: false,
