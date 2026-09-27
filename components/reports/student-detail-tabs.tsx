@@ -80,7 +80,7 @@ export function StudentDetailTabs({
     <div>
       <div
         role="tablist"
-        className="mb-6 flex gap-1 overflow-x-auto rounded-2xl bg-gray-100 p-1"
+        className="mb-6 flex w-full flex-nowrap items-center justify-start space-x-2 overflow-x-auto rounded-2xl bg-gray-100 p-1 pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       >
         {TABS.map((tab) => (
           <button
@@ -89,7 +89,7 @@ export function StudentDetailTabs({
             role="tab"
             aria-selected={activeTab === tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`h-10 shrink-0 whitespace-nowrap rounded-xl px-3.5 text-xs font-semibold transition-colors touch-manipulation ${
+            className={`flex-shrink-0 whitespace-nowrap rounded-xl px-4 py-2 text-xs font-semibold transition-colors touch-manipulation ${
               activeTab === tab.id
                 ? "bg-white text-indigo-700 shadow"
                 : "text-gray-500 hover:text-gray-700"
