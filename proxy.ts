@@ -7,6 +7,8 @@ const HOME_BY_ROLE: Record<string, string> = {
   student: "/quiz-entry",
 };
 
+const FORCE_CHANGE_PATH = "/force-change-password";
+
 function homeFor(role?: string): string {
   return HOME_BY_ROLE[role ?? ""] ?? "/login";
 }
@@ -31,6 +33,17 @@ export const proxy = auth((request) => {
     return NextResponse.redirect(loginUrl);
   }
 
+  if (role === "student" && session.user.mustChangePassword === true) {
+    if (pathname === FORCE_CHANGE_PATH) {
+      return NextResponse.next();
+    }
+    return NextResponse.redirect(new URL(FORCE_CHANGE_PATH, request.url));
+  }
+
+  if (pathname === FORCE_CHANGE_PATH) {
+    return NextResponse.redirect(new URL(homeFor(role), request.url));
+  }
+
   if (pathname.startsWith("/admin")) {
     if (role !== "admin") {
       return NextResponse.redirect(new URL(homeFor(role), request.url));
@@ -52,7 +65,8 @@ export const proxy = auth((request) => {
     pathname.startsWith("/quiz-entry") ||
     pathname.startsWith("/deneme-sinavi") ||
     pathname.startsWith("/ask") ||
-    pathname.startsWith("/mufredat");
+    pathname.startsWith("/mufredat") ||
+    pathname.startsWith("/weekly-targets");
 
   if (isStudentArea && role !== "student") {
     return NextResponse.redirect(new URL(homeFor(role), request.url));

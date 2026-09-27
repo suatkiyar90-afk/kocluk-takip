@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db } from "@/db";
 import { accounts, sessions, users, verificationTokens } from "@/db/schema";
@@ -35,7 +35,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const rows = await db
           .select()
           .from(users)
-          .where(eq(users.email, username))
+          .where(or(eq(users.email, username), eq(users.studentNumber, username)))
           .limit(1);
         const user = rows[0];
 
@@ -53,6 +53,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           email: user.email,
           role: user.role,
+          mustChangePassword: user.mustChangePassword,
         };
       },
     }),
@@ -62,6 +63,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        token.mustChangePassword = user.mustChangePassword;
+      } else if (token.id && token.role === "student") {
+        const rows = await db
+          .select({ flag: users.mustChangePassword })
+          .from(users)
+          .where(eq(users.id, token.id))
+          .limit(1);
+        if (rows[0]) {
+          token.mustChangePassword = rows[0].flag;
+        }
       }
       return token;
     },
@@ -72,6 +83,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.role) {
         session.user.role = token.role;
       }
+      session.user.mustChangePassword = token.mustChangePassword === true;
       return session;
     },
   },

@@ -3,7 +3,7 @@
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { auth } from "@/auth";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { db } from "@/db";
 import { teacherStudents, users } from "@/db/schema";
 
@@ -18,7 +18,6 @@ export interface AdminStudent {
   name: string;
   email: string | null;
   studentNumber: string | null;
-  weeklyTarget: number;
 }
 
 export type AdminActionResult<T> =
@@ -63,12 +62,6 @@ const createUserSchema = z.object({
       (v) => v === undefined || v === null || v === "" || /^[A-Za-z0-9\-/._]{1,50}$/.test(v),
       "Öğrenci numarası geçersiz.",
     ),
-  weeklyTarget: z.coerce
-    .number()
-    .int()
-    .min(0)
-    .max(1000)
-    .default(0),
 });
 
 export async function adminCreateUser(
@@ -87,7 +80,7 @@ export async function adminCreateUser(
       message: parsed.error.issues.map((i) => i.message).join(", "),
     };
   }
-  const { name, email, password, role, studentNumber, weeklyTarget } = parsed.data;
+  const { name, email, password, role, studentNumber } = parsed.data;
   const normalizedStudentNumber =
     role === "student" && studentNumber ? studentNumber.trim() : null;
 
@@ -130,7 +123,7 @@ export async function adminCreateUser(
         role,
         studentNumber: normalizedStudentNumber,
         passwordHash,
-        weeklyTarget: role === "student" ? weeklyTarget : 0,
+        mustChangePassword: true,
       })
       .returning({ id: users.id });
 
@@ -139,6 +132,144 @@ export async function adminCreateUser(
       success: true,
       data: { id: inserted[0].id },
       message: `${roleLabel} kaydedildi.`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message:
+        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+    };
+  }
+}
+
+const bulkStudentsSchema = z.object({
+  rows: z
+    .array(
+      z.object({
+        fullName: z
+          .string()
+          .trim()
+          .min(1, "Ad soyad boş olamaz.")
+          .max(100, "Ad soyad çok uzun."),
+        studentNumber: z
+          .string()
+          .trim()
+          .regex(/^[A-Za-z0-9\-/._]{1,50}$/, "Öğrenci numarası geçersiz."),
+      }),
+    )
+    .min(1, "En az 1 satır gerekli.")
+    .max(1000, "Tek dosyada en fazla 1000 öğrenci olabilir."),
+});
+
+export interface BulkCreateSkipped {
+  studentNumber: string;
+  fullName: string;
+  reason: string;
+}
+
+export interface BulkCreateData {
+  created: number;
+  skipped: BulkCreateSkipped[];
+}
+
+export async function bulkCreateStudents(
+  input: unknown,
+): Promise<AdminActionResult<BulkCreateData>> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  const parsed = bulkStudentsSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((i) => i.message).join(", "),
+    };
+  }
+
+  const skipped: BulkCreateSkipped[] = [];
+  const toInsert: Array<{
+    name: string;
+    email: string;
+    role: "student";
+    studentNumber: string;
+    passwordHash: string;
+    mustChangePassword: true;
+  }> = [];
+
+  try {
+    const seenNumbers = new Set<string>();
+    const numbers = parsed.data.rows.map((r) => r.studentNumber);
+    const emails = numbers.map((n) => `${n}@kocluk.local`);
+
+    const [existingNumberRows, existingEmailRows] = await Promise.all([
+      db
+        .select({ studentNumber: users.studentNumber })
+        .from(users)
+        .where(inArray(users.studentNumber, numbers)),
+      db
+        .select({ email: users.email })
+        .from(users)
+        .where(inArray(users.email, emails)),
+    ]);
+
+    const existingNumbers = new Set(
+      existingNumberRows
+        .map((r) => r.studentNumber)
+        .filter((v): v is string => v !== null),
+    );
+    const existingEmails = new Set(
+      existingEmailRows
+        .map((r) => r.email)
+        .filter((v): v is string => v !== null),
+    );
+
+    const passwordHash = await bcrypt.hash("123456", 10);
+
+    for (const row of parsed.data.rows) {
+      const number = row.studentNumber;
+      if (seenNumbers.has(number)) {
+        skipped.push({
+          studentNumber: number,
+          fullName: row.fullName,
+          reason: "Dosyada tekrar eden numara.",
+        });
+        continue;
+      }
+      seenNumbers.add(number);
+
+      if (existingNumbers.has(number) || existingEmails.has(`${number}@kocluk.local`)) {
+        skipped.push({
+          studentNumber: number,
+          fullName: row.fullName,
+          reason: "Bu numara sistemde zaten kayıtlı.",
+        });
+        continue;
+      }
+
+      toInsert.push({
+        name: row.fullName,
+        email: `${number}@kocluk.local`,
+        role: "student",
+        studentNumber: number,
+        passwordHash,
+        mustChangePassword: true,
+      });
+    }
+
+    if (toInsert.length > 0) {
+      await db.insert(users).values(toInsert);
+    }
+
+    return {
+      success: true,
+      data: { created: toInsert.length, skipped },
+      message: `${toInsert.length} öğrenci eklendi${
+        skipped.length > 0 ? `, ${skipped.length} satır atlandı.` : "."
+      }`,
     };
   } catch (err) {
     return {
@@ -166,7 +297,6 @@ export async function adminListUsers(): Promise<
         email: users.email,
         role: users.role,
         studentNumber: users.studentNumber,
-        weeklyTarget: users.weeklyTarget,
       })
       .from(users)
       .where(
@@ -185,7 +315,6 @@ export async function adminListUsers(): Promise<
         name: r.name,
         email: r.email,
         studentNumber: r.studentNumber,
-        weeklyTarget: r.weeklyTarget,
       }));
 
     return {

@@ -83,7 +83,7 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
               htmlFor="username"
               className="mb-1.5 block text-sm font-semibold text-gray-700"
             >
-              Kullanıcı Adı (e-posta)
+              Kullanıcı Adı (E-posta veya Öğrenci No)
             </label>
             <input
               id="username"
@@ -91,6 +91,7 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
               type="text"
               autoComplete="username"
               autoFocus
+              placeholder="ornek@ornek.com veya 1234"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-base text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"

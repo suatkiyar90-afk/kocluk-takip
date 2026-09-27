@@ -1,0 +1,172 @@
+import { Toaster } from "sonner";
+import { getMyWeeklyTargets } from "@/app/actions/weekly-target-actions";
+import { parseMonday } from "@/lib/week-utils";
+import { WeekPicker } from "@/components/ui/week-picker";
+import { StudentNav } from "@/components/student/student-nav";
+
+export const metadata = {
+  title: "Haftalık Hedeflerim | Koçluk Takip",
+};
+
+function formatRange(mondayIso: string): string {
+  const [y, m, d] = mondayIso.split("-").map(Number);
+  const start = new Date(y, (m || 1) - 1, d || 1);
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+  const opts = { day: "numeric", month: "long" } as const;
+  return `${start.toLocaleDateString("tr-TR", opts)} - ${end.toLocaleDateString("tr-TR", opts)}`;
+}
+
+interface WeeklyTargetsPageProps {
+  searchParams?: Promise<{ week?: string }>;
+}
+
+export default async function WeeklyTargetsPage({
+  searchParams,
+}: WeeklyTargetsPageProps) {
+  const resolvedParams = searchParams ? await searchParams : undefined;
+  const weekStart = parseMonday(resolvedParams?.week);
+
+  const result = await getMyWeeklyTargets(weekStart);
+
+  const targets = result.success === true ? result.data : null;
+  const totalTarget = targets
+    ? targets.reduce((sum, t) => sum + t.targetQuestionCount, 0)
+    : 0;
+  const totalSolved = targets
+    ? targets.reduce((sum, t) => sum + t.solvedCount, 0)
+    : 0;
+  const totalPct =
+    totalTarget > 0
+      ? Math.min(Math.round((totalSolved / totalTarget) * 100), 100)
+      : 0;
+  const totalReached = totalTarget > 0 && totalSolved >= totalTarget;
+
+  return (
+    <main className="mx-auto w-full max-w-md px-4 pb-10">
+      <StudentNav />
+
+      <header className="mb-4">
+        <h1 className="text-xl font-bold text-gray-900">Haftalık Hedeflerim</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          {formatRange(weekStart)} · Koçunuzun belirlediği hedefler ve
+          ilerlemeniz.
+        </p>
+      </header>
+
+      <div className="space-y-4">
+        <WeekPicker monday={weekStart} />
+
+        {result.success === false ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+            {result.message}
+          </div>
+        ) : targets && targets.length > 0 ? (
+          <>
+            <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="text-gray-500">Genel İlerleme</span>
+                <span className="text-gray-900">
+                  {totalSolved} / {totalTarget} soru
+                </span>
+              </div>
+              <div className="mt-2 h-3 w-full overflow-hidden rounded-full bg-gray-200">
+                <div
+                  className={`h-full rounded-full transition-[width] ${
+                    totalReached ? "bg-green-500" : "bg-indigo-500"
+                  }`}
+                  style={{ width: `${totalPct}%` }}
+                />
+              </div>
+              <p className="mt-1.5 text-[11px] font-medium text-gray-500">
+                {totalReached
+                  ? `Tüm haftalık hedefler tamamlandı (%${totalPct}).`
+                  : `Hedefin %${totalPct} tamamlandı · ${Math.max(
+                      totalTarget - totalSolved,
+                      0,
+                    )} soru kaldı.`}
+              </p>
+            </section>
+
+            {targets.map((t) => {
+              const pct =
+                t.targetQuestionCount > 0
+                  ? Math.min(
+                      Math.round((t.solvedCount / t.targetQuestionCount) * 100),
+                      100,
+                    )
+                  : 0;
+              const reached = t.solvedCount >= t.targetQuestionCount;
+              return (
+                <section
+                  key={t.id}
+                  className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-600 ring-1 ring-indigo-100">
+                        {t.examType}
+                      </span>
+                      <h2 className="text-sm font-bold text-gray-900">
+                        {t.subjectName}
+                      </h2>
+                    </div>
+                    <span className="text-xs font-semibold text-gray-500">
+                      {t.solvedCount} / {t.targetQuestionCount}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-gray-200">
+                    <div
+                      className={`h-full rounded-full transition-[width] ${
+                        reached ? "bg-green-500" : "bg-indigo-500"
+                      }`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <p className="mt-1.5 text-[11px] font-medium text-gray-500">
+                    {reached
+                      ? "Hedef tamamlandı!"
+                      : `Hedefin %${pct} tamamlandı · ${Math.max(
+                          t.targetQuestionCount - t.solvedCount,
+                          0,
+                        )} soru kaldı.`}
+                  </p>
+
+                  {t.targetTopics.length > 0 ? (
+                    <div className="mt-3">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400">
+                        Hedef Konular
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {t.targetTopics.map((topic) => (
+                          <span
+                            key={topic.topicId}
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                              topic.solved
+                                ? "bg-green-50 text-green-700 ring-1 ring-green-200"
+                                : "bg-gray-50 text-gray-600 ring-1 ring-gray-200"
+                            }`}
+                          >
+                            {topic.solved ? "✓ " : ""}
+                            {topic.topicName}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })}
+          </>
+        ) : (
+          <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm font-medium text-gray-500 shadow-sm">
+            {formatRange(weekStart)} için henüz bir hedef belirlenmemiş.
+            Koç öğretmeniniz hedef girdiğinde burada göreceksiniz.
+          </div>
+        )}
+      </div>
+
+      <Toaster position="top-center" richColors />
+    </main>
+  );
+}

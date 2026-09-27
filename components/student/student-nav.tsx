@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const LINKS = [
   { href: "/quiz-entry", label: "Günlük Giriş" },
+  { href: "/weekly-targets", label: "Hedeflerim" },
   { href: "/deneme-sinavi", label: "Denemeler" },
   { href: "/mufredat", label: "Müfredat" },
   { href: "/ask", label: "Soru Sor" },
@@ -14,7 +15,7 @@ export function StudentNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="mb-6 grid grid-cols-4 gap-1 rounded-2xl border border-gray-200 bg-white p-1 shadow-sm">
+    <nav className="mb-6 grid grid-cols-5 gap-1 rounded-2xl border border-gray-200 bg-white p-1 shadow-sm">
       {LINKS.map((link) => {
         const active =
           pathname === link.href || pathname.startsWith(`${link.href}/`);

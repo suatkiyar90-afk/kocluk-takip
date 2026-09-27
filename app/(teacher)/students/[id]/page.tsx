@@ -78,7 +78,6 @@ export default async function StudentDetailPage({
         <StudentDetailTabs
           weekStart={weekStart}
           studentId={student.id}
-          weeklyTarget={student.weeklyTarget}
           initialComment={feedback?.comment}
           reportResult={reportResult}
           examsResult={examsResult}

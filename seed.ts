@@ -41,7 +41,6 @@ async function main() {
       email: "student",
       role: "student",
       passwordHash: PASSWORD_HASH,
-      weeklyTarget: 0,
     })
     .onConflictDoUpdate({
       target: users.id,

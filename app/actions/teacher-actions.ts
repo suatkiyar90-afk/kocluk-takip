@@ -50,7 +50,7 @@ export interface SubjectSummary {
 }
 
 export interface WeeklySummaryData {
-  student: { id: string; name: string; weeklyTarget: number };
+  student: { id: string; name: string };
   weekStart: string;
   subjects: SubjectSummary[];
   totals: {
@@ -200,7 +200,7 @@ export async function getStudentWeeklySummary(
 
     const [profileRows, rows, feedbackRows] = await Promise.all([
       db
-        .select({ name: users.name, weeklyTarget: users.weeklyTarget })
+        .select({ name: users.name })
         .from(users)
         .where(eq(users.id, studentId))
         .limit(1),
@@ -273,7 +273,6 @@ export async function getStudentWeeklySummary(
         student: {
           id: studentId,
           name: profileRows[0]?.name || "İsimsiz öğrenci",
-          weeklyTarget: profileRows[0]?.weeklyTarget ?? 0,
         },
         weekStart,
         subjects,

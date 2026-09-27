@@ -1,4 +1,5 @@
 import {
+  boolean,
   date,
   index,
   integer,
@@ -58,7 +59,7 @@ export const users = pgTable("users", {
   image: text("image"),
   role: userRoleEnum("role").notNull().default("student"),
   passwordHash: text("password_hash"),
-  weeklyTarget: integer("weekly_target").notNull().default(0),
+  mustChangePassword: boolean("must_change_password").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -267,6 +268,37 @@ export const dailyQuestionEntries = pgTable(
   }),
 );
 
+export const weeklyTargets = pgTable(
+  "weekly_targets",
+  {
+    id: serial("id").primaryKey(),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    teacherId: uuid("teacher_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    weekStartDate: date("week_start_date").notNull(),
+    subjectId: text("subject_id").notNull(),
+    targetQuestionCount: integer("target_question_count").notNull().default(0),
+    targetTopics: integer("target_topics").array().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    weeklyTargetsUnique: uniqueIndex("weekly_targets_unique").on(
+      t.studentId,
+      t.weekStartDate,
+      t.subjectId,
+    ),
+    weeklyTargetsStudentWeekIdx: index("weekly_targets_student_week_idx").on(
+      t.studentId,
+      t.weekStartDate,
+    ),
+  }),
+);
+
 export const topicStatusEnum = pgEnum("topic_status", [
   "baslamadi",
   "calisiliyor",
@@ -345,3 +377,5 @@ export type NewStudentTopicProgress =
   typeof studentTopicProgress.$inferInsert;
 export type QaThread = typeof qaThreads.$inferSelect;
 export type NewQaThread = typeof qaThreads.$inferInsert;
+export type WeeklyTarget = typeof weeklyTargets.$inferSelect;
+export type NewWeeklyTarget = typeof weeklyTargets.$inferInsert;

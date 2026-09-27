@@ -7,6 +7,7 @@ import { FeedbackForm } from "@/components/coaching/feedback-form";
 import { MockExamHistory } from "@/components/exams/mock-exam-history";
 import { CurriculumProgress } from "@/components/curriculum/curriculum-progress";
 import { TeacherQASection } from "@/components/qa/teacher-qa-section";
+import { TargetsPanel } from "@/components/reports/targets-panel";
 import { netScore } from "@/components/quiz-entry/weekly-quiz-schema";
 import type { WeeklyReportResult } from "@/app/actions/quiz-actions";
 import type { MockExamsResult } from "@/app/actions/mock-exam-actions";
@@ -21,6 +22,7 @@ import type {
 
 const TABS = [
   { id: "report", label: "Haftalık Rapor" },
+  { id: "targets", label: "Hedef Ver" },
   { id: "exams", label: "Deneme Sınavları" },
   { id: "curriculum", label: "Müfredat" },
   { id: "qa", label: "Soru-Cevap" },
@@ -37,7 +39,6 @@ function formatNet(n: number): string {
 interface StudentDetailTabsProps {
   weekStart: string;
   studentId: string;
-  weeklyTarget: number;
   initialComment: string | undefined;
   reportResult: WeeklyReportResult;
   examsResult: MockExamsResult;
@@ -48,7 +49,6 @@ interface StudentDetailTabsProps {
 export function StudentDetailTabs({
   weekStart,
   studentId,
-  weeklyTarget,
   initialComment,
   reportResult,
   examsResult,
@@ -72,13 +72,9 @@ export function StudentDetailTabs({
     : 0;
   const totalSolved = totalCorrect + totalWrong + totalBlank;
   const totalNet = Math.round(netScore(totalCorrect, totalWrong) * 100) / 100;
-  const targetPct =
-    weeklyTarget > 0 ? Math.round((totalSolved / weeklyTarget) * 100) : null;
-  const remaining = Math.max(weeklyTarget - totalSolved, 0);
   const maxDaySolved = report
     ? Math.max(...report.days.map((day) => day.solved), 1)
     : 1;
-  const targetReached = targetPct !== null && targetPct >= 100;
 
   return (
     <div>
@@ -148,32 +144,6 @@ export function StudentDetailTabs({
                     </div>
                   </div>
 
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between text-xs font-semibold">
-                      <span className="text-gray-500">Haftalık Hedef</span>
-                      <span className="text-gray-900">
-                        {totalSolved} / {weeklyTarget} soru
-                      </span>
-                    </div>
-                    <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-gray-200">
-                      <div
-                        className={`h-full rounded-full transition-[width] ${
-                          targetReached ? "bg-green-500" : "bg-indigo-500"
-                        }`}
-                        style={{
-                          width: `${Math.min(targetPct !== null ? targetPct : 0, 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <p className="mt-1.5 text-[11px] font-medium text-gray-500">
-                      {weeklyTarget <= 0
-                        ? "Haftalık hedef tanımlanmamış."
-                        : targetReached
-                          ? `Haftalık hedef tamamlandı (%${targetPct}).`
-                          : `Hedefin %${targetPct ?? 0} tamamlandı · ${remaining} soru kaldı.`}
-                    </p>
-                  </div>
-
                   <div className="mt-4 grid grid-cols-7 gap-1.5">
                     {report.days.map((day) => {
                       const dow = new Date(`${day.date}T00:00:00`).getDay();
@@ -228,6 +198,14 @@ export function StudentDetailTabs({
             weekStart={weekStart}
           />
         </div>
+      </div>
+
+      <div role="tabpanel" hidden={activeTab !== "targets"}>
+        <TargetsPanel
+          studentId={studentId}
+          weekStart={weekStart}
+          snapshot={curriculumResult.success === true ? curriculumResult.data : null}
+        />
       </div>
 
       <div role="tabpanel" hidden={activeTab !== "exams"}>
