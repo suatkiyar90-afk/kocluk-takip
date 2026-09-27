@@ -426,3 +426,151 @@ export async function getWeeklyReportByStudent(
     };
   }
 }
+
+export interface SubjectStatistics {
+  subjectId: string;
+  subjectName: string;
+  lastWeekTotal: number;
+  lastMonthTotal: number;
+  allTimeTotal: number;
+}
+
+export type StudentStatisticsResult =
+  | { success: true; data: SubjectStatistics[] }
+  | {
+      success: false;
+      status: "UNAUTHORIZED" | "FORBIDDEN" | "DATABASE_ERROR";
+      message: string;
+    };
+
+function isoDaysAgo(days: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+export async function getStudentStatistics(
+  studentId: string,
+): Promise<StudentStatisticsResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return {
+      success: false,
+      status: "UNAUTHORIZED",
+      message: "Oturum açmanız gerekiyor.",
+    };
+  }
+
+  const role = session.user.role;
+  if (role === "student") {
+    if (session.user.id !== studentId) {
+      return {
+        success: false,
+        status: "FORBIDDEN",
+        message: "Bu istatistikleri görüntüleme yetkiniz yok.",
+      };
+    }
+  } else if (role === "teacher") {
+    const assigned = await db
+      .select({ studentId: teacherStudents.studentId })
+      .from(teacherStudents)
+      .where(
+        and(
+          eq(teacherStudents.teacherId, session.user.id),
+          eq(teacherStudents.studentId, studentId),
+        ),
+      )
+      .limit(1);
+    if (assigned.length === 0) {
+      return {
+        success: false,
+        status: "FORBIDDEN",
+        message: "Bu öğrenci size atanmamış.",
+      };
+    }
+  } else if (role !== "admin") {
+    return {
+      success: false,
+      status: "FORBIDDEN",
+      message: "Bu işlem için yetkiniz yok.",
+    };
+  }
+
+  try {
+    const rows = await db
+      .select({
+        date: dailyQuestionEntries.date,
+        subjectId: dailyQuestionEntries.subjectId,
+        subjectName: curriculumTopics.subjectName,
+        correct: dailyQuestionEntries.correct,
+        wrong: dailyQuestionEntries.wrong,
+        blank: dailyQuestionEntries.blank,
+      })
+      .from(dailyQuestionEntries)
+      .innerJoin(
+        curriculumTopics,
+        eq(curriculumTopics.id, dailyQuestionEntries.topicId),
+      )
+      .where(eq(dailyQuestionEntries.studentId, studentId));
+
+    const today = new Date().toISOString().slice(0, 10);
+    const weekAgo = isoDaysAgo(7);
+    const monthAgo = isoDaysAgo(30);
+
+    const bySubject = new Map<
+      string,
+      {
+        subjectName: string;
+        lastWeekTotal: number;
+        lastMonthTotal: number;
+        allTimeTotal: number;
+      }
+    >();
+
+    for (const row of rows) {
+      const total = row.correct + row.wrong + row.blank;
+      let entry = bySubject.get(row.subjectId);
+      if (!entry) {
+        entry = {
+          subjectName: row.subjectName,
+          lastWeekTotal: 0,
+          lastMonthTotal: 0,
+          allTimeTotal: 0,
+        };
+        bySubject.set(row.subjectId, entry);
+      }
+      entry.allTimeTotal += total;
+      if (row.date <= today) {
+        if (row.date >= weekAgo) {
+          entry.lastWeekTotal += total;
+        }
+        if (row.date >= monthAgo) {
+          entry.lastMonthTotal += total;
+        }
+      }
+    }
+
+    const data: SubjectStatistics[] = [...bySubject.entries()]
+      .map(([subjectId, e]) => ({
+        subjectId,
+        subjectName: e.subjectName,
+        lastWeekTotal: e.lastWeekTotal,
+        lastMonthTotal: e.lastMonthTotal,
+        allTimeTotal: e.allTimeTotal,
+      }))
+      .sort(
+        (a, b) =>
+          b.allTimeTotal - a.allTimeTotal ||
+          a.subjectName.localeCompare(b.subjectName, "tr"),
+      );
+
+    return { success: true, data };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message:
+        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+    };
+  }
+}

@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/deneme-sinavi", label: "Denemeler" },
   { href: "/mufredat", label: "Müfredat" },
   { href: "/ask", label: "Soru Sor" },
+  { href: "/istatistikler", label: "İstatistikler" },
 ] as const;
 
 export function StudentNav() {

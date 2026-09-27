@@ -8,6 +8,7 @@ import { MockExamHistory } from "@/components/exams/mock-exam-history";
 import { CurriculumProgress } from "@/components/curriculum/curriculum-progress";
 import { TeacherQASection } from "@/components/qa/teacher-qa-section";
 import { TargetsPanel } from "@/components/reports/targets-panel";
+import { StudentStatisticsTab } from "@/components/student/student-statistics";
 import { netScore } from "@/components/quiz-entry/weekly-quiz-schema";
 import type { WeeklyReportResult } from "@/app/actions/quiz-actions";
 import type { MockExamsResult } from "@/app/actions/mock-exam-actions";
@@ -26,6 +27,7 @@ const TABS = [
   { id: "exams", label: "Deneme Sınavları" },
   { id: "curriculum", label: "Müfredat" },
   { id: "qa", label: "Soru-Cevap" },
+  { id: "stats", label: "İstatistikler" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -239,6 +241,10 @@ export function StudentDetailTabs({
             initialThreads={qaResult.data}
           />
         )}
+      </div>
+
+      <div role="tabpanel" hidden={activeTab !== "stats"}>
+        <StudentStatisticsTab studentId={studentId} />
       </div>
     </div>
   );

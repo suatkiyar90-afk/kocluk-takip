@@ -66,7 +66,8 @@ export const proxy = auth((request) => {
     pathname.startsWith("/deneme-sinavi") ||
     pathname.startsWith("/ask") ||
     pathname.startsWith("/mufredat") ||
-    pathname.startsWith("/weekly-targets");
+    pathname.startsWith("/weekly-targets") ||
+    pathname.startsWith("/istatistikler");
 
   if (isStudentArea && role !== "student") {
     return NextResponse.redirect(new URL(homeFor(role), request.url));
