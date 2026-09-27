@@ -13,55 +13,105 @@ function urlBase64ToUint8Array(base64String: string) {
   return output;
 }
 
-type BannerStatus = "hidden" | "show" | "busy" | "granted" | "error";
+type BannerStatus =
+  | "hidden"
+  | "prompt"
+  | "needs-activation"
+  | "busy"
+  | "done"
+  | "error";
+
+type EnsureResult =
+  | { status: "ok" }
+  | { status: "permission-denied" }
+  | { status: "error"; message: string };
+
+async function ensureSubscribed(): Promise<EnsureResult> {
+  if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+    return {
+      status: "error",
+      message: "Bu tarayıcı bildirimleri desteklemiyor.",
+    };
+  }
+
+  if (Notification.permission === "default") {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return { status: "permission-denied" };
+  }
+  if (Notification.permission !== "granted") {
+    return { status: "permission-denied" };
+  }
+
+  const key = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  if (!key) {
+    return {
+      status: "error",
+      message: "Bildirim anahtarı tanımlı değil (NEXT_PUBLIC_VAPID_PUBLIC_KEY).",
+    };
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.ready;
+
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(key),
+      });
+    }
+
+    const res = await fetch("/api/web-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "subscribe",
+        subscription: subscription.toJSON(),
+      }),
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as {
+        message?: string;
+      } | null;
+      return {
+        status: "error",
+        message: data?.message || "Abonelik kaydedilemedi.",
+      };
+    }
+    return { status: "ok" };
+  } catch {
+    return {
+      status: "error",
+      message: "Bildirim servisine bağlanılamadı.",
+    };
+  }
+}
+
+async function isRegisteredInDb(): Promise<boolean> {
+  try {
+    const registration = await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    if (!subscription) return false;
+
+    const res = await fetch(
+      `/api/web-push?endpoint=${encodeURIComponent(subscription.endpoint)}`,
+    );
+    if (!res.ok) return false;
+    const data = (await res.json().catch(() => null)) as {
+      subscribed?: boolean;
+    } | null;
+    return data?.subscribed === true;
+  } catch {
+    return false;
+  }
+}
 
 export function NotificationBanner() {
   const [status, setStatus] = useState<BannerStatus>("hidden");
   const [message, setMessage] = useState("");
   const startedRef = useRef(false);
-
-  async function ensureSubscribed(): Promise<boolean> {
-    const key = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    if (!key) {
-      setMessage(
-        "Bildirim anahtarı tanımlı değil (NEXT_PUBLIC_VAPID_PUBLIC_KEY).",
-      );
-      return false;
-    }
-
-    try {
-      const registration = await navigator.serviceWorker.register("/sw.js");
-      await navigator.serviceWorker.ready;
-
-      let subscription = await registration.pushManager.getSubscription();
-      if (!subscription) {
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(key),
-        });
-      }
-
-      const res = await fetch("/api/web-push", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "subscribe",
-          subscription: subscription.toJSON(),
-        }),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as {
-          message?: string;
-        } | null;
-        setMessage(data?.message || "Abonelik kaydedilemedi.");
-        return false;
-      }
-      return true;
-    } catch {
-      setMessage("Bildirim servisine bağlanılamadı.");
-      return false;
-    }
-  }
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -71,23 +121,27 @@ export function NotificationBanner() {
     if (!("Notification" in window) || !("serviceWorker" in navigator)) return;
     if (sessionStorage.getItem("pushBannerDismissed") === "1") return;
 
-    if (Notification.permission === "default") {
-      setStatus("show");
+    const permission = Notification.permission;
+
+    if (permission === "default") {
+      setStatus("prompt");
       return;
     }
 
-    if (Notification.permission === "granted") {
+    if (permission === "granted") {
       void (async () => {
-        const ok = await ensureSubscribed();
-        if (!ok) {
-          console.warn("push subscription refresh failed:", message);
-        }
+        const registered = await isRegisteredInDb();
+        setStatus(registered ? "hidden" : "needs-activation");
       })();
+      return;
     }
-  }, [message]);
+
+    // permission === "denied": tarayıcı ayarı değiştirilmeden tekrar istenemez
+    setStatus("hidden");
+  }, []);
 
   useEffect(() => {
-    if (status !== "granted") return;
+    if (status !== "done") return;
     const timer = setTimeout(() => setStatus("hidden"), 2500);
     return () => clearTimeout(timer);
   }, [status]);
@@ -96,18 +150,18 @@ export function NotificationBanner() {
     setStatus("busy");
     setMessage("");
 
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
+    const result = await ensureSubscribed();
+
+    if (result.status === "ok") {
+      setStatus("done");
+      return;
+    }
+    if (result.status === "permission-denied") {
       setStatus("hidden");
       return;
     }
-
-    const ok = await ensureSubscribed();
-    if (ok) {
-      setStatus("granted");
-    } else {
-      setStatus("error");
-    }
+    setMessage(result.message);
+    setStatus("error");
   }
 
   function handleDismiss() {
@@ -117,34 +171,69 @@ export function NotificationBanner() {
 
   if (status === "hidden") return null;
 
+  const isActivation = status === "needs-activation" || status === "error";
+  const title = isActivation
+    ? "Bildirimlerin henüz aktif değil"
+    : "Gün sonu hatırlatmalarını kaçırma";
+  const description = isActivation
+    ? "İzin verilmiş ama bu cihaz için abonelik kaydedilmemiş. Etkinleştirerek hatırlatmaları ve koçunun dönütlerini almaya başla."
+    : "Bildirimleri aç; günlük giriş hatırlatmaları ve koçunun dönütleri doğrudan cihazına gelsin.";
+  const buttonLabel =
+    status === "busy"
+      ? "İşleniyor…"
+      : status === "done"
+        ? "Bildirimler aktif ✓"
+        : status === "error"
+          ? "Tekrar Dene"
+          : isActivation
+            ? "Bildirimleri Aktifleştir"
+            : "Bildirimleri Aç";
+
   return (
-    <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 shadow-sm">
-      <p className="text-sm font-bold text-indigo-900">
-        Gün sonu hatırlatmalarını kaçırma
+    <div
+      className={`mb-4 rounded-2xl border p-4 shadow-sm ${
+        isActivation
+          ? "border-amber-300 bg-amber-50"
+          : "border-indigo-200 bg-indigo-50"
+      }`}
+    >
+      <p
+        className={`text-sm font-bold ${
+          isActivation ? "text-amber-900" : "text-indigo-900"
+        }`}
+      >
+        {title}
       </p>
-      <p className="mt-1 text-xs leading-relaxed text-indigo-700">
-        Bildirimleri aç; günlük giriş hatırlatmaları ve koçunun dönütleri
-        doğrudan cihazına gelsin.
+      <p
+        className={`mt-1 text-xs leading-relaxed ${
+          isActivation ? "text-amber-700" : "text-indigo-700"
+        }`}
+      >
+        {description}
       </p>
 
       <div className="mt-3 flex gap-2">
         <button
           type="button"
           onClick={handleEnable}
-          disabled={status === "busy" || status === "granted"}
-          className="h-11 flex-1 rounded-xl bg-indigo-600 text-sm font-bold text-white shadow-lg shadow-indigo-600/25 transition active:scale-[0.98] disabled:opacity-60 touch-manipulation"
+          disabled={status === "busy" || status === "done"}
+          className={`h-11 flex-1 rounded-xl text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:opacity-60 touch-manipulation ${
+            isActivation
+              ? "bg-amber-600 shadow-amber-600/25"
+              : "bg-indigo-600 shadow-indigo-600/25"
+          }`}
         >
-          {status === "busy"
-            ? "İzin alınıyor…"
-            : status === "granted"
-              ? "Bildirimler açıldı ✓"
-              : "Bildirimleri Aç"}
+          {buttonLabel}
         </button>
         <button
           type="button"
           onClick={handleDismiss}
           disabled={status === "busy"}
-          className="h-11 rounded-xl border border-indigo-200 bg-white px-4 text-sm font-semibold text-indigo-700 transition active:scale-[0.98] disabled:opacity-60 touch-manipulation"
+          className={`h-11 rounded-xl border bg-white px-4 text-sm font-semibold transition active:scale-[0.98] disabled:opacity-60 touch-manipulation ${
+            isActivation
+              ? "border-amber-300 text-amber-700"
+              : "border-indigo-200 text-indigo-700"
+          }`}
         >
           Şimdi değil
         </button>
@@ -153,9 +242,9 @@ export function NotificationBanner() {
       {status === "error" && message ? (
         <p className="mt-2 text-xs font-medium text-red-600">{message}</p>
       ) : null}
-      {status === "granted" ? (
+      {status === "done" ? (
         <p className="mt-2 text-xs font-medium text-green-700">
-          Teşekkürler! Bildirimlerin açıldı.
+          Teşekkürler! Bildirimlerin aktif.
         </p>
       ) : null}
     </div>

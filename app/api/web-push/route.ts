@@ -42,6 +42,34 @@ function ensureVapid(): boolean {
   return true;
 }
 
+export async function GET(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json(
+      { success: false, message: "Oturum gerekli." },
+      { status: 401 },
+    );
+  }
+
+  const endpoint = new URL(req.url).searchParams.get("endpoint");
+  if (!endpoint) {
+    return NextResponse.json({ success: true, subscribed: false });
+  }
+
+  const rows = await db
+    .select({ id: pushSubscriptions.id })
+    .from(pushSubscriptions)
+    .where(
+      and(
+        eq(pushSubscriptions.userId, session.user.id),
+        eq(pushSubscriptions.endpoint, endpoint),
+      ),
+    )
+    .limit(1);
+
+  return NextResponse.json({ success: true, subscribed: rows.length > 0 });
+}
+
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
