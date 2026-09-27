@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { mockExams, teacherStudents, users } from "@/db/schema";
+import { sendPushNotification } from "@/lib/web-push-helper";
 
 export interface MockExamRecord {
   id: number;
@@ -304,6 +305,7 @@ export async function importMockExams(
     }
 
     let saved: ImportedExamRow[] = [];
+    let notifiedStudentIds: string[] = [];
     if (toInsert.length > 0) {
       const inserted = await db
         .insert(mockExams)
@@ -365,6 +367,20 @@ export async function importMockExams(
 
       const savedStudentIds = new Set(inserted.map((i) => i.studentId));
       saved = toInsert.filter((r) => savedStudentIds.has(r.studentId));
+      notifiedStudentIds = [...savedStudentIds];
+    }
+
+    if (notifiedStudentIds.length > 0) {
+      await Promise.all(
+        notifiedStudentIds.map((studentId) =>
+          sendPushNotification(
+            studentId,
+            "Yeni Deneme Sınavı!",
+            "Son deneme sınavının sonuçları sisteme yüklendi. Netlerini ve analizini görmek için tıkla.",
+            "/deneme-sinavi",
+          ),
+        ),
+      );
     }
 
     return {

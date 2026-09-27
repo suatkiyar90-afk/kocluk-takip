@@ -5,6 +5,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { pushSubscriptions, teacherStudents } from "@/db/schema";
+import { ensureVapid } from "@/lib/web-push-helper";
 
 const subscribeSchema = z.object({
   action: z.literal("subscribe"),
@@ -29,18 +30,6 @@ const bodySchema = z.discriminatedUnion("action", [
   subscribeSchema,
   sendSchema,
 ]);
-
-function ensureVapid(): boolean {
-  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  const privateKey = process.env.VAPID_PRIVATE_KEY;
-  if (!publicKey || !privateKey) return false;
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || "mailto:admin@kocluk.local",
-    publicKey,
-    privateKey,
-  );
-  return true;
-}
 
 export async function GET(req: Request) {
   const session = await auth();

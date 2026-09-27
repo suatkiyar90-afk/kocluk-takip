@@ -10,6 +10,7 @@ import {
   weeklyQuestionEntries,
 } from "@/db/schema";
 import { getCurrentWeekMonday, parseMonday } from "@/lib/week-utils";
+import { sendPushNotification } from "@/lib/web-push-helper";
 import {
   ALL_SUBJECTS,
   netScore,
@@ -346,6 +347,13 @@ export async function saveCoachingFeedback(
         id: coachingFeedbacks.id,
         comment: coachingFeedbacks.comment,
       });
+
+    await sendPushNotification(
+      studentId,
+      "Yeni Haftalık Dönüt",
+      "Koç öğretmenin bu hafta için sana yeni hedefler ve değerlendirmeler yazdı.",
+      "/weekly-targets",
+    );
 
     return {
       success: true,

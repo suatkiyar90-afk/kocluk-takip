@@ -11,6 +11,7 @@ import {
   weeklyTargets,
 } from "@/db/schema";
 import { parseMonday } from "@/lib/week-utils";
+import { sendPushNotification } from "@/lib/web-push-helper";
 
 export type WeeklyTargetActionResult<T> =
   | { success: true; data: T }
@@ -274,6 +275,13 @@ export async function saveWeeklyTarget(
         set: updateSet,
       })
       .returning({ id: weeklyTargets.id });
+
+    await sendPushNotification(
+      studentId,
+      "Yeni Haftalık Dönüt",
+      "Koç öğretmenin bu hafta için sana yeni hedefler ve değerlendirmeler yazdı.",
+      "/weekly-targets",
+    );
 
     return { success: true, data: { id: saved[0].id } };
   } catch (err) {

@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { qaThreads, teacherStudents } from "@/db/schema";
+import { sendPushNotification } from "@/lib/web-push-helper";
 
 export type QaActionResult<T> =
   | { success: true; data: T }
@@ -354,6 +355,13 @@ export async function answerQuestion(
         message: "Soru bulunamadı.",
       };
     }
+
+    await sendPushNotification(
+      row.studentId,
+      "Soruna Cevap Geldi",
+      "Öğretmenin sorduğun soruya yanıt verdi, detayları görmek için tıkla.",
+      "/ask",
+    );
 
     return {
       success: true,
