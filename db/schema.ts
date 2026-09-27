@@ -299,6 +299,29 @@ export const weeklyTargets = pgTable(
   }),
 );
 
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: serial("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    userEndpointUnique: uniqueIndex("push_subscriptions_user_endpoint_unique").on(
+      t.userId,
+      t.endpoint,
+    ),
+    userIdIdx: index("push_subscriptions_user_id_idx").on(t.userId),
+  }),
+);
+
 export const topicStatusEnum = pgEnum("topic_status", [
   "baslamadi",
   "calisiliyor",
@@ -379,3 +402,5 @@ export type QaThread = typeof qaThreads.$inferSelect;
 export type NewQaThread = typeof qaThreads.$inferInsert;
 export type WeeklyTarget = typeof weeklyTargets.$inferSelect;
 export type NewWeeklyTarget = typeof weeklyTargets.$inferInsert;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type NewPushSubscription = typeof pushSubscriptions.$inferInsert;

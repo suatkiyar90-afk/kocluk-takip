@@ -11,6 +11,7 @@ import type {
   SubjectOptions,
 } from "@/components/quiz-entry/daily-entry-types";
 import { StudentNav } from "@/components/student/student-nav";
+import { NotificationBanner } from "@/components/quiz-entry/notification-banner";
 import { QuizEntryClient } from "./quiz-entry-client";
 
 function toISODateLocal(d: Date): string {
@@ -151,6 +152,8 @@ export default async function QuizEntryPage({
             Sınav türü, ders ve konuyu seçip o gün çözdüğün soruları kaydet.
           </p>
         </header>
+
+        <NotificationBanner />
 
         {data === null ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
