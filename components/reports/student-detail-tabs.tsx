@@ -244,7 +244,10 @@ export function StudentDetailTabs({
       </div>
 
       <div role="tabpanel" hidden={activeTab !== "stats"}>
-        <StudentStatisticsTab studentId={studentId} />
+        <StudentStatisticsTab
+          studentId={studentId}
+          active={activeTab === "stats"}
+        />
       </div>
     </div>
   );

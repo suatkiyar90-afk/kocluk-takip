@@ -497,66 +497,34 @@ export async function getStudentStatistics(
   }
 
   try {
+    const today = new Date().toISOString().slice(0, 10);
+    const weekAgo = isoDaysAgo(7);
+    const monthAgo = isoDaysAgo(30);
+    const solved = sql<number>`${dailyQuestionEntries.correct} + ${dailyQuestionEntries.wrong} + ${dailyQuestionEntries.blank}`;
+
     const rows = await db
       .select({
-        date: dailyQuestionEntries.date,
         subjectId: dailyQuestionEntries.subjectId,
         subjectName: curriculumTopics.subjectName,
-        correct: dailyQuestionEntries.correct,
-        wrong: dailyQuestionEntries.wrong,
-        blank: dailyQuestionEntries.blank,
+        lastWeekTotal: sql<number>`coalesce(sum(case when ${dailyQuestionEntries.date} >= ${weekAgo} and ${dailyQuestionEntries.date} <= ${today} then ${solved} else 0 end)::int, 0)`,
+        lastMonthTotal: sql<number>`coalesce(sum(case when ${dailyQuestionEntries.date} >= ${monthAgo} and ${dailyQuestionEntries.date} <= ${today} then ${solved} else 0 end)::int, 0)`,
+        allTimeTotal: sql<number>`coalesce(sum(${solved})::int, 0)`,
       })
       .from(dailyQuestionEntries)
       .innerJoin(
         curriculumTopics,
         eq(curriculumTopics.id, dailyQuestionEntries.topicId),
       )
-      .where(eq(dailyQuestionEntries.studentId, studentId));
+      .where(eq(dailyQuestionEntries.studentId, studentId))
+      .groupBy(dailyQuestionEntries.subjectId, curriculumTopics.subjectName);
 
-    const today = new Date().toISOString().slice(0, 10);
-    const weekAgo = isoDaysAgo(7);
-    const monthAgo = isoDaysAgo(30);
-
-    const bySubject = new Map<
-      string,
-      {
-        subjectName: string;
-        lastWeekTotal: number;
-        lastMonthTotal: number;
-        allTimeTotal: number;
-      }
-    >();
-
-    for (const row of rows) {
-      const total = row.correct + row.wrong + row.blank;
-      let entry = bySubject.get(row.subjectId);
-      if (!entry) {
-        entry = {
-          subjectName: row.subjectName,
-          lastWeekTotal: 0,
-          lastMonthTotal: 0,
-          allTimeTotal: 0,
-        };
-        bySubject.set(row.subjectId, entry);
-      }
-      entry.allTimeTotal += total;
-      if (row.date <= today) {
-        if (row.date >= weekAgo) {
-          entry.lastWeekTotal += total;
-        }
-        if (row.date >= monthAgo) {
-          entry.lastMonthTotal += total;
-        }
-      }
-    }
-
-    const data: SubjectStatistics[] = [...bySubject.entries()]
-      .map(([subjectId, e]) => ({
-        subjectId,
-        subjectName: e.subjectName,
-        lastWeekTotal: e.lastWeekTotal,
-        lastMonthTotal: e.lastMonthTotal,
-        allTimeTotal: e.allTimeTotal,
+    const data: SubjectStatistics[] = rows
+      .map((row) => ({
+        subjectId: row.subjectId,
+        subjectName: row.subjectName,
+        lastWeekTotal: Number(row.lastWeekTotal),
+        lastMonthTotal: Number(row.lastMonthTotal),
+        allTimeTotal: Number(row.allTimeTotal),
       }))
       .sort(
         (a, b) =>

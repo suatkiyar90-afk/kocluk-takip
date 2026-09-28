@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   getStudentStatistics,
   type SubjectStatistics,
@@ -8,32 +8,43 @@ import {
 
 interface StudentStatisticsTabProps {
   studentId: string;
+  active?: boolean;
 }
 
-export function StudentStatisticsTab({ studentId }: StudentStatisticsTabProps) {
-  const [rows, setRows] = useState<SubjectStatistics[] | null>(null);
+export function StudentStatisticsTab({
+  studentId,
+  active = true,
+}: StudentStatisticsTabProps) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [data, setData] = useState<SubjectStatistics[] | null>(null);
   const [error, setError] = useState("");
+  const loadedRef = useRef(false);
 
   useEffect(() => {
+    if (!active || loadedRef.current) return;
     let cancelled = false;
+    setIsLoading(true);
+
     void (async () => {
       const result = await getStudentStatistics(studentId);
       if (cancelled) return;
       if (result.success === true) {
-        setRows(result.data);
+        setData(result.data);
         setError("");
+        loadedRef.current = true;
       } else {
         setError(result.message);
-        setRows(null);
       }
+      setIsLoading(false);
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [studentId]);
+  }, [active, studentId]);
 
-  const totals = rows
-    ? rows.reduce(
+  const totals = data
+    ? data.reduce(
         (acc, r) => ({
           lastWeekTotal: acc.lastWeekTotal + r.lastWeekTotal,
           lastMonthTotal: acc.lastMonthTotal + r.lastMonthTotal,
@@ -46,17 +57,35 @@ export function StudentStatisticsTab({ studentId }: StudentStatisticsTabProps) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
       <div className="border-b border-gray-100 px-4 py-3.5">
-        <h2 className="text-sm font-bold text-gray-900">Ders Bazında İstatistik</h2>
+        <h2 className="text-sm font-bold text-gray-900">
+          Ders Bazında İstatistik
+        </h2>
         <p className="mt-0.5 text-xs text-gray-500">
           Çözdüğün toplam soru sayıları (doğru + yanlış + boş).
         </p>
       </div>
 
-      {error ? (
+      {isLoading ? (
+        <div
+          role="status"
+          aria-label="Veriler yükleniyor"
+          className="space-y-3 p-4"
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold text-gray-500">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+            Veriler hesaplanıyor...
+          </div>
+          <div className="space-y-2.5 pt-1">
+            <div className="h-4 w-2/3 animate-pulse rounded bg-gray-200" />
+            <div className="h-4 w-5/6 animate-pulse rounded bg-gray-200" />
+            <div className="h-4 w-1/2 animate-pulse rounded bg-gray-200" />
+            <div className="h-4 w-3/4 animate-pulse rounded bg-gray-200" />
+            <div className="h-4 w-2/3 animate-pulse rounded bg-gray-200" />
+          </div>
+        </div>
+      ) : error ? (
         <div className="p-4 text-sm font-medium text-red-600">{error}</div>
-      ) : rows === null ? (
-        <div className="p-4 text-sm font-medium text-gray-500">Yükleniyor…</div>
-      ) : rows.length === 0 ? (
+      ) : data === null || data.length === 0 ? (
         <div className="p-4 text-sm font-medium text-gray-500">
           Henüz soru girişi bulunmuyor. Günlük giriş ekranından çözdüğün soruları
           kaydettiğinde istatistiklerin burada görünecek.
@@ -79,7 +108,7 @@ export function StudentStatisticsTab({ studentId }: StudentStatisticsTabProps) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {data.map((row) => (
                 <tr
                   key={row.subjectId}
                   className="border-t border-gray-100 transition hover:bg-gray-50/60"
