@@ -17,7 +17,7 @@ export default async function ForceChangePasswordPage() {
     redirect(session.user.role === "admin" ? "/admin" : "/dashboard");
   }
   if (session.user.mustChangePassword !== true) {
-    redirect("/quiz-entry");
+    redirect("/panel");
   }
 
   return (

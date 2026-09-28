@@ -101,9 +101,10 @@ function CountStepper({
 interface DailyEntryFormProps {
   date: string;
   subjects: SubjectOptions;
+  onSaved?: () => void;
 }
 
-export function DailyEntryForm({ date, subjects }: DailyEntryFormProps) {
+export function DailyEntryForm({ date, subjects, onSaved }: DailyEntryFormProps) {
   const router = useRouter();
   const [examType, setExamType] = useState<ExamType>("TYT");
   const [subjectId, setSubjectId] = useState("");
@@ -151,7 +152,11 @@ export function DailyEntryForm({ date, subjects }: DailyEntryFormProps) {
         setCorrect(0);
         setWrong(0);
         setBlank(0);
-        router.refresh();
+        if (onSaved) {
+          onSaved();
+        } else {
+          router.refresh();
+        }
       } else {
         toast.error(result.message);
       }

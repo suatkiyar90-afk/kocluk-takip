@@ -62,6 +62,7 @@ export const proxy = auth((request) => {
   }
 
   const isStudentArea =
+    pathname.startsWith("/panel") ||
     pathname.startsWith("/quiz-entry") ||
     pathname.startsWith("/deneme-sinavi") ||
     pathname.startsWith("/ask") ||

@@ -7,6 +7,7 @@ import { getCurrentWeekMonday, parseMonday, toISODate } from "@/lib/week-utils";
 interface WeekPickerProps {
   monday?: string;
   className?: string;
+  onWeekChange?: (monday: string) => void;
 }
 
 function parseDate(iso: string): Date {
@@ -30,7 +31,11 @@ function formatTurkishRange(mondayIso: string): string {
   return `${startFormatted} - ${endFormatted}`;
 }
 
-export function WeekPicker({ monday, className = "" }: WeekPickerProps) {
+export function WeekPicker({
+  monday,
+  className = "",
+  onWeekChange,
+}: WeekPickerProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -53,6 +58,10 @@ export function WeekPicker({ monday, className = "" }: WeekPickerProps) {
   }, [currentMonday]);
 
   const goToWeek = (targetMonday: string) => {
+    if (onWeekChange) {
+      onWeekChange(targetMonday);
+      return;
+    }
     const params = new URLSearchParams(searchParams ? searchParams.toString() : "");
     params.set("week", targetMonday);
     router.push(`${pathname}?${params.toString()}`);

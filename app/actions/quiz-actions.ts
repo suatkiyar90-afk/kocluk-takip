@@ -10,7 +10,15 @@ import {
   teacherStudents,
 } from "@/db/schema";
 import { parseMonday } from "@/lib/week-utils";
-import { netScore } from "@/components/quiz-entry/weekly-quiz-schema";
+import {
+  ALL_SUBJECTS,
+  netScore,
+} from "@/components/quiz-entry/weekly-quiz-schema";
+import type {
+  DayEntryRow,
+  SubjectOption,
+  SubjectOptions,
+} from "@/components/quiz-entry/daily-entry-types";
 
 async function getStudentId(): Promise<
   | { ok: true; studentId: string }
@@ -533,6 +541,135 @@ export async function getStudentStatistics(
       );
 
     return { success: true, data };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message:
+        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+    };
+  }
+}
+
+export interface DailyEntryData {
+  entries: DayEntryRow[];
+  subjects: SubjectOptions;
+}
+
+function isValidPastDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+  const real =
+    parsed.getFullYear() === year &&
+    parsed.getMonth() === month - 1 &&
+    parsed.getDate() === day;
+  if (!real) return false;
+  const today = new Date();
+  const todayIso = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, "0"),
+    String(today.getDate()).padStart(2, "0"),
+  ].join("-");
+  return value <= todayIso;
+}
+
+export async function getDailyEntryData(
+  date: string,
+): Promise<
+  | { success: true; data: DailyEntryData }
+  | {
+      success: false;
+      status: "UNAUTHORIZED" | "FORBIDDEN" | "DATABASE_ERROR";
+      message: string;
+    }
+> {
+  const guard = await getStudentId();
+  if (guard.ok === false) {
+    return { success: false, status: guard.status, message: guard.message };
+  }
+
+  const safeDate = isValidPastDate(date)
+    ? date
+    : new Date().toISOString().slice(0, 10);
+
+  try {
+    const [entryRows, topicRows] = await Promise.all([
+      db
+        .select({
+          id: dailyQuestionEntries.id,
+          examType: dailyQuestionEntries.examType,
+          subjectName: curriculumTopics.subjectName,
+          topicName: curriculumTopics.topicName,
+          correct: dailyQuestionEntries.correct,
+          wrong: dailyQuestionEntries.wrong,
+          blank: dailyQuestionEntries.blank,
+        })
+        .from(dailyQuestionEntries)
+        .innerJoin(
+          curriculumTopics,
+          eq(curriculumTopics.id, dailyQuestionEntries.topicId),
+        )
+        .where(
+          and(
+            eq(dailyQuestionEntries.studentId, guard.studentId),
+            eq(dailyQuestionEntries.date, safeDate),
+          ),
+        )
+        .orderBy(
+          asc(dailyQuestionEntries.examType),
+          asc(curriculumTopics.subjectName),
+          asc(curriculumTopics.sortOrder),
+        ),
+      db
+        .select({
+          id: curriculumTopics.id,
+          examType: curriculumTopics.examType,
+          subjectId: curriculumTopics.subjectId,
+          subjectName: curriculumTopics.subjectName,
+          topicName: curriculumTopics.topicName,
+          sortOrder: curriculumTopics.sortOrder,
+        })
+        .from(curriculumTopics)
+        .orderBy(
+          asc(curriculumTopics.examType),
+          asc(curriculumTopics.subjectId),
+          asc(curriculumTopics.sortOrder),
+        ),
+    ]);
+
+    const subjects: SubjectOptions = { TYT: [], AYT: [] };
+    const groupByKey = new Map<string, SubjectOption>();
+    for (const topic of topicRows) {
+      const key = `${topic.examType}:${topic.subjectId}`;
+      let group = groupByKey.get(key);
+      if (!group) {
+        group = {
+          subjectId: topic.subjectId,
+          subjectName: topic.subjectName,
+          topics: [],
+        };
+        groupByKey.set(key, group);
+        subjects[topic.examType].push(group);
+      }
+      group.topics.push({ id: topic.id, name: topic.topicName });
+    }
+
+    for (const examType of ["TYT", "AYT"] as const) {
+      const rank = new Map(
+        ALL_SUBJECTS[examType].map((subject, index) => [subject.id, index]),
+      );
+      subjects[examType].sort(
+        (a, b) =>
+          (rank.get(a.subjectId) ?? 99) - (rank.get(b.subjectId) ?? 99),
+      );
+    }
+
+    const entries: DayEntryRow[] = entryRows;
+    return { success: true, data: { entries, subjects } };
   } catch (err) {
     return {
       success: false,

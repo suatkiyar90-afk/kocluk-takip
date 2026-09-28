@@ -1,13 +1,12 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { DailyEntryForm } from "@/components/quiz-entry/daily-entry-form";
 import type {
   DayEntryRow,
   SubjectOptions,
 } from "@/components/quiz-entry/daily-entry-types";
 
-function toISODateLocal(d: Date): string {
+export function toISODateLocal(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -31,20 +30,19 @@ interface QuizEntryClientProps {
   date: string;
   entries: DayEntryRow[];
   subjects: SubjectOptions;
+  onDateChange: (nextDate: string) => void;
+  onSaved?: () => void;
 }
 
 export function QuizEntryClient({
   date,
   entries,
   subjects,
+  onDateChange,
+  onSaved,
 }: QuizEntryClientProps) {
-  const router = useRouter();
   const today = toISODateLocal(new Date());
   const label = formatDateLabel(date, today);
-
-  function navigate(nextDate: string) {
-    router.push(`/quiz-entry?date=${encodeURIComponent(nextDate)}`);
-  }
 
   return (
     <>
@@ -63,14 +61,14 @@ export function QuizEntryClient({
             max={today}
             suppressHydrationWarning
             onChange={(e) => {
-              if (e.target.value) navigate(e.target.value);
+              if (e.target.value) onDateChange(e.target.value);
             }}
             className="h-12 min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 text-base font-medium text-gray-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
           />
           {date !== today && (
             <button
               type="button"
-              onClick={() => navigate(today)}
+              onClick={() => onDateChange(today)}
               className="h-12 shrink-0 rounded-xl border border-indigo-200 bg-indigo-50 px-4 text-sm font-bold text-indigo-700 transition active:scale-95 touch-manipulation"
             >
               Bugün
@@ -85,7 +83,7 @@ export function QuizEntryClient({
         </p>
       </section>
 
-      <DailyEntryForm date={date} subjects={subjects} />
+      <DailyEntryForm date={date} subjects={subjects} onSaved={onSaved} />
 
       <section className="mt-6">
         <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
