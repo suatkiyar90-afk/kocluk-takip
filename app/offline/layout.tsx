@@ -1,27 +1,24 @@
 import "../globals.css";
-import { SchoolWatermark } from "@/components/brand/school-logo";
 import { pwaMetadata, pwaViewport } from "@/lib/pwa-metadata";
-import { SwRegister } from "@/components/pwa/sw-register";
 import { AppleWebAppMeta } from "@/components/pwa/apple-web-app-meta";
 
 export const metadata = {
   ...pwaMetadata,
-  title: "Giriş Yap | Koçluk Takip",
+  title: "Bağlantı Yok | Koçluk Takip",
+  robots: { index: false },
 };
 
 export const viewport = pwaViewport;
 
-export default function LoginLayout({
+export default function OfflineLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
     <html lang="tr">
-      <body>
+      <body className="min-h-dvh bg-gray-50">
         <AppleWebAppMeta />
-        <SwRegister />
-        <SchoolWatermark />
         {children}
       </body>
     </html>

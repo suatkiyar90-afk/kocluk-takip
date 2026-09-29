@@ -12,6 +12,7 @@ import {
   Target,
 } from "lucide-react";
 import { getStudentBadges, type StudentBadges } from "@/app/actions/student-badge-actions";
+import { InstallBanner } from "@/components/student/install-banner";
 import { QuizPanel } from "@/components/student/panels/quiz-panel";
 import { WeeklyTargetsPanel } from "@/components/student/panels/weekly-targets-panel";
 import { ExamsPanel } from "@/components/student/panels/exams-panel";
@@ -194,6 +195,7 @@ export function StudentPanel({ studentId }: StudentPanelProps) {
   return (
     <main className="min-h-screen bg-gray-50 px-4 pt-8 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-8">
       <div className="mx-auto w-full max-w-md">
+        <InstallBanner />
         <nav
           aria-label="Panel sekmeleri"
           role="tablist"

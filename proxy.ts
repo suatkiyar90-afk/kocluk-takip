@@ -83,6 +83,9 @@ export const proxy = auth((request) => {
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|sw.js).*)",
+    // PWA dosyaları oturum kontrolüne takılmamalı (manifest, çevrimdışı
+    // sayfası ve uygulama ikonları); aksi halde SW önbelleği ve kurulum
+    // çalışamaz.
+    "/((?!api|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|sw.js|manifest.webmanifest|offline|apple-touch-icon.png|icon-192x192.png|icon-512x512.png|icon-maskable-512x512.png).*)",
   ],
 };
