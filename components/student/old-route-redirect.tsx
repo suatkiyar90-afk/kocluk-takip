@@ -11,12 +11,7 @@ export function OldRouteRedirect({ tab }: OldRouteRedirectProps) {
   const router = useRouter();
 
   useEffect(() => {
-    try {
-      sessionStorage.setItem("student-tab", tab);
-    } catch {
-      // sessionStorage yoksa varsayılan sekme açılacak
-    }
-    router.replace("/panel");
+    router.replace(`/panel#${tab}`);
   }, [router, tab]);
 
   return (
