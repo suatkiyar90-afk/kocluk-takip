@@ -22,3 +22,11 @@ export interface DayEntryRow {
   wrong: number;
   blank: number;
 }
+
+export interface RecentDailyTopic {
+  examType: ExamType;
+  subjectId: string;
+  subjectName: string;
+  topicId: number;
+  topicName: string;
+}
