@@ -1,4 +1,5 @@
 import "../globals.css";
+import "@uploadthing/react/styles.css";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { SchoolWatermark } from "@/components/brand/school-logo";
 
