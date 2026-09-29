@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { getCurrentWeekMonday, parseMonday, toISODate } from "@/lib/week-utils";
+import { addDaysISO, getCurrentWeekMonday, parseMonday } from "@/lib/week-utils";
 
 interface WeekPickerProps {
   monday?: string;
@@ -45,17 +45,14 @@ export function WeekPicker({
     return parseMonday(monday ?? urlParam ?? getCurrentWeekMonday());
   }, [monday, searchParams]);
 
-  const { prevMonday, nextMonday, rangeLabel } = useMemo(() => {
-    const start = parseDate(currentMonday);
-    const prev = new Date(start.getFullYear(), start.getMonth(), start.getDate() - 7);
-    const next = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
-
-    return {
-      prevMonday: toISODate(prev),
-      nextMonday: toISODate(next),
+  const { prevMonday, nextMonday, rangeLabel } = useMemo(
+    () => ({
+      prevMonday: addDaysISO(currentMonday, -7),
+      nextMonday: addDaysISO(currentMonday, 7),
       rangeLabel: formatTurkishRange(currentMonday),
-    };
-  }, [currentMonday]);
+    }),
+    [currentMonday],
+  );
 
   const goToWeek = (targetMonday: string) => {
     if (onWeekChange) {

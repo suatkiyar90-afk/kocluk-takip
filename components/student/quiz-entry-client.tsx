@@ -3,25 +3,17 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { saveDailyNote } from "@/app/actions/quiz-actions";
+import { addDaysISO, todayInIstanbul } from "@/lib/week-utils";
 import { DailyEntryForm } from "@/components/quiz-entry/daily-entry-form";
 import type {
   DayEntryRow,
   SubjectOptions,
 } from "@/components/quiz-entry/daily-entry-types";
 
-export function toISODateLocal(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 function formatDateLabel(iso: string, today: string): string {
   if (iso === today) return "Bugün";
   const [y, m, d] = iso.split("-").map(Number);
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (iso === toISODateLocal(yesterday)) return "Dün";
+  if (iso === addDaysISO(today, -1)) return "Dün";
   return new Date(y, m - 1, d).toLocaleDateString("tr-TR", {
     day: "numeric",
     month: "long",
@@ -48,7 +40,7 @@ export function QuizEntryClient({
   onSaved,
   onNoteSaved,
 }: QuizEntryClientProps) {
-  const today = toISODateLocal(new Date());
+  const today = todayInIstanbul();
   const label = formatDateLabel(date, today);
   const [dailyNote, setDailyNote] = useState(initialDailyNote ?? "");
   const [savingNote, setSavingNote] = useState(false);

@@ -11,7 +11,7 @@ import {
   teacherStudents,
   weeklyTargets,
 } from "@/db/schema";
-import { parseMonday } from "@/lib/week-utils";
+import { addDaysISO, parseMonday } from "@/lib/week-utils";
 import { sendPushNotification } from "@/lib/web-push-helper";
 import { isAllowedUploadUrl } from "@/lib/url-guard";
 import { actionErrorMessage } from "@/lib/action-error";
@@ -103,15 +103,6 @@ async function isAssigned(
     )
     .limit(1);
   return rows.length === 1;
-}
-
-function addDaysISO(iso: string, days: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(y, m - 1, d + days);
-  const yy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
 }
 
 async function buildTargetViews(

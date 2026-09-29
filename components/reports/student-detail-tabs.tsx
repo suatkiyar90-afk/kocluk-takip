@@ -10,6 +10,7 @@ import { TeacherQASection } from "@/components/qa/teacher-qa-section";
 import { TargetsPanel } from "@/components/reports/targets-panel";
 import { StudentStatisticsTab } from "@/components/student/student-statistics";
 import { netScore } from "@/components/quiz-entry/weekly-quiz-schema";
+import { weekdayOfISO } from "@/lib/week-utils";
 import type { WeeklyReportResult } from "@/app/actions/quiz-actions";
 import type { MockExamsResult } from "@/app/actions/mock-exam-actions";
 import type {
@@ -175,7 +176,7 @@ export function StudentDetailTabs({
 
                   <div className="mt-4 grid grid-cols-7 gap-1.5">
                     {report.days.map((day) => {
-                      const dow = new Date(`${day.date}T00:00:00`).getDay();
+                      const dow = weekdayOfISO(day.date);
                       const heightPct =
                         day.solved > 0
                           ? Math.max((day.solved / maxDaySolved) * 100, 10)

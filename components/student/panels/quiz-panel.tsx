@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { getDailyEntryData, type DailyEntryData } from "@/app/actions/quiz-actions";
-import { QuizEntryClient, toISODateLocal } from "@/components/student/quiz-entry-client";
+import { QuizEntryClient } from "@/components/student/quiz-entry-client";
+import { todayInIstanbul } from "@/lib/week-utils";
 import { NotificationBanner } from "@/components/quiz-entry/notification-banner";
 import { PanelError, PanelSkeleton } from "@/components/student/panel-ui";
 
 export function QuizPanel() {
-  const [date, setDate] = useState(() => toISODateLocal(new Date()));
+  const [date, setDate] = useState(() => todayInIstanbul());
   const [reloadKey, setReloadKey] = useState(0);
   const [result, setResult] = useState<
     { success: true; data: DailyEntryData } | { success: false; message: string } | null

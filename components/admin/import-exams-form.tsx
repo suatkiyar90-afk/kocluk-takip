@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { importMockExams } from "@/app/actions/mock-exam-actions";
 import type { ImportedExamRow } from "@/app/actions/mock-exam-actions";
+import { todayInIstanbul } from "@/lib/week-utils";
 
 const inputClass =
   "h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-base text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200";
@@ -49,17 +50,6 @@ function toNet(v: unknown): number | undefined {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : undefined;
 }
 
-function toISODateLocal(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function todayISO(): string {
-  return toISODateLocal(new Date());
-}
-
 interface ParsedRow {
   studentNumber: string;
   turkceNet?: number;
@@ -79,7 +69,7 @@ interface ParsedRow {
 export function ImportExamsForm() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [examName, setExamName] = useState("");
-  const [examDate, setExamDate] = useState(todayISO());
+  const [examDate, setExamDate] = useState(todayInIstanbul());
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

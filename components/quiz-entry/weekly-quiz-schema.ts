@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { todayInIstanbul } from "@/lib/week-utils";
 
 export const examTypes = ["TYT", "AYT", "YDT"] as const;
 export type ExamType = (typeof examTypes)[number];
@@ -65,7 +66,7 @@ export type WeeklyQuizFormValues = z.infer<typeof weeklyQuizSchema>;
 export function buildDefaultValues(
   weekStart?: string,
 ): WeeklyQuizFormValues {
-  const date = weekStart ?? new Date().toISOString().slice(0, 10);
+  const date = weekStart ?? todayInIstanbul();
   const entry =
     (examType: ExamType) =>
     (s: SubjectDef): EntryValues => ({

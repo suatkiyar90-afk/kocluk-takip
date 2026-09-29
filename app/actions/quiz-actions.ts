@@ -10,7 +10,12 @@ import {
   studentDailyNotes,
   teacherStudents,
 } from "@/db/schema";
-import { parseMonday } from "@/lib/week-utils";
+import {
+  addDaysISO,
+  isValidISODate,
+  parseMonday,
+  todayInIstanbul,
+} from "@/lib/week-utils";
 import {
   ALL_SUBJECTS,
   examTypes,
@@ -91,29 +96,6 @@ async function isAssigned(
     )
     .limit(1);
   return rows.length === 1;
-}
-
-function isValidISODate(value: string): boolean {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return false;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(year, month - 1, day);
-  return (
-    date.getFullYear() === year &&
-    date.getMonth() === month - 1 &&
-    date.getDate() === day
-  );
-}
-
-function addDaysISO(iso: string, days: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(y, m - 1, d + days);
-  const yy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
 }
 
 function roundNet(n: number): number {
@@ -584,9 +566,7 @@ export type StudentStatisticsResult =
     };
 
 function isoDaysAgo(days: number): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - days);
-  return d.toISOString().slice(0, 10);
+  return addDaysISO(todayInIstanbul(), -days);
 }
 
 export async function getStudentStatistics(
@@ -637,7 +617,7 @@ export async function getStudentStatistics(
   }
 
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayInIstanbul();
     const weekAgo = isoDaysAgo(7);
     const monthAgo = isoDaysAgo(30);
     const solved = sql<number>`${dailyQuestionEntries.correct} + ${dailyQuestionEntries.wrong} + ${dailyQuestionEntries.blank}`;
@@ -690,24 +670,8 @@ export interface DailyEntryData {
 }
 
 function isValidPastDate(value: string): boolean {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return false;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const parsed = new Date(year, month - 1, day);
-  const real =
-    parsed.getFullYear() === year &&
-    parsed.getMonth() === month - 1 &&
-    parsed.getDate() === day;
-  if (!real) return false;
-  const today = new Date();
-  const todayIso = [
-    today.getFullYear(),
-    String(today.getMonth() + 1).padStart(2, "0"),
-    String(today.getDate()).padStart(2, "0"),
-  ].join("-");
-  return value <= todayIso;
+  if (!isValidISODate(value)) return false;
+  return value <= todayInIstanbul();
 }
 
 export async function getDailyEntryData(
@@ -725,9 +689,7 @@ export async function getDailyEntryData(
     return { success: false, status: guard.status, message: guard.message };
   }
 
-  const safeDate = isValidPastDate(date)
-    ? date
-    : new Date().toISOString().slice(0, 10);
+  const safeDate = isValidPastDate(date) ? date : todayInIstanbul();
 
   try {
     const [entryRows, topicRows, noteRows] = await Promise.all([

@@ -3,6 +3,10 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyQuestionEntries, users } from "@/db/schema";
 import { sendPushNotification } from "@/lib/web-push-helper";
+import { todayInIstanbul } from "@/lib/week-utils";
+
+// Not: vercel.json cron zamani UTC'dir. "0 18 * * *" ifadesi UTC 18:00,
+// Istanbul saatiyle 21:00'dir. "Bugun" hesabi Europe/Istanbul'a gore yapilir.
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +26,7 @@ function unauthorized(): NextResponse {
 
 async function runDailyReminder(): Promise<NextResponse> {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayInIstanbul();
 
     const [students, activeToday] = await Promise.all([
       db
