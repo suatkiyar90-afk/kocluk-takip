@@ -100,6 +100,10 @@ export function StudentDetailTabs({
   const maxDaySolved = report
     ? Math.max(...report.days.map((day) => day.solved), 1)
     : 1;
+  const selectedDayNote =
+    selectedDate !== null && report !== null
+      ? report.dailyNotes.find((note) => note.date === selectedDate)
+      : undefined;
 
   return (
     <div>
@@ -263,6 +267,36 @@ export function StudentDetailTabs({
                     )}
                   </div>
                   <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                    {selectedDate !== null && selectedDayNote !== undefined && (
+                      <div className="mb-4 rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-4 shadow-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="shrink-0 rounded-full bg-indigo-600 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+                            Günün Özeti
+                          </span>
+                          <span
+                            className="text-xs font-bold text-indigo-700"
+                            suppressHydrationWarning
+                          >
+                            {formatSelectedDay(selectedDate)}
+                          </span>
+                        </div>
+                        <p className="mt-2.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-800">
+                          {selectedDayNote.note}
+                        </p>
+                        <p
+                          className="mt-2 text-[11px] font-medium text-gray-400"
+                          suppressHydrationWarning
+                        >
+                          Öğrenci notu · Son güncelleme:{" "}
+                          {new Date(
+                            selectedDayNote.updatedAt,
+                          ).toLocaleDateString("tr-TR", {
+                            day: "numeric",
+                            month: "long",
+                          })}
+                        </p>
+                      </div>
+                    )}
                     {(() => {
                       const filteredEntries = report.entries.filter((entry) =>
                         selectedDate ? entry.date === selectedDate : true,
@@ -314,31 +348,6 @@ export function StudentDetailTabs({
                                   </span>
                                 </p>
                               </div>
-                              {entry.studentNote !== null &&
-                                entry.studentNote !== "" && (
-                                  <div className="mt-2 flex items-start gap-1.5 rounded-xl border border-indigo-100 bg-indigo-50/70 px-2.5 py-2">
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      width="14"
-                                      height="14"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      aria-hidden="true"
-                                      className="mt-0.5 shrink-0 text-indigo-500"
-                                    >
-                                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                                      <path d="M7 9h10" />
-                                      <path d="M7 13h6" />
-                                    </svg>
-                                    <p className="min-w-0 whitespace-pre-wrap break-words text-xs leading-relaxed text-indigo-900">
-                                      {entry.studentNote}
-                                    </p>
-                                  </div>
-                                )}
                             </li>
                           ))}
                         </ul>

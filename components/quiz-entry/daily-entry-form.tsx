@@ -101,14 +101,12 @@ function CountStepper({
 interface DailyEntryFormProps {
   date: string;
   subjects: SubjectOptions;
-  initialNote?: string | null;
   onSaved?: () => void;
 }
 
 export function DailyEntryForm({
   date,
   subjects,
-  initialNote,
   onSaved,
 }: DailyEntryFormProps) {
   const router = useRouter();
@@ -118,7 +116,6 @@ export function DailyEntryForm({
   const [correct, setCorrect] = useState(0);
   const [wrong, setWrong] = useState(0);
   const [blank, setBlank] = useState(0);
-  const [studentNote, setStudentNote] = useState(initialNote ?? "");
   const [saving, setSaving] = useState(false);
 
   const subjectList = subjects[examType] ?? [];
@@ -153,7 +150,6 @@ export function DailyEntryForm({
         correct,
         wrong,
         blank,
-        studentNote: studentNote.trim() === "" ? null : studentNote.trim(),
       });
       if (result.success === true) {
         toast.success("Gün kaydedildi.");
@@ -255,24 +251,6 @@ export function DailyEntryForm({
           {net.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}
         </span>
       </p>
-
-      <div className="mt-5">
-        <label htmlFor="student-note" className={labelClass}>
-          Günün Özeti / İzlenen Videolar
-        </label>
-        <textarea
-          id="student-note"
-          value={studentNote}
-          onChange={(e) => setStudentNote(e.target.value)}
-          maxLength={2000}
-          rows={3}
-          placeholder="Bugün ne yaptın? İzlediğin videolar, dikkatini çeken konular..."
-          className="w-full resize-y rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
-        />
-        <p className="mt-1 text-right text-[11px] font-medium text-gray-400">
-          {studentNote.length}/2000
-        </p>
-      </div>
 
       <div className="mt-5">
         <button

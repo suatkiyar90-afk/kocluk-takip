@@ -46,8 +46,10 @@ export function QuizPanel() {
           date={date}
           entries={result.data.entries}
           subjects={result.data.subjects}
+          initialDailyNote={result.data.dailyNote}
           onDateChange={setDate}
           onSaved={() => setReloadKey((k) => k + 1)}
+          onNoteSaved={() => setReloadKey((k) => k + 1)}
         />
       )}
     </>

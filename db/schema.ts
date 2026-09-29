@@ -249,7 +249,6 @@ export const dailyQuestionEntries = pgTable(
     correct: integer("correct").notNull().default(0),
     wrong: integer("wrong").notNull().default(0),
     blank: integer("blank").notNull().default(0),
-    studentNote: text("student_note"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -263,6 +262,30 @@ export const dailyQuestionEntries = pgTable(
       t.topicId,
     ),
     dailyEntriesStudentDateIdx: index("daily_entries_student_date_idx").on(
+      t.studentId,
+      t.date,
+    ),
+  }),
+);
+
+export const studentDailyNotes = pgTable(
+  "student_daily_notes",
+  {
+    id: serial("id").primaryKey(),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    note: text("note").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    studentDateUnique: uniqueIndex("student_daily_notes_unique").on(
       t.studentId,
       t.date,
     ),

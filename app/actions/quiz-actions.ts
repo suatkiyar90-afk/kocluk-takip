@@ -7,6 +7,7 @@ import { db } from "@/db";
 import {
   curriculumTopics,
   dailyQuestionEntries,
+  studentDailyNotes,
   teacherStudents,
 } from "@/db/schema";
 import { parseMonday } from "@/lib/week-utils";
@@ -126,7 +127,6 @@ const dailyEntrySchema = z.object({
   correct: z.number().int().min(0).max(500),
   wrong: z.number().int().min(0).max(500),
   blank: z.number().int().min(0).max(500),
-  studentNote: z.string().max(2000).nullish(),
 });
 
 export type SaveDailyEntryResult =
@@ -162,16 +162,8 @@ export async function saveDailyEntry(
     };
   }
 
-  const {
-    date,
-    examType,
-    subjectId,
-    topicId,
-    correct,
-    wrong,
-    blank,
-    studentNote,
-  } = parsed.data;
+  const { date, examType, subjectId, topicId, correct, wrong, blank } =
+    parsed.data;
 
   if (!isValidISODate(date)) {
     return {
@@ -206,7 +198,6 @@ export async function saveDailyEntry(
       correct: sql`excluded.correct`,
       wrong: sql`excluded.wrong`,
       blank: sql`excluded.blank`,
-      studentNote: sql`excluded.student_note`,
     } as {
       id?: number;
       studentId?: string;
@@ -217,7 +208,6 @@ export async function saveDailyEntry(
       correct?: unknown;
       wrong?: unknown;
       blank?: unknown;
-      studentNote?: unknown;
       createdAt?: Date;
     };
 
@@ -230,7 +220,6 @@ export async function saveDailyEntry(
       correct,
       wrong,
       blank,
-      studentNote: studentNote ?? null,
     };
 
     const inserted = await db
@@ -249,6 +238,81 @@ export async function saveDailyEntry(
       .returning({ id: dailyQuestionEntries.id });
 
     return { success: true, data: { id: inserted[0].id, date } };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message:
+        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+    };
+  }
+}
+
+export type SaveDailyNoteResult =
+  | {
+      success: true;
+      data: { date: string };
+    }
+  | {
+      success: false;
+      status: "UNAUTHORIZED" | "FORBIDDEN" | "VALIDATION_FAILED" | "DATABASE_ERROR";
+      message: string;
+    };
+
+export async function saveDailyNote(
+  date: string,
+  note: string,
+): Promise<SaveDailyNoteResult> {
+  const authCtx = await getStudentId();
+  if (authCtx.ok === false) {
+    return {
+      success: false,
+      status: authCtx.status,
+      message: authCtx.message,
+    };
+  }
+
+  if (!isValidPastDate(date)) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: "Geçersiz tarih.",
+    };
+  }
+
+  const trimmed = note.trim();
+  if (trimmed.length === 0) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: "Not boş olamaz.",
+    };
+  }
+  if (trimmed.length > 2000) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: "Not en fazla 2000 karakter olabilir.",
+    };
+  }
+
+  try {
+    await db
+      .insert(studentDailyNotes)
+      .values({
+        studentId: authCtx.studentId,
+        date,
+        note: trimmed,
+      })
+      .onConflictDoUpdate({
+        target: [studentDailyNotes.studentId, studentDailyNotes.date],
+        set: {
+          note: trimmed,
+          updatedAt: new Date(),
+        } as Partial<typeof studentDailyNotes.$inferInsert>,
+      });
+
+    return { success: true, data: { date } };
   } catch (err) {
     return {
       success: false,
@@ -291,7 +355,12 @@ export interface DailyReportEntry {
   blank: number;
   solved: number;
   net: number;
-  studentNote: string | null;
+}
+
+export interface DailyReportNote {
+  date: string;
+  note: string;
+  updatedAt: Date;
 }
 
 export type WeeklyReportResult =
@@ -302,6 +371,7 @@ export type WeeklyReportResult =
         weekEnd: string;
         days: DailyReportDay[];
         entries: DailyReportEntry[];
+        dailyNotes: DailyReportNote[];
         byTopic: DailyReportTopic[];
       };
     }
@@ -348,7 +418,6 @@ export async function getWeeklyReportByStudent(
         correct: dailyQuestionEntries.correct,
         wrong: dailyQuestionEntries.wrong,
         blank: dailyQuestionEntries.blank,
-        studentNote: dailyQuestionEntries.studentNote,
       })
       .from(dailyQuestionEntries)
       .innerJoin(
@@ -437,9 +506,26 @@ export async function getWeeklyReportByStudent(
         blank: row.blank,
         solved,
         net: roundNet(netScore(row.correct, row.wrong)),
-        studentNote: row.studentNote,
       };
     });
+
+    const noteRows = await db
+      .select({
+        date: studentDailyNotes.date,
+        note: studentDailyNotes.note,
+        updatedAt: studentDailyNotes.updatedAt,
+      })
+      .from(studentDailyNotes)
+      .where(
+        and(
+          eq(studentDailyNotes.studentId, studentId),
+          gte(studentDailyNotes.date, weekStart),
+          lte(studentDailyNotes.date, weekEnd),
+        ),
+      )
+      .orderBy(asc(studentDailyNotes.date));
+
+    const dailyNotes: DailyReportNote[] = noteRows;
 
     const sortedTopics = [...topicMap.entries()].sort(([, a], [, b]) => {
       const ea = a.examType === "TYT" ? 0 : 1;
@@ -466,7 +552,7 @@ export async function getWeeklyReportByStudent(
 
     return {
       success: true,
-      data: { weekStart, weekEnd, days, entries, byTopic },
+      data: { weekStart, weekEnd, days, entries, dailyNotes, byTopic },
     };
   } catch (err) {
     return {
@@ -597,6 +683,7 @@ export async function getStudentStatistics(
 export interface DailyEntryData {
   entries: DayEntryRow[];
   subjects: SubjectOptions;
+  dailyNote: string | null;
 }
 
 function isValidPastDate(value: string): boolean {
@@ -640,7 +727,7 @@ export async function getDailyEntryData(
     : new Date().toISOString().slice(0, 10);
 
   try {
-    const [entryRows, topicRows] = await Promise.all([
+    const [entryRows, topicRows, noteRows] = await Promise.all([
       db
         .select({
           id: dailyQuestionEntries.id,
@@ -650,7 +737,6 @@ export async function getDailyEntryData(
           correct: dailyQuestionEntries.correct,
           wrong: dailyQuestionEntries.wrong,
           blank: dailyQuestionEntries.blank,
-          studentNote: dailyQuestionEntries.studentNote,
         })
         .from(dailyQuestionEntries)
         .innerJoin(
@@ -683,6 +769,16 @@ export async function getDailyEntryData(
           asc(curriculumTopics.subjectId),
           asc(curriculumTopics.sortOrder),
         ),
+      db
+        .select({ note: studentDailyNotes.note })
+        .from(studentDailyNotes)
+        .where(
+          and(
+            eq(studentDailyNotes.studentId, guard.studentId),
+            eq(studentDailyNotes.date, safeDate),
+          ),
+        )
+        .limit(1),
     ]);
 
     const subjects: SubjectOptions = { TYT: [], AYT: [] };
@@ -713,7 +809,8 @@ export async function getDailyEntryData(
     }
 
     const entries: DayEntryRow[] = entryRows;
-    return { success: true, data: { entries, subjects } };
+    const dailyNote = noteRows[0]?.note ?? null;
+    return { success: true, data: { entries, subjects, dailyNote } };
   } catch (err) {
     return {
       success: false,
