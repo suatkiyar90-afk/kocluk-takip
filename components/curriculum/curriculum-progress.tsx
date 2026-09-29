@@ -152,6 +152,9 @@ export function CurriculumProgress({ snapshot }: { snapshot: CurriculumSnapshot 
       {snapshot.ayt.length > 0 && (
         <CurriculumSubjectGroup title="AYT" groups={snapshot.ayt} />
       )}
+      {snapshot.ydt.length > 0 && (
+        <CurriculumSubjectGroup title="YDT" groups={snapshot.ydt} />
+      )}
     </div>
   );
 }

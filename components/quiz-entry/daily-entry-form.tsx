@@ -180,7 +180,7 @@ export function DailyEntryForm({
       <p className={labelClass}>Sınav Türü</p>
       <div
         role="tablist"
-        className="grid grid-cols-2 gap-2 rounded-2xl bg-gray-100 p-1"
+        className="grid grid-cols-3 gap-2 rounded-2xl bg-gray-100 p-1"
       >
         {examTypes.map((t) => (
           <button

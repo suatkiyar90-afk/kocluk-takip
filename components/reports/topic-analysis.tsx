@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import type { DailyReportTopic } from "@/app/actions/quiz-actions";
+import type { ExamType } from "@/components/quiz-entry/weekly-quiz-schema";
 
 interface TopicGroup {
   key: string;
-  examType: "TYT" | "AYT";
+  examType: ExamType;
   subjectName: string;
   topics: DailyReportTopic[];
   solved: number;

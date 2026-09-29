@@ -14,7 +14,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const examTypeEnum = pgEnum("exam_type", ["TYT", "AYT"]);
+export const examTypeEnum = pgEnum("exam_type", ["TYT", "AYT", "YDT"]);
 
 export const weeklyQuestionEntries = pgTable(
   "weekly_question_entries",

@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 import { parseMonday } from "@/lib/week-utils";
 import { sendPushNotification } from "@/lib/web-push-helper";
+import type { ExamType } from "@/components/quiz-entry/weekly-quiz-schema";
 
 export type WeeklyTargetActionResult<T> =
   | { success: true; data: T }
@@ -30,7 +31,7 @@ export interface WeeklyTargetView {
   id: number;
   subjectId: string;
   subjectName: string;
-  examType: "TYT" | "AYT";
+  examType: ExamType;
   targetQuestionCount: number;
   solvedCount: number;
   scheduleFileUrl: string | null;
@@ -158,7 +159,7 @@ async function buildTargetViews(
 
   const subjectInfoById = new Map<
     string,
-    { name: string; examType: "TYT" | "AYT" }
+    { name: string; examType: ExamType }
   >();
   const topicNameById = new Map<number, string>();
   for (const t of topicRows) {

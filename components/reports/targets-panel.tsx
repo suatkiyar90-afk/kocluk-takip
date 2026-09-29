@@ -60,7 +60,9 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
     void refresh();
   }, [refresh]);
 
-  const subjectGroups = snapshot ? [...snapshot.tyt, ...snapshot.ayt] : [];
+  const subjectGroups = snapshot
+    ? [...snapshot.tyt, ...snapshot.ayt, ...snapshot.ydt]
+    : [];
   const activeGroup = subjectGroups.find((g) => g.subjectId === subjectId);
   const scheduleUrl =
     targets.find((t) => t.scheduleFileUrl !== null)?.scheduleFileUrl ?? null;

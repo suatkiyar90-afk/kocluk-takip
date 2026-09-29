@@ -13,7 +13,9 @@ import {
 import { parseMonday } from "@/lib/week-utils";
 import {
   ALL_SUBJECTS,
+  examTypes,
   netScore,
+  type ExamType,
 } from "@/components/quiz-entry/weekly-quiz-schema";
 import type {
   DayEntryRow,
@@ -121,7 +123,7 @@ const dailyEntrySchema = z.object({
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Tarih YYYY-AA-AA formatında olmalı."),
-  examType: z.enum(["TYT", "AYT"]),
+  examType: z.enum(examTypes),
   subjectId: z.string().min(1).max(50),
   topicId: z.number().int().positive(),
   correct: z.number().int().min(0).max(500),
@@ -202,7 +204,7 @@ export async function saveDailyEntry(
       id?: number;
       studentId?: string;
       date?: string;
-      examType?: "TYT" | "AYT";
+      examType?: ExamType;
       subjectId?: string;
       topicId?: number;
       correct?: unknown;
@@ -334,7 +336,7 @@ export interface DailyReportDay {
 
 export interface DailyReportTopic {
   topicId: number;
-  examType: "TYT" | "AYT";
+  examType: ExamType;
   subjectId: string;
   subjectName: string;
   topicName: string;
@@ -347,7 +349,7 @@ export interface DailyReportTopic {
 
 export interface DailyReportEntry {
   date: string;
-  examType: "TYT" | "AYT";
+  examType: ExamType;
   subjectName: string;
   topicName: string;
   correct: number;
@@ -445,7 +447,7 @@ export async function getWeeklyReportByStudent(
     const topicMap = new Map<
       number,
       {
-        examType: "TYT" | "AYT";
+        examType: ExamType;
         subjectId: string;
         subjectName: string;
         topicName: string;
@@ -528,8 +530,8 @@ export async function getWeeklyReportByStudent(
     const dailyNotes: DailyReportNote[] = noteRows;
 
     const sortedTopics = [...topicMap.entries()].sort(([, a], [, b]) => {
-      const ea = a.examType === "TYT" ? 0 : 1;
-      const eb = b.examType === "TYT" ? 0 : 1;
+      const ea = examTypes.indexOf(a.examType);
+      const eb = examTypes.indexOf(b.examType);
       if (ea !== eb) return ea - eb;
       if (a.subjectId !== b.subjectId)
         return a.subjectId.localeCompare(b.subjectId, "tr");
@@ -781,7 +783,7 @@ export async function getDailyEntryData(
         .limit(1),
     ]);
 
-    const subjects: SubjectOptions = { TYT: [], AYT: [] };
+    const subjects: SubjectOptions = { TYT: [], AYT: [], YDT: [] };
     const groupByKey = new Map<string, SubjectOption>();
     for (const topic of topicRows) {
       const key = `${topic.examType}:${topic.subjectId}`;
@@ -798,7 +800,7 @@ export async function getDailyEntryData(
       group.topics.push({ id: topic.id, name: topic.topicName });
     }
 
-    for (const examType of ["TYT", "AYT"] as const) {
+    for (const examType of examTypes) {
       const rank = new Map(
         ALL_SUBJECTS[examType].map((subject, index) => [subject.id, index]),
       );

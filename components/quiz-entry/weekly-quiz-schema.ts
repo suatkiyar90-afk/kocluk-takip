@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const examTypes = ["TYT", "AYT"] as const;
+export const examTypes = ["TYT", "AYT", "YDT"] as const;
 export type ExamType = (typeof examTypes)[number];
 
 export interface SubjectDef {
@@ -30,9 +30,14 @@ export const AYT_SUBJECTS: SubjectDef[] = [
   { id: "din", name: "Din Kültürü ve Ahlak Bilgisi", maxQuestions: 6 },
 ];
 
+export const YDT_SUBJECTS: SubjectDef[] = [
+  { id: "ydt-ingilizce", name: "Yabancı Dil (İngilizce)", maxQuestions: 80 },
+];
+
 export const ALL_SUBJECTS: Record<ExamType, SubjectDef[]> = {
   TYT: TYT_SUBJECTS,
   AYT: AYT_SUBJECTS,
+  YDT: YDT_SUBJECTS,
 };
 
 export const countField = z
@@ -75,6 +80,7 @@ export function buildDefaultValues(
     categories: [
       ...TYT_SUBJECTS.map(entry("TYT")),
       ...AYT_SUBJECTS.map(entry("AYT")),
+      ...YDT_SUBJECTS.map(entry("YDT")),
     ],
   };
 }

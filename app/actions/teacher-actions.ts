@@ -13,6 +13,7 @@ import { getCurrentWeekMonday, parseMonday } from "@/lib/week-utils";
 import { sendPushNotification } from "@/lib/web-push-helper";
 import {
   ALL_SUBJECTS,
+  examTypes,
   netScore,
   type ExamType,
 } from "@/components/quiz-entry/weekly-quiz-schema";
@@ -234,25 +235,24 @@ export async function getStudentWeeklySummary(
       rows.map((r) => [`${r.examType}:${r.subjectId}`, r]),
     );
 
-    const subjects: SubjectSummary[] = (["TYT", "AYT"] as const).flatMap(
-      (examType) =>
-        ALL_SUBJECTS[examType].map((s) => {
-          const e = byKey.get(`${examType}:${s.id}`);
-          const correct = e?.correct ?? 0;
-          const wrong = e?.wrong ?? 0;
-          const blank = e?.blank ?? 0;
-          return {
-            examType,
-            subjectId: s.id,
-            subjectName: s.name,
-            maxQuestions: s.maxQuestions,
-            correct,
-            wrong,
-            blank,
-            solved: correct + wrong + blank,
-            net: roundNet(netScore(correct, wrong)),
-          };
-        }),
+    const subjects: SubjectSummary[] = examTypes.flatMap((examType) =>
+      ALL_SUBJECTS[examType].map((s) => {
+        const e = byKey.get(`${examType}:${s.id}`);
+        const correct = e?.correct ?? 0;
+        const wrong = e?.wrong ?? 0;
+        const blank = e?.blank ?? 0;
+        return {
+          examType,
+          subjectId: s.id,
+          subjectName: s.name,
+          maxQuestions: s.maxQuestions,
+          correct,
+          wrong,
+          blank,
+          solved: correct + wrong + blank,
+          net: roundNet(netScore(correct, wrong)),
+        };
+      }),
     );
 
     const totals = subjects.reduce(

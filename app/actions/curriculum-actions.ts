@@ -9,7 +9,7 @@ import {
   studentTopicProgress,
   teacherStudents,
 } from "@/db/schema";
-import { ALL_SUBJECTS } from "@/components/quiz-entry/weekly-quiz-schema";
+import { ALL_SUBJECTS, examTypes, type ExamType } from "@/components/quiz-entry/weekly-quiz-schema";
 
 export type TopicStatus = "baslamadi" | "calisiliyor" | "bitti";
 
@@ -20,6 +20,7 @@ export interface CurriculumTopicRow {
 }
 
 export interface CurriculumSubjectGroup {
+  examType: ExamType;
   subjectId: string;
   subjectName: string;
   totalTopics: number;
@@ -31,6 +32,7 @@ export interface CurriculumSubjectGroup {
 export interface CurriculumSnapshot {
   tyt: CurriculumSubjectGroup[];
   ayt: CurriculumSubjectGroup[];
+  ydt: CurriculumSubjectGroup[];
   totalTopics: number;
   doneTopics: number;
   inProgressTopics: number;
@@ -148,6 +150,7 @@ async function loadSnapshot(studentId: string): Promise<CurriculumSnapshot> {
     let group = groups.get(key);
     if (!group) {
       group = {
+        examType: t.examType,
         subjectId: t.subjectId,
         subjectName: t.subjectName,
         totalTopics: 0,
@@ -165,20 +168,29 @@ async function loadSnapshot(studentId: string): Promise<CurriculumSnapshot> {
   }
 
   const rankMap = new Map<string, number>();
-  (["TYT", "AYT"] as const).forEach((examType) => {
+  examTypes.forEach((examType) => {
     ALL_SUBJECTS[examType].forEach((s, index) => {
       rankMap.set(`${examType}:${s.id}`, index);
     });
   });
 
+  const examRank = new Map<string, number>();
+  examTypes.forEach((examType, index) => {
+    examRank.set(examType, index);
+  });
+
   const sorted = [...groups.values()].sort((a, b) => {
-    const aRank = rankMap.get(`TYT:${a.subjectId}`) ?? 99;
-    const bRank = rankMap.get(`TYT:${b.subjectId}`) ?? 99;
+    const ea = examRank.get(a.examType) ?? 99;
+    const eb = examRank.get(b.examType) ?? 99;
+    if (ea !== eb) return ea - eb;
+    const aRank = rankMap.get(`${a.examType}:${a.subjectId}`) ?? 99;
+    const bRank = rankMap.get(`${b.examType}:${b.subjectId}`) ?? 99;
     return aRank - bRank;
   });
 
   const tyt: CurriculumSubjectGroup[] = [];
   const ayt: CurriculumSubjectGroup[] = [];
+  const ydt: CurriculumSubjectGroup[] = [];
 
   let doneTopics = 0;
   let inProgressTopics = 0;
@@ -192,19 +204,23 @@ async function loadSnapshot(studentId: string): Promise<CurriculumSnapshot> {
     doneTopics += group.doneTopics;
     inProgressTopics += group.inProgressTopics;
 
-    if (rankMap.has(`TYT:${group.subjectId}`)) {
+    if (group.examType === "TYT") {
       tyt.push(group);
-    } else {
+    } else if (group.examType === "AYT") {
       ayt.push(group);
+    } else {
+      ydt.push(group);
     }
   }
 
   return {
     tyt,
     ayt,
+    ydt,
     totalTopics:
       tyt.reduce((s, g) => s + g.totalTopics, 0) +
-      ayt.reduce((s, g) => s + g.totalTopics, 0),
+      ayt.reduce((s, g) => s + g.totalTopics, 0) +
+      ydt.reduce((s, g) => s + g.totalTopics, 0),
     doneTopics,
     inProgressTopics,
     notStartedTopics: 0,

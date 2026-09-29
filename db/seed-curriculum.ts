@@ -2,7 +2,7 @@ import { db } from "./index";
 import { curriculumTopics } from "./schema";
 
 interface TopicSeed {
-  examType: "TYT" | "AYT";
+  examType: "TYT" | "AYT" | "YDT";
   subjectId: string;
   subjectName: string;
   topicName: string;
@@ -11,6 +11,7 @@ interface TopicSeed {
 
 const TURKCE = "TYT";
 const AYT = "AYT";
+const YDT = "YDT";
 
 const TOPICS: TopicSeed[] = [
   ...list(TURKCE, "turkce", "Türkçe", [
@@ -226,10 +227,20 @@ const TOPICS: TopicSeed[] = [
     "Anadolu'da İslam",
     "Günümüz Dünya Sorunları ve Etik",
   ]),
+  ...list(YDT, "ydt-ingilizce", "Yabancı Dil (İngilizce)", [
+    "Kelime Bilgisi (Vocabulary)",
+    "Gramer (Grammar)",
+    "Cümle Tamamlama",
+    "İngilizce - Türkçe Çeviri",
+    "Türkçe - İngilizce Çeviri",
+    "Okuma Parçaları (Reading)",
+    "Diyalog Tamamlama",
+    "Anlamı Bozan Cümle",
+  ]),
 ];
 
 function list(
-  examType: "TYT" | "AYT",
+  examType: "TYT" | "AYT" | "YDT",
   subjectId: string,
   subjectName: string,
   topics: string[],
