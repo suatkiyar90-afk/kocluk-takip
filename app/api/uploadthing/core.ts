@@ -38,6 +38,26 @@ export const ourFileRouter = {
       if (!session?.user?.id) {
         throw new Error("Oturum açmanız gerekiyor.");
       }
+      return { userId: session.user.id };
+    })
+    .onUploadComplete(({ file }) => ({
+      url: file.url,
+      key: file.key,
+      name: file.name,
+    })),
+
+  scheduleUploader: f({
+    image: { maxFileSize: "4MB", maxFileCount: 1 },
+    pdf: { maxFileSize: "4MB", maxFileCount: 1 },
+  })
+    .middleware(async () => {
+      const session = await auth();
+      if (!session?.user?.id) {
+        throw new Error("Oturum açmanız gerekiyor.");
+      }
+      if (session.user.role !== "teacher" && session.user.role !== "admin") {
+        throw new Error("Bu işlem için öğretmen yetkisi gerekli.");
+      }
       return { userId: session.user.id, role: session.user.role };
     })
     .onUploadComplete(({ file }) => ({

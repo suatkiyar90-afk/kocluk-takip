@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { WeekPicker } from "@/components/ui/week-picker";
+import { UploadDropzone } from "@/lib/uploadthing";
+import { saveWeeklyScheduleFile } from "@/app/actions/weekly-target-actions";
+import { isImageUrl, isPdfUrl } from "@/lib/schedule-file";
 import {
   deleteWeeklyTarget,
   listWeeklyTargets,
@@ -36,6 +39,7 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
   const [selectedTopics, setSelectedTopics] = useState<Set<number>>(new Set());
   const [loadingList, setLoadingList] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingSchedule, setUploadingSchedule] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -58,6 +62,8 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
 
   const subjectGroups = snapshot ? [...snapshot.tyt, ...snapshot.ayt] : [];
   const activeGroup = subjectGroups.find((g) => g.subjectId === subjectId);
+  const scheduleUrl =
+    targets.find((t) => t.scheduleFileUrl !== null)?.scheduleFileUrl ?? null;
 
   function changeSubject(next: string) {
     setSubjectId(next);
@@ -126,6 +132,24 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
       await refresh();
     } else {
       toast.error(result.message);
+    }
+  }
+
+  async function handleScheduleUpload(url: string | undefined | null) {
+    if (!url) return;
+    setUploadingSchedule(true);
+    try {
+      const result = await saveWeeklyScheduleFile(studentId, weekStart, url);
+      if (result.success === true) {
+        toast.success("Haftalık çizelge yüklendi.");
+        await refresh();
+      } else {
+        toast.error(result.message);
+      }
+    } catch {
+      toast.error("Çizelge kaydedilirken bir hata oluştu.");
+    } finally {
+      setUploadingSchedule(false);
     }
   }
 
@@ -239,6 +263,62 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
             </button>
           </div>
         </form>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
+          Haftalık Çalışma Çizelgesi
+        </h2>
+
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          {scheduleUrl ? (
+            <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-3.5">
+              <p className="text-xs font-bold uppercase tracking-wide text-green-700">
+                ✓ Bu haftanın çizelgesi yüklü
+              </p>
+              {isImageUrl(scheduleUrl) ? (
+                <img
+                  src={scheduleUrl}
+                  alt="Haftalık çalışma çizelgesi"
+                  className="mt-2.5 max-h-56 w-full rounded-lg border border-green-200 bg-white object-contain"
+                />
+              ) : null}
+                <a
+                  href={scheduleUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-xs font-bold text-green-700 ring-1 ring-green-200 transition hover:bg-green-100 touch-manipulation"
+                >
+                  {isPdfUrl(scheduleUrl)
+                    ? "📄 Çizelgeyi Görüntüle"
+                    : "📎 Dosyayı Görüntüle"}
+                </a>
+            </div>
+          ) : (
+            <p className="mb-4 rounded-xl bg-gray-50 px-3.5 py-2.5 text-xs font-medium text-gray-500">
+              Bu hafta için henüz çizelge yüklenmedi. Öğrencine görsel (PNG,
+              JPG) veya PDF olarak haftalık çalışma çizelgeni yükle.
+            </p>
+          )}
+
+          <UploadDropzone
+            endpoint="scheduleUploader"
+            className="ut-allowed-content:text-gray-500"
+            onClientUploadComplete={(res) => {
+              void handleScheduleUpload(res?.[0]?.url);
+            }}
+            onUploadError={(err) => {
+              toast.error(err.message);
+            }}
+            disabled={uploadingSchedule}
+          />
+
+          {uploadingSchedule ? (
+            <p className="mt-3 text-center text-xs font-semibold text-indigo-600">
+              Çizelge kaydediliyor...
+            </p>
+          ) : null}
+        </div>
       </section>
 
       <section>

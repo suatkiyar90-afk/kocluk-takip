@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 import {
+  approveWeeklySchedule,
   getMyWeeklyFeedback,
+  getMyWeeklySchedule,
   getMyWeeklyTargets,
 } from "@/app/actions/weekly-target-actions";
 import { parseMonday } from "@/lib/week-utils";
+import { isImageUrl, isPdfUrl } from "@/lib/schedule-file";
 import { WeekPicker } from "@/components/ui/week-picker";
 import { PanelError, PanelSkeleton } from "@/components/student/panel-ui";
 
@@ -27,12 +30,39 @@ function formatRange(mondayIso: string): string {
   )}`;
 }
 
+interface ScheduleState {
+  fileUrl: string | null;
+  isApproved: boolean;
+}
+
 export function WeeklyTargetsPanel() {
   const [weekStart, setWeekStart] = useState(() => parseMonday());
   const [targetsResult, setTargetsResult] = useState<TargetsResult | null>(null);
   const [feedbackResult, setFeedbackResult] = useState<FeedbackResult | null>(
     null,
   );
+  const [schedule, setSchedule] = useState<ScheduleState | null>(null);
+  const [approving, setApproving] = useState(false);
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSchedule(null);
+    setPreviewFailed(false);
+    void (async () => {
+      const res = await getMyWeeklySchedule(weekStart);
+      if (cancelled) return;
+      setSchedule(
+        res.success === true
+          ? res.data
+          : { fileUrl: null, isApproved: false },
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [weekStart]);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,6 +86,21 @@ export function WeeklyTargetsPanel() {
     feedbackResult !== null && feedbackResult.success === true
       ? feedbackResult.data.comment
       : null;
+
+  async function handleApprove() {
+    if (schedule?.isApproved || approving) return;
+    setApproving(true);
+    try {
+      const result = await approveWeeklySchedule(weekStart);
+      if (result.success === true) {
+        setSchedule((prev) =>
+          prev ? { ...prev, isApproved: true } : prev,
+        );
+      }
+    } finally {
+      setApproving(false);
+    }
+  }
 
   const targets =
     targetsResult !== null && targetsResult.success === true
@@ -85,6 +130,74 @@ export function WeeklyTargetsPanel() {
 
       <div className="space-y-4">
         <WeekPicker monday={weekStart} onWeekChange={setWeekStart} />
+
+        {schedule?.fileUrl ? (
+          <section className="rounded-2xl border border-indigo-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="rounded-md bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-200">
+                  Çizelge
+                </span>
+                <h2 className="text-sm font-bold text-gray-900">
+                  Haftalık Çalışma Çizelgem
+                </h2>
+              </div>
+              {schedule.isApproved ? (
+                <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700 ring-1 ring-green-200">
+                  ✓ Onaylandı
+                </span>
+              ) : null}
+            </div>
+
+            {isImageUrl(schedule.fileUrl) && !previewFailed ? (
+              <button
+                type="button"
+                onClick={() => setScheduleModalOpen(true)}
+                aria-label="Çizelgeyi büyük görüntüle"
+                className="mt-3 block w-full touch-manipulation"
+              >
+                <img
+                  src={schedule.fileUrl}
+                  alt="Haftalık çalışma çizelgesi"
+                  onError={() => setPreviewFailed(true)}
+                  className="max-h-64 w-full rounded-xl border border-gray-200 bg-gray-50 object-contain"
+                />
+              </button>
+            ) : (
+              <a
+                href={schedule.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-600/25 transition active:scale-[0.98] touch-manipulation"
+              >
+                {isPdfUrl(schedule.fileUrl) || previewFailed
+                  ? "📄 Çizelgeyi Görüntüle / İndir"
+                  : "📎 Çizelgeyi Görüntüle / İndir"}
+              </a>
+            )}
+
+            <button
+              type="button"
+              onClick={() => void handleApprove()}
+              disabled={schedule.isApproved || approving}
+              className={`mt-3 w-full rounded-xl px-4 py-3 text-sm font-bold transition active:scale-[0.98] touch-manipulation ${
+                schedule.isApproved
+                  ? "cursor-default bg-green-600 text-white shadow-lg shadow-green-600/25"
+                  : "bg-white text-indigo-700 ring-2 ring-indigo-300 hover:bg-indigo-50 disabled:opacity-60"
+              }`}
+            >
+              {schedule.isApproved
+                ? "✓ Bu haftaki çalışma programımı inceledim"
+                : approving
+                  ? "Onaylanıyor..."
+                  : "Bu haftaki çalışma programımı inceledim"}
+            </button>
+
+            <p className="mt-2 text-center text-[11px] font-medium text-gray-400">
+              Çizelgeyi inceleyip onayladığında koç öğretmenin görebilir.
+            </p>
+          </section>
+        ) : null}
 
         <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
           <div className="flex items-center gap-2">
@@ -218,6 +331,30 @@ export function WeeklyTargetsPanel() {
           </div>
         )}
       </div>
+
+      {scheduleModalOpen && schedule?.fileUrl ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Haftalık çalışma çizelgesi"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setScheduleModalOpen(false)}
+        >
+          <button
+            type="button"
+            onClick={() => setScheduleModalOpen(false)}
+            className="absolute right-4 top-4 rounded-full bg-white/10 px-3 py-1.5 text-sm font-bold text-white ring-1 ring-white/40 transition hover:bg-white/20 touch-manipulation"
+          >
+            Kapat ✕
+          </button>
+          <img
+            src={schedule.fileUrl}
+            alt="Haftalık çalışma çizelgesi (büyük)"
+            className="max-h-full max-w-full rounded-xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      ) : null}
     </>
   );
 }

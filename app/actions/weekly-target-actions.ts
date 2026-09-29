@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import {
@@ -33,6 +33,7 @@ export interface WeeklyTargetView {
   examType: "TYT" | "AYT";
   targetQuestionCount: number;
   solvedCount: number;
+  scheduleFileUrl: string | null;
   targetTopics: Array<{
     topicId: number;
     topicName: string;
@@ -195,6 +196,7 @@ async function buildTargetViews(
       examType: info?.examType ?? "TYT",
       targetQuestionCount: t.targetQuestionCount,
       solvedCount: solvedBySubject.get(t.subjectId) ?? 0,
+      scheduleFileUrl: t.scheduleFileUrl,
       targetTopics: t.targetTopics.map((topicId) => ({
         topicId,
         topicName: topicNameById.get(topicId) ?? `Konu #${topicId}`,
@@ -408,6 +410,147 @@ export async function getMyWeeklyFeedback(
       .limit(1);
 
     return { success: true, data: { comment: rows[0]?.comment ?? null } };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message:
+        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+    };
+  }
+}
+
+const scheduleUrlSchema = z
+  .string()
+  .trim()
+  .url("Geçerli bir dosya adresi gerekli.")
+  .max(2048);
+
+export async function saveWeeklyScheduleFile(
+  studentId: string,
+  weekStartArg: string,
+  fileUrl: string,
+): Promise<WeeklyTargetActionResult<{ updated: number }>> {
+  const ctx = await getTeacherId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  const url = scheduleUrlSchema.safeParse(fileUrl);
+  if (!url.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: url.error.issues.map((i) => i.message).join(", "),
+    };
+  }
+
+  const weekStart = parseMonday(weekStartArg);
+
+  try {
+    if (!(await isAssigned(ctx.teacherId, studentId))) {
+      return {
+        success: false,
+        status: "FORBIDDEN",
+        message: "Bu öğrenci size atanmamış.",
+      };
+    }
+
+    const result = await db.execute(
+      sql`UPDATE weekly_targets SET schedule_file_url = ${url.data}, is_schedule_approved = false WHERE student_id = ${studentId} AND week_start_date = ${weekStart}`,
+    );
+
+    const updated = result.rowCount ?? 0;
+    if (updated === 0) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message:
+          "Bu hafta için henüz hedef girilmemiş. Önce haftalık hedef belirleyin.",
+      };
+    }
+
+    return { success: true, data: { updated } };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message:
+        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+    };
+  }
+}
+
+export async function getMyWeeklySchedule(
+  weekStartArg?: string,
+): Promise<
+  WeeklyTargetActionResult<{ fileUrl: string | null; isApproved: boolean }>
+> {
+  const ctx = await getStudentId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  const weekStart = parseMonday(weekStartArg);
+
+  try {
+    const rows = await db
+      .select({
+        fileUrl: weeklyTargets.scheduleFileUrl,
+        isApproved: weeklyTargets.isScheduleApproved,
+      })
+      .from(weeklyTargets)
+      .where(
+        and(
+          eq(weeklyTargets.studentId, ctx.studentId),
+          eq(weeklyTargets.weekStartDate, weekStart),
+          isNotNull(weeklyTargets.scheduleFileUrl),
+        ),
+      )
+      .limit(1);
+
+    return {
+      success: true,
+      data: {
+        fileUrl: rows[0]?.fileUrl ?? null,
+        isApproved: rows[0]?.isApproved ?? false,
+      },
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message:
+        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+    };
+  }
+}
+
+export async function approveWeeklySchedule(
+  weekStartArg?: string,
+): Promise<WeeklyTargetActionResult<{ approved: boolean }>> {
+  const ctx = await getStudentId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  const weekStart = parseMonday(weekStartArg);
+
+  try {
+    const result = await db.execute(
+      sql`UPDATE weekly_targets SET is_schedule_approved = true WHERE student_id = ${ctx.studentId} AND week_start_date = ${weekStart} AND schedule_file_url IS NOT NULL`,
+    );
+
+    const updated = result.rowCount ?? 0;
+    if (updated === 0) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message: "Onaylanacak bir çizelge bulunamadı.",
+      };
+    }
+
+    return { success: true, data: { approved: true } };
   } catch (err) {
     return {
       success: false,

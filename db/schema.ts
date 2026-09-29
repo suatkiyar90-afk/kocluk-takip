@@ -282,6 +282,10 @@ export const weeklyTargets = pgTable(
     subjectId: text("subject_id").notNull(),
     targetQuestionCount: integer("target_question_count").notNull().default(0),
     targetTopics: integer("target_topics").array().notNull(),
+    scheduleFileUrl: text("schedule_file_url"),
+    isScheduleApproved: boolean("is_schedule_approved")
+      .notNull()
+      .default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
