@@ -6,6 +6,7 @@ import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { mockExams, teacherStudents, users } from "@/db/schema";
 import { sendPushNotification } from "@/lib/web-push-helper";
+import { actionErrorMessage } from "@/lib/action-error";
 
 export interface MockExamRecord {
   id: number;
@@ -399,7 +400,7 @@ export async function importMockExams(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -450,7 +451,7 @@ export async function getMyMockExams(): Promise<MockExamsResult> {
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -503,7 +504,7 @@ export async function getStudentMockExams(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }

@@ -13,6 +13,8 @@ import {
 } from "@/db/schema";
 import { parseMonday } from "@/lib/week-utils";
 import { sendPushNotification } from "@/lib/web-push-helper";
+import { isAllowedUploadUrl } from "@/lib/url-guard";
+import { actionErrorMessage } from "@/lib/action-error";
 import type { ExamType } from "@/components/quiz-entry/weekly-quiz-schema";
 
 export type WeeklyTargetActionResult<T> =
@@ -293,7 +295,7 @@ export async function saveWeeklyTarget(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -323,7 +325,7 @@ export async function listWeeklyTargets(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -361,7 +363,7 @@ export async function deleteWeeklyTarget(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -382,7 +384,7 @@ export async function getMyWeeklyTargets(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -416,7 +418,7 @@ export async function getMyWeeklyFeedback(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -424,8 +426,11 @@ export async function getMyWeeklyFeedback(
 const scheduleUrlSchema = z
   .string()
   .trim()
-  .url("Geçerli bir dosya adresi gerekli.")
-  .max(2048);
+  .max(2048)
+  .refine(
+    isAllowedUploadUrl,
+    "Yalnızca UploadThing dosya adresleri kabul edilir (utfs.io / *.ufs.sh).",
+  );
 
 export async function saveWeeklyScheduleFile(
   studentId: string,
@@ -477,7 +482,7 @@ export async function saveWeeklyScheduleFile(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -522,7 +527,7 @@ export async function getMyWeeklySchedule(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -557,7 +562,7 @@ export async function approveWeeklySchedule(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }

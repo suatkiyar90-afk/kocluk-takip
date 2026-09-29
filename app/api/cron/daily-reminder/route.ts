@@ -6,6 +6,20 @@ import { sendPushNotification } from "@/lib/web-push-helper";
 
 export const dynamic = "force-dynamic";
 
+function isAuthorized(request: Request): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  const header = request.headers.get("authorization");
+  return header === `Bearer ${secret}`;
+}
+
+function unauthorized(): NextResponse {
+  return NextResponse.json(
+    { success: false, message: "Unauthorized" },
+    { status: 401 },
+  );
+}
+
 async function runDailyReminder(): Promise<NextResponse> {
   try {
     const today = new Date().toISOString().slice(0, 10);
@@ -52,10 +66,12 @@ async function runDailyReminder(): Promise<NextResponse> {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!isAuthorized(request)) return unauthorized();
   return runDailyReminder();
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  if (!isAuthorized(request)) return unauthorized();
   return runDailyReminder();
 }

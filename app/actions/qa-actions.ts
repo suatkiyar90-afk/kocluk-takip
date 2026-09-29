@@ -6,6 +6,8 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { qaThreads, teacherStudents } from "@/db/schema";
 import { sendPushNotification } from "@/lib/web-push-helper";
+import { isAllowedUploadUrl } from "@/lib/url-guard";
+import { actionErrorMessage } from "@/lib/action-error";
 
 export type QaActionResult<T> =
   | { success: true; data: T }
@@ -105,8 +107,8 @@ const urlField = z
   .min(1, "Dosya adresi gerekli")
   .max(2000, "Dosya adresi çok uzun")
   .refine(
-    (v) => v.startsWith("/") || /^https?:\/\//i.test(v),
-    "Dosya adresi http ile başlamalı veya / yolunda olmalı",
+    isAllowedUploadUrl,
+    "Yalnızca UploadThing dosya adresleri kabul edilir (utfs.io / *.ufs.sh).",
   );
 
 const askQuestionSchema = z.object({
@@ -177,7 +179,7 @@ export async function askQuestion(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -206,7 +208,7 @@ export async function listMyQuestions(): Promise<
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -243,7 +245,7 @@ export async function listStudentThreads(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -375,7 +377,7 @@ export async function answerQuestion(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }

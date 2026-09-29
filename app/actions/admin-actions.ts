@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { and, eq, inArray, or } from "drizzle-orm";
 import { db } from "@/db";
 import { teacherStudents, users } from "@/db/schema";
+import { actionErrorMessage } from "@/lib/action-error";
 
 export interface AdminTeacher {
   id: string;
@@ -138,7 +139,7 @@ export async function adminCreateUser(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -276,7 +277,7 @@ export async function bulkCreateStudents(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -327,7 +328,7 @@ export async function adminListUsers(): Promise<
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -416,7 +417,7 @@ export async function adminAssignTeacher(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }

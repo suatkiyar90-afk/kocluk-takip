@@ -22,6 +22,7 @@ import type {
   SubjectOption,
   SubjectOptions,
 } from "@/components/quiz-entry/daily-entry-types";
+import { actionErrorMessage } from "@/lib/action-error";
 
 async function getStudentId(): Promise<
   | { ok: true; studentId: string }
@@ -245,7 +246,7 @@ export async function saveDailyEntry(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -320,7 +321,7 @@ export async function saveDailyNote(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -561,7 +562,7 @@ export async function getWeeklyReportByStudent(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -677,7 +678,7 @@ export async function getStudentStatistics(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -818,7 +819,7 @@ export async function getDailyEntryData(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }

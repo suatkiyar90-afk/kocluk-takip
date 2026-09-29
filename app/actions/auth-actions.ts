@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { users } from "@/db/schema";
+import { actionErrorMessage } from "@/lib/action-error";
 
 export type ChangePasswordResult =
   | { success: true; message: string }
@@ -66,7 +67,7 @@ export async function changeMyPassword(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }

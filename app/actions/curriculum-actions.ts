@@ -10,6 +10,7 @@ import {
   teacherStudents,
 } from "@/db/schema";
 import { ALL_SUBJECTS, examTypes, type ExamType } from "@/components/quiz-entry/weekly-quiz-schema";
+import { actionErrorMessage } from "@/lib/action-error";
 
 export type TopicStatus = "baslamadi" | "calisiliyor" | "bitti";
 
@@ -245,7 +246,7 @@ export async function getMyCurriculum(): Promise<
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -275,7 +276,7 @@ export async function getStudentCurriculumProgress(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -342,7 +343,7 @@ export async function updateTopicStatus(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }

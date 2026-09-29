@@ -10,6 +10,7 @@ import {
   weeklyQuestionEntries,
 } from "@/db/schema";
 import { parseMonday } from "@/lib/week-utils";
+import { actionErrorMessage } from "@/lib/action-error";
 import {
   netScore,
   weeklyQuizSchema,
@@ -181,7 +182,7 @@ export async function saveWeeklyQuizEntries(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -230,7 +231,7 @@ export async function getThisWeeksEntries(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }
@@ -344,7 +345,7 @@ export async function getStudentOverview(
       success: false,
       status: "DATABASE_ERROR",
       message:
-        err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.",
+        actionErrorMessage(err),
     };
   }
 }

@@ -18,6 +18,7 @@ import {
   type ExamType,
 } from "@/components/quiz-entry/weekly-quiz-schema";
 import { coachingFeedbackSchema } from "@/components/coaching/feedback-schema";
+import { actionErrorMessage } from "@/lib/action-error";
 
 export type TeacherActionResult<T> =
   | { success: true; data: T }
@@ -66,7 +67,7 @@ export interface WeeklySummaryData {
 }
 
 function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "Bilinmeyen veritabanı hatası.";
+  return actionErrorMessage(err);
 }
 
 function roundNet(n: number): number {
