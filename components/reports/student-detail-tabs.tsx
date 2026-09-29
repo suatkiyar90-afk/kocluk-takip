@@ -248,7 +248,7 @@ export function StudentDetailTabs({
                 </div>
               </section>
 
-              {report.entries.length > 0 && (
+              {selectedDate !== null && report.entries.length > 0 && (
                 <section>
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">
