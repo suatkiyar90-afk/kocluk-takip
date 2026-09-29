@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { WeekPicker } from "@/components/ui/week-picker";
 import { TopicAnalysis } from "@/components/reports/topic-analysis";
 import { FeedbackForm } from "@/components/coaching/feedback-form";
@@ -9,10 +10,15 @@ import { CurriculumProgress } from "@/components/curriculum/curriculum-progress"
 import { TeacherQASection } from "@/components/qa/teacher-qa-section";
 import { TargetsPanel } from "@/components/reports/targets-panel";
 import { StudentStatisticsTab } from "@/components/student/student-statistics";
+import { ChartSkeleton } from "@/components/charts/chart-ui";
 import { netScore } from "@/components/quiz-entry/weekly-quiz-schema";
 import { weekdayOfISO } from "@/lib/week-utils";
 import type { WeeklyReportResult } from "@/app/actions/quiz-actions";
 import type { MockExamsResult } from "@/app/actions/mock-exam-actions";
+import type {
+  WeeklyTargetActionResult,
+  WeeklyTargetView,
+} from "@/app/actions/weekly-target-actions";
 import type {
   CurriculumActionResult,
   CurriculumSnapshot,
@@ -21,6 +27,14 @@ import type {
   QaActionResult,
   QaThreadSummary,
 } from "@/app/actions/qa-actions";
+
+const TargetComparisonChart = dynamic(
+  () => import("@/components/charts/target-comparison-chart"),
+  {
+    ssr: false,
+    loading: () => <ChartSkeleton />,
+  },
+);
 
 const TABS = [
   { id: "report", label: "Haftalık Rapor" },
@@ -63,6 +77,7 @@ interface StudentDetailTabsProps {
   initialComment: string | undefined;
   reportResult: WeeklyReportResult;
   examsResult: MockExamsResult;
+  targetsResult: WeeklyTargetActionResult<WeeklyTargetView[]>;
   curriculumResult: CurriculumActionResult<CurriculumSnapshot>;
   qaResult: QaActionResult<QaThreadSummary[]>;
 }
@@ -73,6 +88,7 @@ export function StudentDetailTabs({
   initialComment,
   reportResult,
   examsResult,
+  targetsResult,
   curriculumResult,
   qaResult,
 }: StudentDetailTabsProps) {
@@ -105,6 +121,14 @@ export function StudentDetailTabs({
     selectedDate !== null && report !== null
       ? report.dailyNotes.find((note) => note.date === selectedDate)
       : undefined;
+  const targetItems =
+    targetsResult.success === true
+      ? targetsResult.data.map((t) => ({
+          subjectName: t.subjectName,
+          target: t.targetQuestionCount,
+          actual: t.solvedCount,
+        }))
+      : [];
 
   return (
     <div>
@@ -363,6 +387,20 @@ export function StudentDetailTabs({
                   Konu Bazlı Analiz
                 </h2>
                 <TopicAnalysis key={weekStart} topics={report.byTopic} />
+              </section>
+
+              <section>
+                <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
+                  Hedef / Gerçekleşen
+                </h2>
+                <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <TargetComparisonChart items={targetItems} />
+                  {targetsResult.success === false ? (
+                    <p className="mt-3 text-xs font-medium text-red-600">
+                      {targetsResult.message}
+                    </p>
+                  ) : null}
+                </div>
               </section>
             </>
           ) : null}

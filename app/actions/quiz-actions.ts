@@ -13,6 +13,7 @@ import {
 import {
   addDaysISO,
   isValidISODate,
+  mondayOfISO,
   parseMonday,
   todayInIstanbul,
 } from "@/lib/week-utils";
@@ -569,15 +570,18 @@ function isoDaysAgo(days: number): string {
   return addDaysISO(todayInIstanbul(), -days);
 }
 
-export async function getStudentStatistics(
-  studentId: string,
-): Promise<StudentStatisticsResult> {
+async function checkStatisticsAccess(studentId: string): Promise<
+  | { ok: true }
+  | {
+      ok: false;
+      error: { status: "UNAUTHORIZED" | "FORBIDDEN"; message: string };
+    }
+> {
   const session = await auth();
   if (!session?.user?.id) {
     return {
-      success: false,
-      status: "UNAUTHORIZED",
-      message: "Oturum açmanız gerekiyor.",
+      ok: false,
+      error: { status: "UNAUTHORIZED", message: "Oturum açmanız gerekiyor." },
     };
   }
 
@@ -585,9 +589,11 @@ export async function getStudentStatistics(
   if (role === "student") {
     if (session.user.id !== studentId) {
       return {
-        success: false,
-        status: "FORBIDDEN",
-        message: "Bu istatistikleri görüntüleme yetkiniz yok.",
+        ok: false,
+        error: {
+          status: "FORBIDDEN",
+          message: "Bu istatistikleri görüntüleme yetkiniz yok.",
+        },
       };
     }
   } else if (role === "teacher") {
@@ -603,16 +609,35 @@ export async function getStudentStatistics(
       .limit(1);
     if (assigned.length === 0) {
       return {
-        success: false,
-        status: "FORBIDDEN",
-        message: "Bu öğrenci size atanmamış.",
+        ok: false,
+        error: {
+          status: "FORBIDDEN",
+          message: "Bu öğrenci size atanmamış.",
+        },
       };
     }
   } else if (role !== "admin") {
     return {
+      ok: false,
+      error: {
+        status: "FORBIDDEN",
+        message: "Bu işlem için yetkiniz yok.",
+      },
+    };
+  }
+
+  return { ok: true };
+}
+
+export async function getStudentStatistics(
+  studentId: string,
+): Promise<StudentStatisticsResult> {
+  const access = await checkStatisticsAccess(studentId);
+  if (access.ok === false) {
+    return {
       success: false,
-      status: "FORBIDDEN",
-      message: "Bu işlem için yetkiniz yok.",
+      status: access.error.status,
+      message: access.error.message,
     };
   }
 
@@ -653,6 +678,177 @@ export async function getStudentStatistics(
       );
 
     return { success: true, data };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message:
+        actionErrorMessage(err),
+    };
+  }
+}
+
+export interface StudentTrendWeek {
+  weekStart: string;
+  correct: number;
+  wrong: number;
+  blank: number;
+  total: number;
+  net: number;
+}
+
+export interface StudentTrendSubject {
+  subjectId: string;
+  subjectName: string;
+  correct: number;
+  wrong: number;
+  blank: number;
+  total: number;
+}
+
+export interface StudentTrendDay {
+  date: string;
+  total: number;
+}
+
+export interface StudentTrendsData {
+  weeks: StudentTrendWeek[];
+  subjects: StudentTrendSubject[];
+  daily: StudentTrendDay[];
+}
+
+export type StudentTrendsResult =
+  | { success: true; data: StudentTrendsData }
+  | {
+      success: false;
+      status: "UNAUTHORIZED" | "FORBIDDEN" | "DATABASE_ERROR";
+      message: string;
+    };
+
+export async function getStudentTrends(
+  studentId: string,
+  weeks = 8,
+): Promise<StudentTrendsResult> {
+  const access = await checkStatisticsAccess(studentId);
+  if (access.ok === false) {
+    return {
+      success: false,
+      status: access.error.status,
+      message: access.error.message,
+    };
+  }
+
+  const weekCount = Math.min(Math.max(Math.trunc(weeks) || 8, 1), 52);
+
+  try {
+    const today = todayInIstanbul();
+    const currentWeek = mondayOfISO(today);
+    const weekBound = addDaysISO(currentWeek, -7 * (weekCount - 1));
+    const dayBound = addDaysISO(today, -29);
+
+    const weekKey = sql<string>`to_char(date_trunc('week', ${dailyQuestionEntries.date}::date), 'YYYY-MM-DD')`;
+    const solved = sql<number>`${dailyQuestionEntries.correct} + ${dailyQuestionEntries.wrong} + ${dailyQuestionEntries.blank}`;
+
+    const [weeklyRows, subjectRows, dailyRows] = await Promise.all([
+      db
+        .select({
+          weekStart: weekKey,
+          correct: sql<number>`coalesce(sum(${dailyQuestionEntries.correct})::int, 0)`,
+          wrong: sql<number>`coalesce(sum(${dailyQuestionEntries.wrong})::int, 0)`,
+          blank: sql<number>`coalesce(sum(${dailyQuestionEntries.blank})::int, 0)`,
+        })
+        .from(dailyQuestionEntries)
+        .where(
+          and(
+            eq(dailyQuestionEntries.studentId, studentId),
+            gte(dailyQuestionEntries.date, weekBound),
+            lte(dailyQuestionEntries.date, today),
+          ),
+        )
+        .groupBy(weekKey)
+        .orderBy(asc(weekKey)),
+      db
+        .select({
+          subjectId: dailyQuestionEntries.subjectId,
+          subjectName: curriculumTopics.subjectName,
+          correct: sql<number>`coalesce(sum(${dailyQuestionEntries.correct})::int, 0)`,
+          wrong: sql<number>`coalesce(sum(${dailyQuestionEntries.wrong})::int, 0)`,
+          blank: sql<number>`coalesce(sum(${dailyQuestionEntries.blank})::int, 0)`,
+        })
+        .from(dailyQuestionEntries)
+        .innerJoin(
+          curriculumTopics,
+          eq(curriculumTopics.id, dailyQuestionEntries.topicId),
+        )
+        .where(eq(dailyQuestionEntries.studentId, studentId))
+        .groupBy(dailyQuestionEntries.subjectId, curriculumTopics.subjectName),
+      db
+        .select({
+          date: dailyQuestionEntries.date,
+          total: sql<number>`coalesce(sum(${solved})::int, 0)`,
+        })
+        .from(dailyQuestionEntries)
+        .where(
+          and(
+            eq(dailyQuestionEntries.studentId, studentId),
+            gte(dailyQuestionEntries.date, dayBound),
+            lte(dailyQuestionEntries.date, today),
+          ),
+        )
+        .groupBy(dailyQuestionEntries.date)
+        .orderBy(asc(dailyQuestionEntries.date)),
+    ]);
+
+    const weeklyByKey = new Map(weeklyRows.map((r) => [r.weekStart, r]));
+    const trendWeeks: StudentTrendWeek[] = [];
+    for (let i = weekCount - 1; i >= 0; i--) {
+      const weekStart = addDaysISO(currentWeek, -7 * i);
+      const row = weeklyByKey.get(weekStart);
+      const correct = Number(row?.correct ?? 0);
+      const wrong = Number(row?.wrong ?? 0);
+      const blank = Number(row?.blank ?? 0);
+      trendWeeks.push({
+        weekStart,
+        correct,
+        wrong,
+        blank,
+        total: correct + wrong + blank,
+        net: roundNet(netScore(correct, wrong)),
+      });
+    }
+
+    const trendSubjects: StudentTrendSubject[] = subjectRows
+      .map((row) => {
+        const correct = Number(row.correct);
+        const wrong = Number(row.wrong);
+        const blank = Number(row.blank);
+        return {
+          subjectId: row.subjectId,
+          subjectName: row.subjectName,
+          correct,
+          wrong,
+          blank,
+          total: correct + wrong + blank,
+        };
+      })
+      .filter((row) => row.total > 0)
+      .sort(
+        (a, b) =>
+          b.total - a.total ||
+          a.subjectName.localeCompare(b.subjectName, "tr"),
+      );
+
+    const dailyByDate = new Map(dailyRows.map((r) => [r.date, Number(r.total)]));
+    const trendDaily: StudentTrendDay[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const date = addDaysISO(today, -i);
+      trendDaily.push({ date, total: dailyByDate.get(date) ?? 0 });
+    }
+
+    return {
+      success: true,
+      data: { weeks: trendWeeks, subjects: trendSubjects, daily: trendDaily },
+    };
   } catch (err) {
     return {
       success: false,

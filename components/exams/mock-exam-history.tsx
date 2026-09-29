@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { MockExamRecord } from "@/app/actions/mock-exam-actions";
 
-type BranchKey =
+export type BranchKey =
   | "turkceNet"
   | "tarihNet"
   | "cografyaNet"
@@ -15,7 +15,7 @@ type BranchKey =
   | "kimyaNet"
   | "biyolojiNet";
 
-const BRANCHES: Array<{ key: BranchKey; label: string }> = [
+export const MOCK_EXAM_BRANCHES: Array<{ key: BranchKey; label: string }> = [
   { key: "turkceNet", label: "Türkçe" },
   { key: "tarihNet", label: "Tarih" },
   { key: "cografyaNet", label: "Coğrafya" },
@@ -101,7 +101,7 @@ export function MockExamHistory({ records }: { records: MockExamRecord[] }) {
 
             {open ? (
               <div className="grid grid-cols-2 gap-1.5 border-t border-gray-100 bg-gray-50/60 px-3 py-3">
-                {BRANCHES.map((b) => (
+                {MOCK_EXAM_BRANCHES.map((b) => (
                   <div
                     key={b.key}
                     className="flex items-center justify-between gap-2 rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-gray-200"
