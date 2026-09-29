@@ -126,6 +126,7 @@ const dailyEntrySchema = z.object({
   correct: z.number().int().min(0).max(500),
   wrong: z.number().int().min(0).max(500),
   blank: z.number().int().min(0).max(500),
+  studentNote: z.string().max(2000).nullish(),
 });
 
 export type SaveDailyEntryResult =
@@ -161,8 +162,16 @@ export async function saveDailyEntry(
     };
   }
 
-  const { date, examType, subjectId, topicId, correct, wrong, blank } =
-    parsed.data;
+  const {
+    date,
+    examType,
+    subjectId,
+    topicId,
+    correct,
+    wrong,
+    blank,
+    studentNote,
+  } = parsed.data;
 
   if (!isValidISODate(date)) {
     return {
@@ -197,6 +206,7 @@ export async function saveDailyEntry(
       correct: sql`excluded.correct`,
       wrong: sql`excluded.wrong`,
       blank: sql`excluded.blank`,
+      studentNote: sql`excluded.student_note`,
     } as {
       id?: number;
       studentId?: string;
@@ -207,6 +217,7 @@ export async function saveDailyEntry(
       correct?: unknown;
       wrong?: unknown;
       blank?: unknown;
+      studentNote?: unknown;
       createdAt?: Date;
     };
 
@@ -219,6 +230,7 @@ export async function saveDailyEntry(
       correct,
       wrong,
       blank,
+      studentNote: studentNote ?? null,
     };
 
     const inserted = await db
@@ -269,6 +281,19 @@ export interface DailyReportTopic {
   net: number;
 }
 
+export interface DailyReportEntry {
+  date: string;
+  examType: "TYT" | "AYT";
+  subjectName: string;
+  topicName: string;
+  correct: number;
+  wrong: number;
+  blank: number;
+  solved: number;
+  net: number;
+  studentNote: string | null;
+}
+
 export type WeeklyReportResult =
   | {
       success: true;
@@ -276,6 +301,7 @@ export type WeeklyReportResult =
         weekStart: string;
         weekEnd: string;
         days: DailyReportDay[];
+        entries: DailyReportEntry[];
         byTopic: DailyReportTopic[];
       };
     }
@@ -322,6 +348,7 @@ export async function getWeeklyReportByStudent(
         correct: dailyQuestionEntries.correct,
         wrong: dailyQuestionEntries.wrong,
         blank: dailyQuestionEntries.blank,
+        studentNote: dailyQuestionEntries.studentNote,
       })
       .from(dailyQuestionEntries)
       .innerJoin(
@@ -398,6 +425,22 @@ export async function getWeeklyReportByStudent(
       });
     }
 
+    const entries: DailyReportEntry[] = rows.map((row) => {
+      const solved = row.correct + row.wrong + row.blank;
+      return {
+        date: row.date,
+        examType: row.examType,
+        subjectName: row.subjectName,
+        topicName: row.topicName,
+        correct: row.correct,
+        wrong: row.wrong,
+        blank: row.blank,
+        solved,
+        net: roundNet(netScore(row.correct, row.wrong)),
+        studentNote: row.studentNote,
+      };
+    });
+
     const sortedTopics = [...topicMap.entries()].sort(([, a], [, b]) => {
       const ea = a.examType === "TYT" ? 0 : 1;
       const eb = b.examType === "TYT" ? 0 : 1;
@@ -423,7 +466,7 @@ export async function getWeeklyReportByStudent(
 
     return {
       success: true,
-      data: { weekStart, weekEnd, days, byTopic },
+      data: { weekStart, weekEnd, days, entries, byTopic },
     };
   } catch (err) {
     return {
@@ -607,6 +650,7 @@ export async function getDailyEntryData(
           correct: dailyQuestionEntries.correct,
           wrong: dailyQuestionEntries.wrong,
           blank: dailyQuestionEntries.blank,
+          studentNote: dailyQuestionEntries.studentNote,
         })
         .from(dailyQuestionEntries)
         .innerJoin(

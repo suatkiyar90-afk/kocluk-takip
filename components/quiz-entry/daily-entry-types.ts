@@ -21,4 +21,5 @@ export interface DayEntryRow {
   correct: number;
   wrong: number;
   blank: number;
+  studentNote: string | null;
 }

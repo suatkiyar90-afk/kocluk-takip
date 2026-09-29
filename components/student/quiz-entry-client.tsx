@@ -43,6 +43,8 @@ export function QuizEntryClient({
 }: QuizEntryClientProps) {
   const today = toISODateLocal(new Date());
   const label = formatDateLabel(date, today);
+  const savedNote =
+    entries.find((row) => row.studentNote !== null)?.studentNote ?? null;
 
   return (
     <>
@@ -83,7 +85,12 @@ export function QuizEntryClient({
         </p>
       </section>
 
-      <DailyEntryForm date={date} subjects={subjects} onSaved={onSaved} />
+      <DailyEntryForm
+        date={date}
+        subjects={subjects}
+        initialNote={savedNote}
+        onSaved={onSaved}
+      />
 
       <section className="mt-6">
         <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
@@ -121,6 +128,30 @@ export function QuizEntryClient({
                     {row.blank} Boş
                   </span>
                 </p>
+                {row.studentNote !== null && row.studentNote !== "" && (
+                  <div className="mt-2 flex items-start gap-1.5 rounded-xl border border-indigo-100 bg-indigo-50/70 px-2.5 py-2">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                      className="mt-0.5 shrink-0 text-indigo-500"
+                    >
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      <path d="M7 9h10" />
+                      <path d="M7 13h6" />
+                    </svg>
+                    <p className="min-w-0 whitespace-pre-wrap break-words text-xs leading-relaxed text-indigo-900">
+                      {row.studentNote}
+                    </p>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

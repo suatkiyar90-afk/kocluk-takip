@@ -249,6 +249,7 @@ export const dailyQuestionEntries = pgTable(
     correct: integer("correct").notNull().default(0),
     wrong: integer("wrong").notNull().default(0),
     blank: integer("blank").notNull().default(0),
+    studentNote: text("student_note"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

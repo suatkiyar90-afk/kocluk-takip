@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { WeekPicker } from "@/components/ui/week-picker";
 import { TopicAnalysis } from "@/components/reports/topic-analysis";
 import { FeedbackForm } from "@/components/coaching/feedback-form";
@@ -38,6 +38,24 @@ function formatNet(n: number): string {
   return n.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
 }
 
+function formatEntryDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("tr-TR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatSelectedDay(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("tr-TR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+}
+
 interface StudentDetailTabsProps {
   weekStart: string;
   studentId: string;
@@ -58,6 +76,11 @@ export function StudentDetailTabs({
   qaResult,
 }: StudentDetailTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("report");
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedDate(null);
+  }, [weekStart]);
 
   const report = reportResult.success === true ? reportResult.data : null;
   const reportError =
@@ -153,28 +176,65 @@ export function StudentDetailTabs({
                         day.solved > 0
                           ? Math.max((day.solved / maxDaySolved) * 100, 10)
                           : 0;
+                      const isSelected = selectedDate === day.date;
+                      const isDimmed =
+                        selectedDate !== null && !isSelected;
                       return (
-                        <div
+                        <button
                           key={day.date}
-                          className="flex flex-col items-center gap-1"
+                          type="button"
+                          aria-pressed={isSelected}
+                          aria-label={`${day.date} tarihini filtrele`}
+                          onClick={() =>
+                            setSelectedDate((prev) =>
+                              prev === day.date ? null : day.date,
+                            )
+                          }
+                          className="flex touch-manipulation flex-col items-center gap-1 rounded-lg outline-none transition focus-visible:ring-2 focus-visible:ring-indigo-400"
                         >
-                          <div className="flex h-14 w-full items-end justify-center rounded-lg bg-gray-50 p-0.5">
+                          <div
+                            className={`flex h-14 w-full items-end justify-center rounded-lg p-0.5 transition-all ${
+                              isSelected
+                                ? "bg-indigo-50 ring-2 ring-indigo-400"
+                                : "bg-gray-50"
+                            } ${isDimmed ? "opacity-40" : "opacity-100"}`}
+                          >
                             <div
-                              className={`w-full rounded-md ${
+                              className={`w-full rounded-md transition-all ${
                                 day.solved > 0
-                                  ? "bg-indigo-500"
+                                  ? isSelected
+                                    ? "bg-indigo-700"
+                                    : "bg-indigo-500"
                                   : "bg-transparent"
                               }`}
                               style={{ height: `${heightPct}%` }}
                             />
                           </div>
-                          <span className="text-[10px] font-semibold text-gray-400">
+                          <span
+                            className={`text-[10px] font-semibold transition-colors ${
+                              isSelected
+                                ? "text-indigo-700"
+                                : "text-gray-400"
+                            }`}
+                          >
                             {DAY_LABELS[dow]}
                           </span>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
+
+                  {selectedDate !== null && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDate(null)}
+                      className="mx-auto mt-3 flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 transition active:scale-95 touch-manipulation"
+                    >
+                      {formatSelectedDay(selectedDate)}
+                      <span aria-hidden>✕</span>
+                      <span className="sr-only">Filtreyi temizle</span>
+                    </button>
+                  )}
 
                   {totalSolved === 0 && (
                     <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-center text-xs font-medium text-amber-700">
@@ -183,6 +243,110 @@ export function StudentDetailTabs({
                   )}
                 </div>
               </section>
+
+              {report.entries.length > 0 && (
+                <section>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">
+                      Günlük Soru Detayı
+                    </h2>
+                    {selectedDate !== null && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDate(null)}
+                        className="flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700 transition active:scale-95 touch-manipulation"
+                      >
+                        {formatSelectedDay(selectedDate)}
+                        <span aria-hidden>✕</span>
+                        <span className="sr-only">Filtreyi temizle</span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                    {(() => {
+                      const filteredEntries = report.entries.filter((entry) =>
+                        selectedDate ? entry.date === selectedDate : true,
+                      );
+                      if (filteredEntries.length === 0) {
+                        return (
+                          <p className="rounded-xl bg-gray-50 px-3 py-3 text-center text-xs font-medium text-gray-500">
+                            {selectedDate !== null
+                              ? `${formatSelectedDay(selectedDate)} için kayıt bulunamadı.`
+                              : "Kayıt bulunamadı."}
+                          </p>
+                        );
+                      }
+                      return (
+                        <ul className="space-y-2">
+                          {filteredEntries.map((entry, index) => (
+                            <li
+                              key={`${entry.date}-${entry.examType}-${entry.topicName}-${index}`}
+                              className="rounded-xl border border-gray-100 bg-gray-50/60 p-3"
+                            >
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-700">
+                                  {entry.examType}
+                                </span>
+                                <span
+                                  className="shrink-0 text-[11px] font-semibold text-gray-400"
+                                  suppressHydrationWarning
+                                >
+                                  {formatEntryDate(entry.date)}
+                                </span>
+                                <p className="min-w-0 text-sm font-semibold text-gray-900">
+                                  {entry.subjectName} · {entry.topicName}
+                                </p>
+                                <p className="ml-auto shrink-0 text-xs font-medium text-gray-500">
+                                  <span className="font-bold text-green-600">
+                                    {entry.correct} Doğru
+                                  </span>
+                                  ,{" "}
+                                  <span className="font-bold text-red-600">
+                                    {entry.wrong} Yanlış
+                                  </span>
+                                  ,{" "}
+                                  <span className="font-bold text-stone-500">
+                                    {entry.blank} Boş
+                                  </span>
+                                  · Net{" "}
+                                  <span className="font-bold text-indigo-700">
+                                    {formatNet(entry.net)}
+                                  </span>
+                                </p>
+                              </div>
+                              {entry.studentNote !== null &&
+                                entry.studentNote !== "" && (
+                                  <div className="mt-2 flex items-start gap-1.5 rounded-xl border border-indigo-100 bg-indigo-50/70 px-2.5 py-2">
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      width="14"
+                                      height="14"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      aria-hidden="true"
+                                      className="mt-0.5 shrink-0 text-indigo-500"
+                                    >
+                                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                                      <path d="M7 9h10" />
+                                      <path d="M7 13h6" />
+                                    </svg>
+                                    <p className="min-w-0 whitespace-pre-wrap break-words text-xs leading-relaxed text-indigo-900">
+                                      {entry.studentNote}
+                                    </p>
+                                  </div>
+                                )}
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                    })()}
+                  </div>
+                </section>
+              )}
 
               <section>
                 <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
