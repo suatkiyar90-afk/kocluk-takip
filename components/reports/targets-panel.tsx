@@ -365,7 +365,7 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
                     <button
                       type="button"
                       onClick={() => handleDelete(t.id)}
-                      className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600 transition active:scale-95 touch-manipulation"
+                      className="flex h-11 shrink-0 items-center rounded-lg border border-red-200 bg-red-50 px-3.5 text-xs font-bold text-red-600 transition active:scale-95 touch-manipulation"
                     >
                       Sil
                     </button>

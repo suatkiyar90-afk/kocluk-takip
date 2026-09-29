@@ -84,7 +84,7 @@ export function FeedbackForm({
       <button
         type="submit"
         disabled={isSubmitting || !isDirty}
-        className="mt-4 h-12 w-full rounded-xl bg-indigo-600 text-base font-bold text-white shadow-lg shadow-indigo-600/25 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation"
+        className="sticky bottom-[env(safe-area-inset-bottom)] z-10 mt-4 h-12 w-full rounded-xl bg-indigo-600 text-base font-bold text-white shadow-lg shadow-indigo-600/25 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation"
       >
         {isSubmitting ? "Kaydediliyor…" : "Dönütü Kaydet"}
       </button>

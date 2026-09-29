@@ -2,9 +2,9 @@
 
 import { z } from "zod";
 import { auth } from "@/auth";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { qaThreads, teacherStudents } from "@/db/schema";
+import { qaThreads, teacherStudents, users } from "@/db/schema";
 import { sendPushNotification } from "@/lib/web-push-helper";
 import { isAllowedUploadUrl } from "@/lib/url-guard";
 import { actionErrorMessage } from "@/lib/action-error";
@@ -167,6 +167,21 @@ export async function askQuestion(
         studentId: qaThreads.studentId,
       });
 
+    if (values.teacherId) {
+      const nameRows = await db
+        .select({ name: users.name })
+        .from(users)
+        .where(eq(users.id, ctx.studentId))
+        .limit(1);
+      const studentName = nameRows[0]?.name || "Öğrenci";
+      await sendPushNotification(
+        values.teacherId,
+        `Yeni soru: ${studentName}`,
+        "Öğrenci yeni bir soru gönderdi. Cevabını bekliyor.",
+        "/sorular",
+      );
+    }
+
     return {
       success: true,
       data: {
@@ -209,6 +224,90 @@ export async function listMyQuestions(): Promise<
       status: "DATABASE_ERROR",
       message:
         actionErrorMessage(err),
+    };
+  }
+}
+
+export async function getPendingQuestionCount(): Promise<number> {
+  const ctx = await getTeacherId();
+  if (ctx.ok === false) {
+    return 0;
+  }
+
+  try {
+    const rows = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(qaThreads)
+      .innerJoin(
+        teacherStudents,
+        eq(teacherStudents.studentId, qaThreads.studentId),
+      )
+      .where(
+        and(
+          eq(teacherStudents.teacherId, ctx.teacherId),
+          eq(qaThreads.status, "bekliyor"),
+        ),
+      );
+    return rows[0]?.count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+export interface PendingQuestionCard {
+  id: number;
+  studentId: string;
+  studentName: string;
+  questionImageUrl: string;
+  studentNote: string;
+  createdAt: string;
+}
+
+export async function listPendingQuestions(): Promise<
+  QaActionResult<PendingQuestionCard[]>
+> {
+  const ctx = await getTeacherId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  try {
+    const rows = await db
+      .select({
+        id: qaThreads.id,
+        studentId: qaThreads.studentId,
+        studentName: users.name,
+        questionImageUrl: qaThreads.questionImageUrl,
+        studentNote: qaThreads.studentNote,
+        createdAt: qaThreads.createdAt,
+      })
+      .from(qaThreads)
+      .innerJoin(users, eq(users.id, qaThreads.studentId))
+      .innerJoin(
+        teacherStudents,
+        eq(teacherStudents.studentId, qaThreads.studentId),
+      )
+      .where(
+        and(
+          eq(teacherStudents.teacherId, ctx.teacherId),
+          eq(qaThreads.status, "bekliyor"),
+        ),
+      )
+      .orderBy(asc(qaThreads.createdAt));
+
+    return {
+      success: true,
+      data: rows.map((row) => ({
+        ...row,
+        studentName: row.studentName || "İsimsiz öğrenci",
+        createdAt: row.createdAt.toJSON(),
+      })),
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
     };
   }
 }

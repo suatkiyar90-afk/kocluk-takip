@@ -121,7 +121,7 @@ function ReplyForm({ threadId, onAnswered }: ReplyFormProps) {
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <label
           htmlFor={`qa-reply-image-${threadId}`}
-          className="flex h-9 cursor-pointer items-center rounded-lg border border-indigo-300 bg-white px-3 text-xs font-semibold text-indigo-700 transition active:scale-[0.98] touch-manipulation"
+          className="flex h-11 cursor-pointer items-center rounded-lg border border-indigo-300 bg-white px-3.5 text-xs font-semibold text-indigo-700 transition active:scale-[0.98] touch-manipulation"
         >
           {imageFile ? "✓ Görsel eklendi" : "+ Çözüm Görseli"}
         </label>
@@ -136,7 +136,7 @@ function ReplyForm({ threadId, onAnswered }: ReplyFormProps) {
 
         <label
           htmlFor={`qa-reply-audio-${threadId}`}
-          className="flex h-9 cursor-pointer items-center rounded-lg border border-indigo-300 bg-white px-3 text-xs font-semibold text-indigo-700 transition active:scale-[0.98] touch-manipulation"
+          className="flex h-11 cursor-pointer items-center rounded-lg border border-indigo-300 bg-white px-3.5 text-xs font-semibold text-indigo-700 transition active:scale-[0.98] touch-manipulation"
         >
           {audioFile ? "✓ Ses eklendi" : "+ Ses Kaydı"}
         </label>
@@ -152,7 +152,7 @@ function ReplyForm({ threadId, onAnswered }: ReplyFormProps) {
         <button
           type="submit"
           disabled={disabled}
-          className="ml-auto h-9 rounded-lg bg-indigo-600 px-4 text-sm font-bold text-white shadow-lg shadow-indigo-600/25 transition active:scale-[0.98] disabled:opacity-60 touch-manipulation"
+          className="ml-auto flex h-11 items-center rounded-lg bg-indigo-600 px-5 text-sm font-bold text-white shadow-lg shadow-indigo-600/25 transition active:scale-[0.98] disabled:opacity-60 touch-manipulation"
         >
           {saving || uploading ? "Gönderiliyor…" : "Yanıtla"}
         </button>

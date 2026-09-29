@@ -52,7 +52,9 @@ export const proxy = auth((request) => {
   }
 
   const isTeacherArea =
-    pathname.startsWith("/dashboard") || pathname.startsWith("/students");
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/students") ||
+    pathname.startsWith("/sorular");
 
   if (isTeacherArea && role !== "teacher") {
     if (role === "admin") {

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getDailyEntryData, type DailyEntryData } from "@/app/actions/quiz-actions";
 import { QuizEntryClient } from "@/components/student/quiz-entry-client";
 import { todayInIstanbul } from "@/lib/week-utils";
-import { NotificationBanner } from "@/components/quiz-entry/notification-banner";
+import { NotificationBanner } from "@/components/notifications/notification-banner";
 import { PanelError, PanelSkeleton } from "@/components/student/panel-ui";
 
 export function QuizPanel() {

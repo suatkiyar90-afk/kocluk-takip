@@ -1,15 +1,21 @@
 "use server";
 
 import { auth } from "@/auth";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   coachingFeedbacks,
+  dailyQuestionEntries,
+  qaThreads,
   teacherStudents,
   users,
   weeklyQuestionEntries,
 } from "@/db/schema";
-import { getCurrentWeekMonday, parseMonday } from "@/lib/week-utils";
+import {
+  getCurrentWeekMonday,
+  parseMonday,
+  todayInIstanbul,
+} from "@/lib/week-utils";
 import { sendPushNotification } from "@/lib/web-push-helper";
 import {
   ALL_SUBJECTS,
@@ -172,6 +178,137 @@ export async function getAssignedStudents(): Promise<
     });
 
     return { success: true, data };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: errorMessage(err),
+    };
+  }
+}
+
+export interface AttentionStudent {
+  studentId: string;
+  studentName: string;
+  studentNumber: string | null;
+  weekTotalQuestions: number;
+  weekNet: number;
+  lastEntryDate: string | null;
+  daysSinceEntry: number | null;
+  pendingQuestionCount: number;
+  oldestPendingWaitingHours: number | null;
+}
+
+export interface AttentionStaleItem {
+  studentId: string;
+  studentName: string;
+  daysSinceEntry: number | null;
+}
+
+export interface AttentionWaitingItem {
+  studentId: string;
+  studentName: string;
+  pendingCount: number;
+  oldestWaitingHours: number;
+}
+
+export interface AttentionListData {
+  students: AttentionStudent[];
+  stale: AttentionStaleItem[];
+  waiting: AttentionWaitingItem[];
+}
+
+const STALE_DAYS = 3;
+const WAITING_HOURS = 48;
+
+function daysBetweenIso(fromIso: string, toIso: string): number {
+  const from = Date.parse(`${fromIso}T00:00:00Z`);
+  const to = Date.parse(`${toIso}T00:00:00Z`);
+  if (Number.isNaN(from) || Number.isNaN(to)) return 0;
+  return Math.max(0, Math.floor((from - to) / 86_400_000));
+}
+
+export async function getAttentionList(): Promise<
+  TeacherActionResult<AttentionListData>
+> {
+  const ctx = await getTeacherId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  try {
+    const weekStart = getCurrentWeekMonday();
+    const today = todayInIstanbul();
+
+    const rows = await db
+      .select({
+        studentId: teacherStudents.studentId,
+        studentName: users.name,
+        studentNumber: users.studentNumber,
+        weekTotal: sql<number>`coalesce((select sum(w.correct + w.wrong + w.blank)::int from ${weeklyQuestionEntries} w where w.student_id = ${teacherStudents.studentId} and w.week_start = ${weekStart}), 0)`,
+        weekNet: sql<number>`coalesce((select sum(w.correct) - sum(w.wrong) * 0.25 from ${weeklyQuestionEntries} w where w.student_id = ${teacherStudents.studentId} and w.week_start = ${weekStart}), 0)`,
+        lastEntryDate: sql<string | null>`to_char(greatest((select max(d.date) from ${dailyQuestionEntries} d where d.student_id = ${teacherStudents.studentId}), (select max(w2.week_start) from ${weeklyQuestionEntries} w2 where w2.student_id = ${teacherStudents.studentId})), 'YYYY-MM-DD')`,
+        pendingCount: sql<number>`(select count(*)::int from ${qaThreads} q where q.student_id = ${teacherStudents.studentId} and q.status = 'bekliyor')`,
+        oldestPendingAt: sql<string | null>`(select to_char(min(q.created_at) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') from ${qaThreads} q where q.student_id = ${teacherStudents.studentId} and q.status = 'bekliyor')`,
+      })
+      .from(teacherStudents)
+      .innerJoin(users, eq(users.id, teacherStudents.studentId))
+      .where(eq(teacherStudents.teacherId, ctx.teacherId))
+      .orderBy(users.name);
+
+    const students: AttentionStudent[] = rows.map((row) => {
+      const lastEntryDate = row.lastEntryDate ?? null;
+      const pendingCount = Number(row.pendingCount) || 0;
+      const oldestPendingAt = row.oldestPendingAt
+        ? Date.parse(row.oldestPendingAt)
+        : NaN;
+      const waitingHours =
+        pendingCount > 0 && !Number.isNaN(oldestPendingAt)
+          ? Math.max(
+              1,
+              Math.floor((Date.now() - oldestPendingAt) / 3_600_000),
+            )
+          : null;
+
+      return {
+        studentId: row.studentId,
+        studentName: row.studentName || "İsimsiz öğrenci",
+        studentNumber: row.studentNumber ?? null,
+        weekTotalQuestions: Number(row.weekTotal) || 0,
+        weekNet: roundNet(Number(row.weekNet) || 0),
+        lastEntryDate,
+        daysSinceEntry:
+          lastEntryDate === null ? null : daysBetweenIso(today, lastEntryDate),
+        pendingQuestionCount: pendingCount,
+        oldestPendingWaitingHours: waitingHours,
+      };
+    });
+
+    const stale: AttentionStaleItem[] = students
+      .filter(
+        (s) =>
+          s.daysSinceEntry === null || s.daysSinceEntry >= STALE_DAYS,
+      )
+      .map((s) => ({
+        studentId: s.studentId,
+        studentName: s.studentName,
+        daysSinceEntry: s.daysSinceEntry,
+      }));
+
+    const waiting: AttentionWaitingItem[] = students
+      .filter(
+        (s) =>
+          s.pendingQuestionCount > 0 &&
+          (s.oldestPendingWaitingHours ?? 0) >= WAITING_HOURS,
+      )
+      .map((s) => ({
+        studentId: s.studentId,
+        studentName: s.studentName,
+        pendingCount: s.pendingQuestionCount,
+        oldestWaitingHours: s.oldestPendingWaitingHours ?? 0,
+      }));
+
+    return { success: true, data: { students, stale, waiting } };
   } catch (err) {
     return {
       success: false,

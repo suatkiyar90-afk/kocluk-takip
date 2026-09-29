@@ -20,8 +20,10 @@ function formatDate(iso: string): string {
 
 interface StudentDetailPageProps {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ week?: string }>;
+  searchParams?: Promise<{ week?: string; tab?: string }>;
 }
+
+const VALID_TABS = ["report", "targets", "exams", "curriculum", "qa", "stats"];
 
 export default async function StudentDetailPage({
   params,
@@ -30,6 +32,10 @@ export default async function StudentDetailPage({
   const { id } = await params;
   const resolvedParams = searchParams ? await searchParams : undefined;
   const weekStart = parseMonday(resolvedParams?.week);
+  const initialTab =
+    resolvedParams?.tab && VALID_TABS.includes(resolvedParams.tab)
+      ? resolvedParams.tab
+      : undefined;
 
   const result = await getStudentWeeklySummary(id, weekStart);
   const reportResult = await getWeeklyReportByStudent(id, weekStart);
@@ -59,16 +65,16 @@ export default async function StudentDetailPage({
   const { student, feedback } = result.data;
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-8">
-      <div className="mx-auto w-full max-w-md">
+    <main className="min-h-dvh bg-gray-50 px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-10">
+      <div className="mx-auto w-full max-w-md md:max-w-3xl xl:max-w-5xl">
         <Link
           href="/dashboard"
-          className="text-sm font-semibold text-indigo-600"
+          className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-indigo-600"
         >
           ← Öğrencilerim
         </Link>
 
-        <header className="mt-4 mb-6">
+        <header className="mb-4">
           <h1 className="text-xl font-bold text-gray-900">
             {student.name}
           </h1>
@@ -81,6 +87,7 @@ export default async function StudentDetailPage({
           weekStart={weekStart}
           studentId={student.id}
           initialComment={feedback?.comment}
+          initialTab={initialTab}
           reportResult={reportResult}
           examsResult={examsResult}
           targetsResult={targetsResult}

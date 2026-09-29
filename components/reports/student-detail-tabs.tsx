@@ -75,6 +75,7 @@ interface StudentDetailTabsProps {
   weekStart: string;
   studentId: string;
   initialComment: string | undefined;
+  initialTab?: string;
   reportResult: WeeklyReportResult;
   examsResult: MockExamsResult;
   targetsResult: WeeklyTargetActionResult<WeeklyTargetView[]>;
@@ -86,13 +87,18 @@ export function StudentDetailTabs({
   weekStart,
   studentId,
   initialComment,
+  initialTab,
   reportResult,
   examsResult,
   targetsResult,
   curriculumResult,
   qaResult,
 }: StudentDetailTabsProps) {
-  const [activeTab, setActiveTab] = useState<TabId>("report");
+  const [activeTab, setActiveTab] = useState<TabId>(
+    initialTab !== undefined && TABS.some((tab) => tab.id === initialTab)
+      ? (initialTab as TabId)
+      : "report",
+  );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   useEffect(() => {
@@ -134,7 +140,8 @@ export function StudentDetailTabs({
     <div>
       <div
         role="tablist"
-        className="mb-6 flex w-full flex-nowrap items-center justify-start space-x-2 overflow-x-auto rounded-2xl bg-gray-100 p-1 pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        aria-label="Öğrenci detay sekmeleri"
+        className="sticky top-14 z-30 -mx-4 mb-5 flex w-auto flex-nowrap items-center gap-2 overflow-x-auto border-b border-gray-200 bg-gray-50 px-4 py-2.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       >
         {TABS.map((tab) => (
           <button
@@ -143,10 +150,10 @@ export function StudentDetailTabs({
             role="tab"
             aria-selected={activeTab === tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-shrink-0 whitespace-nowrap rounded-xl px-4 py-2 text-xs font-semibold transition-colors touch-manipulation ${
+            className={`h-11 flex-shrink-0 rounded-full px-4 text-xs font-semibold transition touch-manipulation ${
               activeTab === tab.id
-                ? "bg-white text-indigo-700 shadow"
-                : "text-gray-500 hover:text-gray-700"
+                ? "bg-white text-indigo-700 shadow ring-1 ring-gray-200"
+                : "text-gray-500"
             }`}
           >
             {tab.label}
@@ -352,7 +359,7 @@ export function StudentDetailTabs({
                                 >
                                   {formatEntryDate(entry.date)}
                                 </span>
-                                <p className="min-w-0 text-sm font-semibold text-gray-900">
+                                <p className="min-w-0 text-sm font-semibold break-words text-gray-900">
                                   {entry.subjectName} · {entry.topicName}
                                 </p>
                                 <p className="ml-auto shrink-0 text-xs font-medium text-gray-500">
