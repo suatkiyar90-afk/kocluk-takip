@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/auth";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   coachingFeedbacks,
@@ -9,13 +9,17 @@ import {
   qaThreads,
   teacherStudents,
   users,
-  weeklyQuestionEntries,
 } from "@/db/schema";
 import {
   getCurrentWeekMonday,
   parseMonday,
   todayInIstanbul,
 } from "@/lib/week-utils";
+import {
+  aggregateWeekEntries,
+  weekEndOf,
+  type DailyEntryLike,
+} from "@/lib/week-entries";
 import { sendPushNotification } from "@/lib/web-push-helper";
 import {
   ALL_SUBJECTS,
@@ -144,36 +148,50 @@ export async function getAssignedStudents(): Promise<
 
     const studentIds = assignments.map((a) => a.studentId);
     const weekStart = getCurrentWeekMonday();
+    const weekEnd = weekEndOf(weekStart);
 
-    const entries =
+    interface WeekRow extends DailyEntryLike {
+      studentId: string;
+    }
+
+    const entries: WeekRow[] =
       studentIds.length > 0
         ? await db
-            .select()
-            .from(weeklyQuestionEntries)
+            .select({
+              studentId: dailyQuestionEntries.studentId,
+              date: dailyQuestionEntries.date,
+              correct: dailyQuestionEntries.correct,
+              wrong: dailyQuestionEntries.wrong,
+              blank: dailyQuestionEntries.blank,
+            })
+            .from(dailyQuestionEntries)
             .where(
               and(
-                inArray(weeklyQuestionEntries.studentId, studentIds),
-                eq(weeklyQuestionEntries.weekStart, weekStart),
+                inArray(dailyQuestionEntries.studentId, studentIds),
+                gte(dailyQuestionEntries.date, weekStart),
+                lte(dailyQuestionEntries.date, weekEnd),
               ),
             )
         : [];
 
-    const agg = new Map<string, { total: number; net: number }>();
+    const byStudent = new Map<string, DailyEntryLike[]>();
     for (const e of entries) {
-      const current = agg.get(e.studentId) ?? { total: 0, net: 0 };
-      current.total += e.correct + e.wrong + e.blank;
-      current.net += netScore(e.correct, e.wrong);
-      agg.set(e.studentId, current);
+      const list = byStudent.get(e.studentId) ?? [];
+      list.push(e);
+      byStudent.set(e.studentId, list);
     }
 
     const data: AssignedStudent[] = assignments.map((a) => {
-      const s = agg.get(a.studentId);
+      const totals = aggregateWeekEntries(
+        byStudent.get(a.studentId) ?? [],
+        weekStart,
+      );
       return {
         studentId: a.studentId,
         studentName: a.studentName || "İsimsiz öğrenci",
-        hasEntriesThisWeek: s !== undefined,
-        weekTotalQuestions: s?.total ?? 0,
-        weekNet: roundNet(s?.net ?? 0),
+        hasEntriesThisWeek: totals.hasEntries,
+        weekTotalQuestions: totals.total,
+        weekNet: roundNet(totals.net),
       };
     });
 
@@ -238,6 +256,7 @@ export async function getAttentionList(): Promise<
 
   try {
     const weekStart = getCurrentWeekMonday();
+    const weekEnd = weekEndOf(weekStart);
     const today = todayInIstanbul();
 
     const rows = await db
@@ -245,9 +264,6 @@ export async function getAttentionList(): Promise<
         studentId: teacherStudents.studentId,
         studentName: users.name,
         studentNumber: users.studentNumber,
-        weekTotal: sql<number>`coalesce((select sum(w.correct + w.wrong + w.blank)::int from ${weeklyQuestionEntries} w where w.student_id = ${teacherStudents.studentId} and w.week_start = ${weekStart}), 0)`,
-        weekNet: sql<number>`coalesce((select sum(w.correct) - sum(w.wrong) * 0.25 from ${weeklyQuestionEntries} w where w.student_id = ${teacherStudents.studentId} and w.week_start = ${weekStart}), 0)`,
-        lastEntryDate: sql<string | null>`to_char(greatest((select max(d.date) from ${dailyQuestionEntries} d where d.student_id = ${teacherStudents.studentId}), (select max(w2.week_start) from ${weeklyQuestionEntries} w2 where w2.student_id = ${teacherStudents.studentId})), 'YYYY-MM-DD')`,
         pendingCount: sql<number>`(select count(*)::int from ${qaThreads} q where q.student_id = ${teacherStudents.studentId} and q.status = 'bekliyor')`,
         oldestPendingAt: sql<string | null>`(select to_char(min(q.created_at) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') from ${qaThreads} q where q.student_id = ${teacherStudents.studentId} and q.status = 'bekliyor')`,
       })
@@ -256,8 +272,61 @@ export async function getAttentionList(): Promise<
       .where(eq(teacherStudents.teacherId, ctx.teacherId))
       .orderBy(users.name);
 
+    const studentIds = rows.map((row) => row.studentId);
+
+    interface WeekRow extends DailyEntryLike {
+      studentId: string;
+    }
+
+    let weekRows: WeekRow[] = [];
+    let lastEntryRows: { studentId: string; lastDate: string | null }[] = [];
+
+    if (studentIds.length > 0) {
+      [weekRows, lastEntryRows] = await Promise.all([
+        db
+          .select({
+            studentId: dailyQuestionEntries.studentId,
+            date: dailyQuestionEntries.date,
+            correct: dailyQuestionEntries.correct,
+            wrong: dailyQuestionEntries.wrong,
+            blank: dailyQuestionEntries.blank,
+          })
+          .from(dailyQuestionEntries)
+          .where(
+            and(
+              inArray(dailyQuestionEntries.studentId, studentIds),
+              gte(dailyQuestionEntries.date, weekStart),
+              lte(dailyQuestionEntries.date, weekEnd),
+            ),
+          ),
+        db
+          .select({
+            studentId: dailyQuestionEntries.studentId,
+            lastDate: sql<string | null>`to_char(max(${dailyQuestionEntries.date}), 'YYYY-MM-DD')`,
+          })
+          .from(dailyQuestionEntries)
+          .where(inArray(dailyQuestionEntries.studentId, studentIds))
+          .groupBy(dailyQuestionEntries.studentId),
+      ]);
+    }
+
+    const weekByStudent = new Map<string, DailyEntryLike[]>();
+    for (const row of weekRows) {
+      const list = weekByStudent.get(row.studentId) ?? [];
+      list.push(row);
+      weekByStudent.set(row.studentId, list);
+    }
+
+    const lastByStudent = new Map(
+      lastEntryRows.map((row) => [row.studentId, row.lastDate]),
+    );
+
     const students: AttentionStudent[] = rows.map((row) => {
-      const lastEntryDate = row.lastEntryDate ?? null;
+      const totals = aggregateWeekEntries(
+        weekByStudent.get(row.studentId) ?? [],
+        weekStart,
+      );
+      const lastEntryDate = lastByStudent.get(row.studentId) ?? null;
       const pendingCount = Number(row.pendingCount) || 0;
       const oldestPendingAt = row.oldestPendingAt
         ? Date.parse(row.oldestPendingAt)
@@ -274,8 +343,8 @@ export async function getAttentionList(): Promise<
         studentId: row.studentId,
         studentName: row.studentName || "İsimsiz öğrenci",
         studentNumber: row.studentNumber ?? null,
-        weekTotalQuestions: Number(row.weekTotal) || 0,
-        weekNet: roundNet(Number(row.weekNet) || 0),
+        weekTotalQuestions: totals.total,
+        weekNet: roundNet(totals.net),
         lastEntryDate,
         daysSinceEntry:
           lastEntryDate === null ? null : daysBetweenIso(today, lastEntryDate),
@@ -337,6 +406,7 @@ export async function getStudentWeeklySummary(
     }
 
     const weekStart = parseMonday(weekStartArg);
+    const weekEnd = weekEndOf(weekStart);
 
     const [profileRows, rows, feedbackRows] = await Promise.all([
       db
@@ -345,13 +415,24 @@ export async function getStudentWeeklySummary(
         .where(eq(users.id, studentId))
         .limit(1),
       db
-        .select()
-        .from(weeklyQuestionEntries)
+        .select({
+          examType: dailyQuestionEntries.examType,
+          subjectId: dailyQuestionEntries.subjectId,
+          correct: sql<number>`sum(${dailyQuestionEntries.correct})::int`,
+          wrong: sql<number>`sum(${dailyQuestionEntries.wrong})::int`,
+          blank: sql<number>`sum(${dailyQuestionEntries.blank})::int`,
+        })
+        .from(dailyQuestionEntries)
         .where(
           and(
-            eq(weeklyQuestionEntries.studentId, studentId),
-            eq(weeklyQuestionEntries.weekStart, weekStart),
+            eq(dailyQuestionEntries.studentId, studentId),
+            gte(dailyQuestionEntries.date, weekStart),
+            lte(dailyQuestionEntries.date, weekEnd),
           ),
+        )
+        .groupBy(
+          dailyQuestionEntries.examType,
+          dailyQuestionEntries.subjectId,
         ),
       db
         .select({
