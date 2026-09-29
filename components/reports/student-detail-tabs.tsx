@@ -141,7 +141,7 @@ export function StudentDetailTabs({
       <div
         role="tablist"
         aria-label="Öğrenci detay sekmeleri"
-        className="sticky top-14 z-30 -mx-4 mb-5 flex w-auto flex-nowrap items-center gap-2 overflow-x-auto border-b border-gray-200 bg-gray-50 px-4 py-2.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        className="sticky top-14 z-30 -mx-4 mb-5 flex w-auto flex-nowrap items-center gap-2 overflow-x-auto border-b border-gray-200 bg-gray-50 px-4 py-2.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden print:hidden"
       >
         {TABS.map((tab) => (
           <button

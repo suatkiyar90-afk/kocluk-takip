@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useReactToPrint } from "react-to-print";
+import { Printer } from "lucide-react";
 import {
   getStudentStatistics,
   getStudentTrends,
@@ -9,6 +11,7 @@ import {
   type SubjectStatistics,
 } from "@/app/actions/quiz-actions";
 import { ChartSkeleton } from "@/components/charts/chart-ui";
+import { SchoolLogo } from "@/components/brand/school-logo";
 
 const StatisticsCharts = dynamic(
   () => import("@/components/charts/statistics-charts"),
@@ -33,6 +36,24 @@ export function StudentStatisticsTab({
   const [trends, setTrends] = useState<StudentTrendsData | null>(null);
   const [trendsError, setTrendsError] = useState("");
   const loadedRef = useRef(false);
+  const printRef = useRef<HTMLDivElement>(null);
+  const [printDate, setPrintDate] = useState("");
+
+  useEffect(() => {
+    setPrintDate(
+      new Intl.DateTimeFormat("tr-TR", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }).format(new Date()),
+    );
+  }, []);
+
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: "Demirci-AIHL-Ogrenci-Haftalik-Gelisim-Raporu",
+    pageStyle: "@page { size: A4; margin: 12mm; }",
+  });
 
   useEffect(() => {
     if (!active || loadedRef.current) return;
@@ -78,7 +99,36 @@ export function StudentStatisticsTab({
     : null;
 
   return (
-    <div className="space-y-4">
+    <div ref={printRef} className="space-y-4 print-exact-colors">
+      <div className="hidden print:block">
+        <div className="flex items-center gap-4 border-b-2 border-gray-300 pb-3">
+          <SchoolLogo className="hidden h-16 w-16 shrink-0 object-contain print:block" />
+          <div className="min-w-0">
+            <h1 className="text-lg font-bold text-gray-900">
+              Demirci AİHL - Öğrenci Haftalık Gelişim Raporu
+            </h1>
+            <p className="mt-0.5 text-sm text-gray-600">
+              Ders bazında çözülen soru istatistikleri ve haftalık performans
+              grafikleri
+            </p>
+          </div>
+          <p className="ml-auto shrink-0 text-sm font-semibold text-gray-600">
+            {printDate}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex justify-end print:hidden">
+        <button
+          type="button"
+          onClick={handlePrint}
+          className="flex h-11 items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 text-xs font-bold text-indigo-700 shadow-sm transition active:scale-[0.98] touch-manipulation dark:border-indigo-500 dark:bg-indigo-500/20 dark:text-indigo-300"
+        >
+          <Printer aria-hidden="true" className="h-4 w-4" />
+          PDF Olarak Kaydet / Yazdır
+        </button>
+      </div>
+
       <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
         <div className="border-b border-gray-100 px-4 py-3.5">
           <h2 className="text-sm font-bold text-gray-900">

@@ -82,7 +82,7 @@ export function AnnouncementFab({ studentCount }: { studentCount: number }) {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Duyuru Gönder"
-        className="fixed right-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-xl shadow-indigo-600/30 transition active:scale-[0.95] touch-manipulation md:bottom-6"
+        className="fixed right-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-xl shadow-indigo-600/30 transition active:scale-[0.95] touch-manipulation md:bottom-6 print:hidden"
       >
         <Megaphone aria-hidden="true" className="h-6 w-6" />
       </button>

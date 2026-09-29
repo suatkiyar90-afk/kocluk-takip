@@ -26,7 +26,7 @@ export function TeacherBottomNav({ pendingCount }: TeacherBottomNavProps) {
   return (
     <nav
       aria-label="Panel gezinmesi"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(0,0,0,0.04)] backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(0,0,0,0.04)] backdrop-blur md:hidden print:hidden"
     >
       <ul className="grid grid-cols-2">
         {ITEMS.map((item) => {

@@ -3,6 +3,7 @@ import { SchoolWatermark } from "@/components/brand/school-logo";
 import { pwaMetadata, pwaViewport } from "@/lib/pwa-metadata";
 import { SwRegister } from "@/components/pwa/sw-register";
 import { AppleWebAppMeta } from "@/components/pwa/apple-web-app-meta";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata = {
   ...pwaMetadata,
@@ -17,12 +18,14 @@ export default function LoginLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="tr">
+    <html lang="tr" suppressHydrationWarning>
       <body>
-        <AppleWebAppMeta />
-        <SwRegister />
-        <SchoolWatermark />
-        {children}
+        <ThemeProvider>
+          <AppleWebAppMeta />
+          <SwRegister />
+          <SchoolWatermark />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

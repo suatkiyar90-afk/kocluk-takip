@@ -199,7 +199,7 @@ export function StudentPanel({ studentId }: StudentPanelProps) {
         <nav
           aria-label="Panel sekmeleri"
           role="tablist"
-          className="mb-6 hidden w-full flex-nowrap items-center justify-start space-x-2 overflow-x-auto rounded-2xl border border-gray-200 bg-white p-1 pb-2 shadow-sm [scrollbar-width:none] [-ms-overflow-style:none] md:flex [&::-webkit-scrollbar]:hidden"
+          className="mb-6 hidden w-full flex-nowrap items-center justify-start space-x-2 overflow-x-auto rounded-2xl border border-gray-200 bg-white p-1 pb-2 shadow-sm [scrollbar-width:none] [-ms-overflow-style:none] md:flex [&::-webkit-scrollbar]:hidden print:hidden"
         >
           {TABS.map((item, index) => {
             const active = tab === item.id;
@@ -267,7 +267,7 @@ export function StudentPanel({ studentId }: StudentPanelProps) {
       <nav
         aria-label="Panel sekmeleri"
         role="tablist"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(0,0,0,0.04)] backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(0,0,0,0.04)] backdrop-blur md:hidden print:hidden"
       >
         <ul className="grid grid-cols-6">
           {TABS.map((item, index) => {

@@ -1,3 +1,170 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+}
+
+.dark body,
+.dark {
+  background-color: #0f172a;
+}
+
+.dark .bg-white {
+  background-color: #1e293b;
+}
+
+.dark .bg-white\/90,
+.dark .bg-white\/95 {
+  background-color: rgba(15, 23, 42, 0.92);
+}
+
+.dark .bg-gray-50 {
+  background-color: #0f172a;
+}
+
+.dark .bg-gray-50\/60,
+.dark .bg-gray-50\/70 {
+  background-color: rgba(30, 41, 59, 0.7);
+}
+
+.dark .bg-gray-100 {
+  background-color: #1e293b;
+}
+
+.dark .bg-gray-200 {
+  background-color: #334155;
+}
+
+.dark .border-gray-100,
+.dark .border-gray-200 {
+  border-color: #334155;
+}
+
+.dark .border-t {
+  border-top-color: #334155;
+}
+
+.dark .text-gray-900 {
+  color: #f1f5f9;
+}
+
+.dark .text-gray-800,
+.dark .text-gray-700 {
+  color: #cbd5e1;
+}
+
+.dark .text-gray-600 {
+  color: #94a3b8;
+}
+
+.dark .text-gray-500 {
+  color: #94a3b8;
+}
+
+.dark .text-gray-400 {
+  color: #64748b;
+}
+
+.dark .bg-indigo-50,
+.dark .bg-indigo-50\/60 {
+  background-color: rgba(49, 46, 129, 0.55);
+}
+
+.dark .text-indigo-700 {
+  color: #a5b4fc;
+}
+
+.dark .text-indigo-900 {
+  color: #c7d2fe;
+}
+
+.dark .bg-indigo-600,
+.dark .bg-indigo-600\/90 {
+  background-color: #4f46e5;
+}
+
+.dark .border-indigo-200,
+.dark .border-indigo-300 {
+  border-color: #6366f1;
+}
+
+.dark .bg-red-50 {
+  background-color: rgba(127, 29, 29, 0.45);
+}
+
+.dark .border-red-200 {
+  border-color: #7f1d1d;
+}
+
+.dark .text-red-600 {
+  color: #fca5a5;
+}
+
+.dark .bg-orange-100 {
+  background-color: rgba(124, 45, 18, 0.5);
+}
+
+.dark .text-orange-700 {
+  color: #fdba74;
+}
+
+.dark .bg-amber-50 {
+  background-color: rgba(120, 53, 15, 0.5);
+}
+
+.dark .text-amber-800 {
+  color: #fcd34d;
+}
+
+.dark .bg-green-50,
+.dark .bg-emerald-50 {
+  background-color: rgba(6, 78, 59, 0.5);
+}
+
+.dark .text-green-700,
+.dark .text-emerald-700 {
+  color: #6ee7b7;
+}
+
+.dark .bg-slate-100 {
+  background-color: #1e293b;
+}
+
+.dark .bg-black\/40,
+.dark .bg-black\/45,
+.dark .bg-black\/50 {
+  background-color: rgba(0, 0, 0, 0.65);
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b;
+}
+
+@layer utilities {
+  .print-exact-colors {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
+
+@media print {
+  body {
+    background: #ffffff !important;
+  }
+}

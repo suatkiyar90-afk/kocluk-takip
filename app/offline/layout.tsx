@@ -1,6 +1,7 @@
 import "../globals.css";
 import { pwaMetadata, pwaViewport } from "@/lib/pwa-metadata";
 import { AppleWebAppMeta } from "@/components/pwa/apple-web-app-meta";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata = {
   ...pwaMetadata,
@@ -16,10 +17,12 @@ export default function OfflineLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="tr">
+    <html lang="tr" suppressHydrationWarning>
       <body className="min-h-dvh bg-gray-50">
-        <AppleWebAppMeta />
-        {children}
+        <ThemeProvider>
+          <AppleWebAppMeta />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -8,6 +8,8 @@ import { AppleWebAppMeta } from "@/components/pwa/apple-web-app-meta";
 import { TeacherBottomNav } from "@/components/teacher/teacher-bottom-nav";
 import { NotificationStatusIcon } from "@/components/teacher/notification-status-icon";
 import { getPendingQuestionCount } from "@/app/actions/qa-actions";
+import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export const metadata = {
   ...pwaMetadata,
@@ -24,24 +26,27 @@ export default async function TeacherLayout({
   const pendingCount = await getPendingQuestionCount();
 
   return (
-    <html lang="tr">
+    <html lang="tr" suppressHydrationWarning>
       <body className="min-h-dvh bg-gray-50">
-        <AppleWebAppMeta />
-        <SwRegister />
-        <SchoolWatermark />
-        <div className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
-          <div className="mx-auto flex h-14 w-full max-w-md items-center justify-between gap-3 px-4 md:max-w-3xl xl:max-w-5xl">
-            <span className="text-base font-extrabold tracking-tight text-gray-900">
-              Koç Paneli
-            </span>
-            <div className="flex items-center gap-2">
-              <NotificationStatusIcon />
-              <LogoutButton className="flex h-11 items-center rounded-xl border border-red-200 bg-red-50 px-4 text-xs font-bold text-red-600 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation" />
+        <ThemeProvider>
+          <AppleWebAppMeta />
+          <SwRegister />
+          <SchoolWatermark />
+          <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur print:hidden">
+            <div className="mx-auto flex h-14 w-full max-w-md items-center justify-between gap-3 px-4 md:max-w-3xl xl:max-w-5xl">
+              <span className="text-base font-extrabold tracking-tight text-gray-900">
+                Koç Paneli
+              </span>
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+                <NotificationStatusIcon />
+                <LogoutButton className="flex h-11 items-center rounded-xl border border-red-200 bg-red-50 px-4 text-xs font-bold text-red-600 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation" />
+              </div>
             </div>
-          </div>
-        </div>
-        {children}
-        <TeacherBottomNav pendingCount={pendingCount} />
+          </header>
+          {children}
+          <TeacherBottomNav pendingCount={pendingCount} />
+        </ThemeProvider>
       </body>
     </html>
   );
