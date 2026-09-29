@@ -17,9 +17,14 @@ export type ChangePasswordResult =
     };
 
 const changePasswordSchema = z.object({
+  currentPassword: z
+    .string()
+    .max(200, "Mevcut şifre çok uzun.")
+    .optional()
+    .default(""),
   newPassword: z
     .string()
-    .min(6, "Yeni şifre en az 6 karakter olmalı.")
+    .min(8, "Yeni şifre en az 8 karakter olmalı.")
     .max(200, "Şifre çok uzun."),
   confirmPassword: z.string().min(1, "Şifre tekrarı boş olamaz."),
 });
@@ -28,11 +33,11 @@ export async function changeMyPassword(
   input: unknown,
 ): Promise<ChangePasswordResult> {
   const session = await auth();
-  if (!session?.user?.id || session.user.role !== "student") {
+  if (!session?.user?.id) {
     return {
       success: false,
       status: "UNAUTHORIZED",
-      message: "Bu işlem için öğrenci oturumu gerekli.",
+      message: "Bu işlem için oturum açmanız gerekiyor.",
     };
   }
 
@@ -45,7 +50,7 @@ export async function changeMyPassword(
     };
   }
 
-  const { newPassword, confirmPassword } = parsed.data;
+  const { currentPassword, newPassword, confirmPassword } = parsed.data;
   if (newPassword !== confirmPassword) {
     return {
       success: false,
@@ -55,6 +60,61 @@ export async function changeMyPassword(
   }
 
   try {
+    const rows = await db
+      .select({
+        passwordHash: users.passwordHash,
+        mustChangePassword: users.mustChangePassword,
+      })
+      .from(users)
+      .where(eq(users.id, session.user.id))
+      .limit(1);
+    const user = rows[0];
+    if (!user) {
+      return {
+        success: false,
+        status: "UNAUTHORIZED",
+        message: "Kullanıcı bulunamadı.",
+      };
+    }
+
+    const forced = user.mustChangePassword === true;
+
+    if (!forced) {
+      if (!currentPassword) {
+        return {
+          success: false,
+          status: "VALIDATION_FAILED",
+          message: "Mevcut şifrenizi girin.",
+        };
+      }
+      if (!user.passwordHash) {
+        return {
+          success: false,
+          status: "VALIDATION_FAILED",
+          message: "Mevcut şifrenizi doğrulayamadık.",
+        };
+      }
+      const currentOk = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!currentOk) {
+        return {
+          success: false,
+          status: "VALIDATION_FAILED",
+          message: "Mevcut şifre hatalı.",
+        };
+      }
+    }
+
+    if (
+      user.passwordHash &&
+      (await bcrypt.compare(newPassword, user.passwordHash))
+    ) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message: "Yeni şifre mevcut şifreyle aynı olamaz.",
+      };
+    }
+
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await db
       .update(users)
@@ -66,8 +126,7 @@ export async function changeMyPassword(
     return {
       success: false,
       status: "DATABASE_ERROR",
-      message:
-        actionErrorMessage(err),
+      message: actionErrorMessage(err),
     };
   }
 }

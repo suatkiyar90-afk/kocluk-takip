@@ -20,8 +20,8 @@ export function ForceChangePasswordForm() {
     e.preventDefault();
     setError(null);
 
-    if (newPassword.length < 6) {
-      setError("Yeni şifre en az 6 karakter olmalı.");
+    if (newPassword.length < 8) {
+      setError("Yeni şifre en az 8 karakter olmalı.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -58,7 +58,7 @@ export function ForceChangePasswordForm() {
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           className={inputClass}
-          placeholder="En az 6 karakter"
+          placeholder="En az 8 karakter"
           autoComplete="new-password"
           autoFocus
         />
@@ -87,7 +87,7 @@ export function ForceChangePasswordForm() {
 
       <button
         type="submit"
-        disabled={loading || newPassword.length < 6 || confirmPassword.length < 1}
+          disabled={loading || newPassword.length < 8 || confirmPassword.length < 1}
         className="h-12 w-full rounded-xl bg-indigo-600 text-base font-bold text-white shadow-lg shadow-indigo-600/25 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation"
       >
         {loading ? "Kaydediliyor…" : "Şifremi Değiştir"}

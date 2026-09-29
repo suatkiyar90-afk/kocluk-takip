@@ -5,6 +5,13 @@ import { eq, or } from "drizzle-orm";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db } from "@/db";
 import { accounts, sessions, users, verificationTokens } from "@/db/schema";
+import {
+  clearLoginAttempts,
+  getClientIp,
+  isLoginRateLimited,
+  normalizeLoginIdentifier,
+  recordFailedLogin,
+} from "@/lib/login-rate-limit";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: DrizzleAdapter(db, {
@@ -24,13 +31,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         username: { label: "Kullanıcı Adı (e-posta)", type: "text" },
         password: { label: "Şifre", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const username = credentials?.username;
         const password = credentials?.password;
 
         if (typeof username !== "string" || typeof password !== "string") {
           return null;
         }
+
+        const identifier = normalizeLoginIdentifier(username);
+        if (await isLoginRateLimited(identifier)) {
+          return null;
+        }
+
+        const ip = getClientIp(request);
 
         const rows = await db
           .select()
@@ -40,13 +54,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = rows[0];
 
         if (!user?.passwordHash || !user.email) {
+          await recordFailedLogin(identifier, ip);
           return null;
         }
 
         const valid = await bcrypt.compare(password, user.passwordHash);
         if (!valid) {
+          await recordFailedLogin(identifier, ip);
           return null;
         }
+
+        await clearLoginAttempts(identifier);
 
         return {
           id: user.id,
@@ -64,7 +82,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id;
         token.role = user.role;
         token.mustChangePassword = user.mustChangePassword;
-      } else if (token.id && token.role === "student") {
+      } else if (token.id) {
         const rows = await db
           .select({ flag: users.mustChangePassword })
           .from(users)

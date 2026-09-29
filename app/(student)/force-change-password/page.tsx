@@ -13,9 +13,6 @@ export default async function ForceChangePasswordPage() {
   if (!session?.user?.id) {
     redirect("/login");
   }
-  if (session.user.role !== "student") {
-    redirect(session.user.role === "admin" ? "/admin" : "/dashboard");
-  }
   if (session.user.mustChangePassword !== true) {
     redirect("/panel");
   }

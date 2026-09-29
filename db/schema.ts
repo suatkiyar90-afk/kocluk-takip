@@ -65,6 +65,23 @@ export const users = pgTable("users", {
     .notNull(),
 });
 
+export const loginAttempts = pgTable(
+  "login_attempts",
+  {
+    identifier: text("identifier").notNull(),
+    ip: text("ip"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    identifierCreatedIdx: index("login_attempts_identifier_created_idx").on(
+      t.identifier,
+      t.createdAt,
+    ),
+  }),
+);
+
 export const mockExams = pgTable(
   "mock_exams",
   {

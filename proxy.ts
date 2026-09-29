@@ -33,7 +33,7 @@ export const proxy = auth((request) => {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (role === "student" && session.user.mustChangePassword === true) {
+  if (session.user.mustChangePassword === true) {
     if (pathname === FORCE_CHANGE_PATH) {
       return NextResponse.next();
     }

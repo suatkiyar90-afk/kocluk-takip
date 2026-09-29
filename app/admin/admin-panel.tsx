@@ -7,16 +7,18 @@ import {
   adminAssignTeacher,
   adminCreateUser,
   adminListUsers,
+  adminResetUserPassword,
   type AdminStudent,
   type AdminTeacher,
 } from "@/app/actions/admin-actions";
 
-type Tab = "teacher" | "student" | "assign";
+type Tab = "teacher" | "student" | "assign" | "reset";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "teacher", label: "Öğretmen Ekle" },
   { id: "student", label: "Öğrenci Ekle" },
   { id: "assign", label: "Koç Atama" },
+  { id: "reset", label: "Şifre Sıfırla" },
 ];
 
 const inputClass =
@@ -68,7 +70,7 @@ export function AdminPanel({
         </div>
       </header>
 
-      <nav className="mb-6 grid grid-cols-3 gap-1 rounded-2xl border border-gray-200 bg-white p-1 shadow-sm">
+      <nav className="mb-6 grid grid-cols-2 gap-1 rounded-2xl border border-gray-200 bg-white p-1 shadow-sm sm:grid-cols-4">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -85,13 +87,12 @@ export function AdminPanel({
         ))}
       </nav>
 
-      {tab !== "assign" ? (
-        <CreateUserForm
-          role={tab}
-          onCreated={refreshLists}
-        />
-      ) : (
+      {tab === "reset" ? (
+        <ResetPasswordList teachers={teachers} students={students} />
+      ) : tab === "assign" ? (
         <AssignForm teachers={teachers} students={students} />
+      ) : (
+        <CreateUserForm role={tab} onCreated={refreshLists} />
       )}
     </div>
   );
@@ -348,5 +349,141 @@ function AssignForm({
         </button>
       </div>
     </form>
+  );
+}
+
+function ResetPasswordList({
+  teachers,
+  students,
+}: {
+  teachers: AdminTeacher[];
+  students: AdminStudent[];
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<{
+    name: string;
+    password: string;
+  } | null>(null);
+
+  const entries = [
+    ...teachers.map((t) => ({
+      id: t.id,
+      name: t.name,
+      subtitle: t.email ?? "E-posta yok",
+      roleLabel: "Öğretmen",
+    })),
+    ...students.map((s) => ({
+      id: s.id,
+      name: s.name,
+      subtitle: `${s.email ?? "E-posta yok"} · No: ${s.studentNumber ?? "-"}`,
+      roleLabel: "Öğrenci",
+    })),
+  ];
+
+  async function handleReset(userId: string) {
+    setBusyId(userId);
+    setError(null);
+    setResetResult(null);
+    try {
+      const result = await adminResetUserPassword({ userId });
+      if (result.success === true) {
+        setResetResult({
+          name: result.data.name,
+          password: result.data.password,
+        });
+        toast.success(result.message);
+      } else {
+        setError(result.message);
+      }
+    } catch {
+      setError("Bilinmeyen bir hata oluştu.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleCopy() {
+    if (!resetResult) return;
+    try {
+      await navigator.clipboard.writeText(resetResult.password);
+      toast.success("Şifre panoya kopyalandı.");
+    } catch {
+      toast.error("Kopyalanamadı. Şifreyi elle kopyalayın.");
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {resetResult ? (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
+          <p className="text-sm font-bold text-amber-900">
+            {resetResult.name} için geçici şifre
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="min-w-0 flex-1 break-all rounded-xl border border-amber-200 bg-white px-3 py-2 font-mono text-sm font-bold text-gray-900 select-all">
+              {resetResult.password}
+            </code>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="h-10 shrink-0 rounded-xl bg-amber-600 px-3.5 text-xs font-bold text-white transition active:scale-[0.98] touch-manipulation"
+            >
+              Kopyala
+            </button>
+          </div>
+          <p className="mt-2 text-xs font-medium text-amber-800">
+            Bu şifre yalnızca bir kez gösterilir. Kullanıcı ilk girişte
+            şifresini değiştirmeye yönlendirilir.
+          </p>
+        </div>
+      ) : null}
+
+      {error ? (
+        <p className="rounded-xl bg-red-50 px-3 py-2.5 text-sm font-medium text-red-600">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-gray-900">Şifre Sıfırla</h2>
+        <p className="mt-0.5 text-xs text-gray-500">
+          Seçili kullanıcı için rastgele şifre üretilir ve yalnızca bir kez
+          gösterilir.
+        </p>
+
+        {entries.length > 0 ? (
+          <ul className="mt-4 space-y-2">
+            {entries.map((u) => (
+              <li
+                key={u.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-gray-900">
+                    {u.name}
+                  </p>
+                  <p className="truncate text-xs text-gray-500">
+                    {u.subtitle} · {u.roleLabel}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleReset(u.id)}
+                  disabled={busyId !== null}
+                  className="h-10 shrink-0 rounded-xl border border-red-200 bg-white px-3.5 text-xs font-bold text-red-600 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation"
+                >
+                  {busyId === u.id ? "Sıfırlanıyor…" : "Şifreyi Sıfırla"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-4 rounded-xl bg-amber-50 px-3 py-2.5 text-sm font-medium text-amber-700">
+            Önce kullanıcı ekleyin.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }

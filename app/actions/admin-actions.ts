@@ -1,6 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
+import { randomInt } from "crypto";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { and, eq, inArray, or } from "drizzle-orm";
@@ -411,6 +412,89 @@ export async function adminAssignTeacher(
       success: true,
       data: { assigned: true },
       message: "Öğrenci öğretmene atandı.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message:
+        actionErrorMessage(err),
+    };
+  }
+}
+
+const PASSWORD_UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const PASSWORD_LOWER = "abcdefghijkmnopqrstuvwxyz";
+const PASSWORD_DIGITS = "23456789";
+
+function generateTemporaryPassword(): string {
+  const pick = (set: string) => set[randomInt(set.length)];
+  const chars: string[] = [];
+  for (let i = 0; i < 4; i++) chars.push(pick(PASSWORD_UPPER));
+  for (let i = 0; i < 4; i++) chars.push(pick(PASSWORD_LOWER));
+  for (let i = 0; i < 4; i++) chars.push(pick(PASSWORD_DIGITS));
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    const tmp = chars[i];
+    chars[i] = chars[j];
+    chars[j] = tmp;
+  }
+  return chars.join("");
+}
+
+const resetPasswordSchema = z.object({
+  userId: z.string().uuid("Geçerli bir kullanıcı seçin."),
+});
+
+export interface AdminResetPasswordData {
+  userId: string;
+  name: string;
+  password: string;
+}
+
+export async function adminResetUserPassword(
+  input: unknown,
+): Promise<AdminActionResult<AdminResetPasswordData>> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  const parsed = resetPasswordSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((i) => i.message).join(", "),
+    };
+  }
+
+  try {
+    const rows = await db
+      .select({ id: users.id, name: users.name, role: users.role })
+      .from(users)
+      .where(eq(users.id, parsed.data.userId))
+      .limit(1);
+    const target = rows[0];
+    if (!target || (target.role !== "teacher" && target.role !== "student")) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message: "Sıfırlanacak kullanıcı bulunamadı.",
+      };
+    }
+
+    const password = generateTemporaryPassword();
+    const passwordHash = await bcrypt.hash(password, 10);
+    await db
+      .update(users)
+      .set({ passwordHash, mustChangePassword: true })
+      .where(eq(users.id, target.id));
+
+    return {
+      success: true,
+      data: { userId: target.id, name: target.name, password },
+      message: `${target.name} için yeni şifre oluşturuldu.`,
     };
   } catch (err) {
     return {
