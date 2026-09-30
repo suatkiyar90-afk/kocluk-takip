@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { StudentPanel } from "@/components/student/student-panel";
 
 export const metadata = {
-  title: "Öğrenci Paneli | Koçluk Takip",
+  title: "Öğrenci Paneli | Akademik Takip",
 };
 
 export default async function PanelPage() {

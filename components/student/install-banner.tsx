@@ -73,7 +73,7 @@ export function InstallBanner() {
       <div className="min-w-0 flex-1">
         <p className="text-xs font-bold text-indigo-900">Ana ekrana ekle</p>
         <p className="text-[11px] leading-snug text-indigo-700">
-          Koçluk Takip’i uygulama gibi aç.
+          Akademik Takip’i uygulama gibi aç.
         </p>
       </div>
       <button

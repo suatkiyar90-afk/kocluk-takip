@@ -3,7 +3,7 @@ import { Toaster } from "sonner";
 import { BulkStudentsForm } from "@/components/admin/bulk-students-form";
 
 export const metadata = {
-  title: "Toplu Öğrenci Ekle | Koçluk Takip",
+  title: "Toplu Öğrenci Ekle | Akademik Takip",
 };
 
 export default function AdminBulkStudentsPage() {

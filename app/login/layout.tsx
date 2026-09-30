@@ -7,7 +7,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata = {
   ...pwaMetadata,
-  title: "Giriş Yap | Koçluk Takip",
+  title: "Giriş Yap | Akademik Takip",
 };
 
 export const viewport = pwaViewport;

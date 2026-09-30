@@ -123,7 +123,7 @@ export function WeeklyTargetsPanel() {
       <header className="mb-4">
         <h1 className="text-xl font-bold text-gray-900">Haftalık Hedeflerim</h1>
         <p className="mt-1 text-sm text-gray-500">
-          {formatRange(weekStart)} · Koçunuzun belirlediği hedefler ve
+          {formatRange(weekStart)} · Danışman Öğretmeninizin belirlediği hedefler ve
           ilerlemeniz.
         </p>
       </header>
@@ -194,7 +194,7 @@ export function WeeklyTargetsPanel() {
             </button>
 
             <p className="mt-2 text-center text-[11px] font-medium text-gray-400">
-              Çizelgeyi inceleyip onayladığında koç öğretmenin görebilir.
+              Çizelgeyi inceleyip onayladığında danışman öğretmenin görebilir.
             </p>
           </section>
         ) : null}
@@ -205,7 +205,7 @@ export function WeeklyTargetsPanel() {
               Dönüt
             </span>
             <h2 className="text-sm font-bold text-blue-900">
-              Koçun Bu Haftaki Notu
+              Danışman Öğretmeninin Bu Haftaki Notu
             </h2>
           </div>
           {feedbackResult === null ? (
@@ -216,7 +216,7 @@ export function WeeklyTargetsPanel() {
             </p>
           ) : (
             <p className="mt-2.5 text-sm italic text-gray-400">
-              Koç öğretmeniniz bu hafta için henüz bir değerlendirme notu
+              Danışman öğretmeniniz bu hafta için henüz bir değerlendirme notu
               eklemedi.
             </p>
           )}
@@ -327,7 +327,7 @@ export function WeeklyTargetsPanel() {
         ) : (
           <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm font-medium text-gray-500 shadow-sm">
             {formatRange(weekStart)} için henüz bir hedef belirlenmemiş.
-            Koç öğretmeniniz hedef girdiğinde burada göreceksiniz.
+            Danışman öğretmeniniz hedef girdiğinde burada göreceksiniz.
           </div>
         )}
       </div>

@@ -13,7 +13,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 export const metadata = {
   ...pwaMetadata,
-  title: "Öğretmen | Koçluk Takip",
+  title: "Öğretmen | Akademik Takip",
 };
 
 export const viewport = pwaViewport;
@@ -35,7 +35,7 @@ export default async function TeacherLayout({
           <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur print:hidden">
             <div className="mx-auto flex h-14 w-full max-w-md items-center justify-between gap-3 px-4 md:max-w-3xl xl:max-w-5xl">
               <span className="text-base font-extrabold tracking-tight text-gray-900">
-                Koç Paneli
+                Danışman Öğretmen Paneli
               </span>
               <div className="flex items-center gap-2">
                 <ThemeToggle />

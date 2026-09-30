@@ -16,7 +16,7 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("push", (event) => {
-  let payload = { title: "Koçluk Takip", body: "", url: "/quiz-entry" };
+  let payload = { title: "Akademik Takip", body: "", url: "/quiz-entry" };
 
   if (event.data) {
     try {
@@ -27,7 +27,7 @@ self.addEventListener("push", (event) => {
   }
 
   event.waitUntil(
-    self.registration.showNotification(payload.title || "Koçluk Takip", {
+    self.registration.showNotification(payload.title || "Akademik Takip", {
       body: payload.body || "",
       vibrate: [100, 50, 100],
       data: { url: payload.url || "/quiz-entry" },

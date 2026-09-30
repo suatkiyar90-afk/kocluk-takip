@@ -5,7 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata = {
   ...pwaMetadata,
-  title: "Bağlantı Yok | Koçluk Takip",
+  title: "Bağlantı Yok | Akademik Takip",
   robots: { index: false },
 };
 

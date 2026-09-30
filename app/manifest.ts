@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Koçluk Takip",
-    short_name: "Koçluk",
-    description: "Günlük soru girişi, hedef takibi ve koçluk uygulaması",
+    name: "Akademik Takip",
+    short_name: "Akademik Takip",
+    description: "Günlük soru girişi, hedef takibi ve danışmanlık uygulaması",
     lang: "tr",
     start_url: "/",
     display: "standalone",

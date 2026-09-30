@@ -276,7 +276,7 @@ export async function saveWeeklyTarget(
     await sendPushNotification(
       studentId,
       "Yeni Haftalık Dönüt",
-      "Koç öğretmenin bu hafta için sana yeni hedefler ve değerlendirmeler yazdı.",
+      "Danışman öğretmenin bu hafta için sana yeni hedefler ve değerlendirmeler yazdı.",
       "/weekly-targets",
     );
 

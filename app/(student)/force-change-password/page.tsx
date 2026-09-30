@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { ForceChangePasswordForm } from "./force-change-password-form";
 
 export const metadata = {
-  title: "Şifre Değiştir | Koçluk Takip",
+  title: "Şifre Değiştir | Akademik Takip",
 };
 
 export default async function ForceChangePasswordPage() {

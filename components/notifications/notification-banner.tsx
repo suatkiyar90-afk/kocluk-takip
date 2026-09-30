@@ -23,7 +23,7 @@ export interface NotificationBannerProps {
 
 export function NotificationBanner({
   title = "Gün sonu hatırlatmalarını kaçırma",
-  description = "Bildirimleri aç; günlük giriş hatırlatmaları ve koçunun dönütleri doğrudan cihazına gelsin.",
+  description = "Bildirimleri aç; günlük giriş hatırlatmaları ve danışman öğretmeninin dönütleri doğrudan cihazına gelsin.",
   enableLabel = "Bildirimleri Aç",
   activateLabel = "Bildirimleri Aktifleştir",
 }: NotificationBannerProps = {}) {

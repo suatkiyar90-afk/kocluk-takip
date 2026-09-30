@@ -3,7 +3,7 @@ import { Toaster } from "sonner";
 import { ImportExamsForm } from "@/components/admin/import-exams-form";
 
 export const metadata = {
-  title: "Deneme Sınavı Yükle | Koçluk Takip",
+  title: "Deneme Sınavı Yükle | Akademik Takip",
 };
 
 export default function AdminImportExamsPage() {

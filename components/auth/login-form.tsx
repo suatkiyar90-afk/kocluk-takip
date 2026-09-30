@@ -72,7 +72,7 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
             <SchoolLogo className="w-full h-full object-contain p-2" />
           </div>
           <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-gray-900">
-            Koçluk Takip
+            Akademik Takip
           </h1>
           <p className="mt-1.5 text-sm text-gray-500">
             Devam etmek için giriş yapın.

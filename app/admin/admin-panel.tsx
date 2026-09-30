@@ -17,7 +17,7 @@ type Tab = "teacher" | "student" | "assign" | "reset";
 const TABS: { id: Tab; label: string }[] = [
   { id: "teacher", label: "Öğretmen Ekle" },
   { id: "student", label: "Öğrenci Ekle" },
-  { id: "assign", label: "Koç Atama" },
+  { id: "assign", label: "Danışman Öğretmen Atama" },
   { id: "reset", label: "Şifre Sıfırla" },
 ];
 
@@ -52,7 +52,7 @@ export function AdminPanel({
       <header className="mb-6">
         <h1 className="text-xl font-bold text-gray-900">Yönetici Paneli</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Öğretmen ve öğrenci hesaplarını yönetin, koç atamalarını yapın.
+          Öğretmen ve öğrenci hesaplarını yönetin, Danışman Öğretmen atamalarını yapın.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Link
@@ -278,7 +278,7 @@ function AssignForm({
       noValidate
       className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
     >
-      <h2 className="text-sm font-semibold text-gray-900">Koç Atama</h2>
+      <h2 className="text-sm font-semibold text-gray-900">Danışman Öğretmen Atama</h2>
       <p className="mt-0.5 text-xs text-gray-500">
         Kayıtlı bir öğrenciyi kayıtlı bir öğretmene bağlayın.
       </p>

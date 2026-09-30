@@ -11,7 +11,7 @@ export const pwaMetadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Koçluk Takip",
+    title: "Akademik Takip",
   },
   icons: {
     apple: "/apple-touch-icon.png",
