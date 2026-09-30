@@ -68,8 +68,8 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
     <main className="flex min-h-dvh items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-105 rounded-3xl border border-gray-200 bg-white p-6 shadow-lg shadow-gray-200/60 sm:p-8">
         <header className="text-center">
-          <div className="mx-auto flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white p-1 shadow-md sm:h-32 sm:w-32">
-            <SchoolLogo className="h-full w-full object-cover object-center" />
+          <div className="relative w-28 h-28 bg-white rounded-full flex items-center justify-center overflow-hidden shrink-0 mx-auto shadow-lg">
+            <SchoolLogo className="w-full h-full object-contain p-2" />
           </div>
           <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-gray-900">
             Koçluk Takip
