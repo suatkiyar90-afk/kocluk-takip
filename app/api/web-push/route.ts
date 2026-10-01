@@ -4,6 +4,7 @@ import webpush from "web-push";
 import { and, eq, inArray } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
+import { logActivity } from "@/lib/activity-log";
 import { pushSubscriptions, teacherStudents } from "@/db/schema";
 import { ensureVapid } from "@/lib/web-push-helper";
 
@@ -206,6 +207,12 @@ export async function POST(req: Request) {
       }
     }),
   );
+
+  await logActivity({
+    actorId: session.user.id,
+    action: "announcement_sent",
+    studentId: userId ?? null,
+  });
 
   return NextResponse.json({
     success: true,

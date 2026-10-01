@@ -1,5 +1,7 @@
 import "../globals.css";
 import Link from "next/link";
+import { auth } from "@/auth";
+import { touchLastSeen } from "@/lib/touch-last-seen";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { SchoolWatermark } from "@/components/brand/school-logo";
 import { pwaMetadata, pwaViewport } from "@/lib/pwa-metadata";
@@ -15,11 +17,16 @@ export const metadata = {
 
 export const viewport = pwaViewport;
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await auth();
+  if (session?.user?.id) {
+    void touchLastSeen(session.user.id);
+  }
+
   return (
     <html lang="tr" suppressHydrationWarning>
       <body className="min-h-dvh bg-gray-50">

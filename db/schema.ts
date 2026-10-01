@@ -61,6 +61,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash"),
   mustChangePassword: boolean("must_change_password").notNull().default(true),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -181,6 +182,30 @@ export const teacherStudents = pgTable(
     teacherStudentsStudentIdx: index("teacher_students_student_idx").on(
       t.studentId,
     ),
+  }),
+);
+
+export const activityLogs = pgTable(
+  "activity_logs",
+  {
+    id: serial("id").primaryKey(),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    action: text("action").notNull(),
+    studentId: uuid("student_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    activityLogsActorCreatedIdx: index("activity_logs_actor_created_idx").on(
+      t.actorId,
+      t.createdAt,
+    ),
+    activityLogsCreatedIdx: index("activity_logs_created_idx").on(t.createdAt),
   }),
 );
 

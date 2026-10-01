@@ -4,6 +4,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { logActivity } from "@/lib/activity-log";
 import { mockExams, teacherStudents, users } from "@/db/schema";
 import { sendPushNotification } from "@/lib/web-push-helper";
 import { isValidISODate } from "@/lib/week-utils";
@@ -370,6 +371,11 @@ export async function importMockExams(
         ),
       );
     }
+
+    await logActivity({
+      actorId: ctx.userId,
+      action: "mock_exam_uploaded",
+    });
 
     return {
       success: true,

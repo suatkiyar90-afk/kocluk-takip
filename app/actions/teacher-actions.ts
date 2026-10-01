@@ -3,6 +3,7 @@
 import { auth } from "@/auth";
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { logActivity } from "@/lib/activity-log";
 import {
   coachingFeedbacks,
   dailyQuestionEntries,
@@ -573,6 +574,12 @@ export async function saveCoachingFeedback(
       "Danışman öğretmenin bu hafta için sana yeni hedefler ve değerlendirmeler yazdı.",
       "/weekly-targets",
     );
+
+    await logActivity({
+      actorId: ctx.teacherId,
+      action: "feedback_saved",
+      studentId,
+    });
 
     return {
       success: true,

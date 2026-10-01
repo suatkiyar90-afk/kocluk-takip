@@ -4,15 +4,31 @@ import bcrypt from "bcryptjs";
 import { randomInt } from "crypto";
 import { z } from "zod";
 import { auth } from "@/auth";
-import { and, desc, eq, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  ne,
+  not,
+  or,
+  sql,
+} from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import {
+  activityLogs,
   curriculumTopics,
   dailyQuestionEntries,
   teacherStudents,
   users,
 } from "@/db/schema";
 import { actionErrorMessage } from "@/lib/action-error";
+import { isUserActiveToday, istanbulDayRange } from "@/lib/week-utils";
 
 export interface AdminTeacher {
   id: string;
@@ -30,6 +46,7 @@ export interface AdminStudent {
 export interface RecentLogin {
   id: string;
   name: string;
+  role: "student" | "teacher" | "admin";
   roleLabel: string;
   lastLoginAt: string;
 }
@@ -708,6 +725,7 @@ export async function getRecentLogins(): Promise<
       logins.push({
         id: row.id,
         name: row.name || "İsimsiz kullanıcı",
+        role: row.role,
         roleLabel: ROLE_LABELS[row.role] ?? row.role,
         lastLoginAt: row.lastLoginAt.toISOString(),
       });
@@ -767,6 +785,243 @@ export async function getRecentDataEntries(): Promise<
       success: true,
       data: { entries },
       message: "Son veri girişleri yüklendi.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+const ACTIVITY_LABELS: Record<string, string> = {
+  feedback_saved: "Dönüt yazdı",
+  target_saved: "Hedef belirledi",
+  qa_replied: "Soruyu cevapladı",
+  mock_exam_uploaded: "Deneme sonucu yükledi",
+  announcement_sent: "Duyuru gönderdi",
+};
+
+export interface RecentTeacherActivity {
+  id: number;
+  actorName: string;
+  action: string;
+  actionLabel: string;
+  studentName: string | null;
+  createdAt: string;
+}
+
+export async function getRecentTeacherActivities(): Promise<
+  AdminActionResult<{ activities: RecentTeacherActivity[] }>
+> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  try {
+    const actor = alias(users, "activity_actor");
+    const student = alias(users, "activity_student");
+
+    const rows = await db
+      .select({
+        id: activityLogs.id,
+        action: activityLogs.action,
+        createdAt: activityLogs.createdAt,
+        actorName: actor.name,
+        studentName: student.name,
+      })
+      .from(activityLogs)
+      .innerJoin(actor, eq(activityLogs.actorId, actor.id))
+      .leftJoin(student, eq(activityLogs.studentId, student.id))
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(30);
+
+    return {
+      success: true,
+      data: {
+        activities: rows.map((row) => ({
+          id: row.id,
+          actorName: row.actorName || "İsimsiz kullanıcı",
+          action: row.action,
+          actionLabel: ACTIVITY_LABELS[row.action] ?? row.action,
+          studentName: row.studentName,
+          createdAt: row.createdAt.toISOString(),
+        })),
+      },
+      message: "Son işlemler yüklendi.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+const SEED_TEST_EMAILS = ["admin", "teacher", "student"];
+
+export interface InactiveUserRow {
+  id: string;
+  name: string;
+  role: "student" | "teacher";
+  studentNumber: string | null;
+  lastSeenAt: string | null;
+  assignedTeacher: string | null;
+}
+
+export interface TodayInactivitySummary {
+  studentTotal: number;
+  studentOpenedToday: number;
+  studentDataEnteredToday: number;
+  teacherTotal: number;
+  teacherOpenedToday: number;
+  teacherActionedToday: number;
+}
+
+export interface TodayInactivityData {
+  summary: TodayInactivitySummary;
+  inactiveStudents: InactiveUserRow[];
+  inactiveTeachers: InactiveUserRow[];
+  studentsWithoutData: InactiveUserRow[];
+  teachersWithoutActivity: InactiveUserRow[];
+}
+
+export async function getTodayInactivity(): Promise<
+  AdminActionResult<TodayInactivityData>
+> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  try {
+    const range = istanbulDayRange();
+
+    const [people, dataTodayRows, actorRows, assignmentRows] =
+      await Promise.all([
+        db
+          .select({
+            id: users.id,
+            name: users.name,
+            role: users.role,
+            studentNumber: users.studentNumber,
+            lastSeenAt: users.lastSeenAt,
+            lastLoginAt: users.lastLoginAt,
+          })
+          .from(users)
+          .where(
+            and(
+              inArray(users.role, ["student", "teacher"]),
+              or(
+                isNull(users.email),
+                not(inArray(users.email, SEED_TEST_EMAILS)),
+              ),
+            ),
+          ),
+        db
+          .selectDistinct({ studentId: dailyQuestionEntries.studentId })
+          .from(dailyQuestionEntries)
+          .where(
+            and(
+              gte(dailyQuestionEntries.createdAt, range.start),
+              lt(dailyQuestionEntries.createdAt, range.end),
+            ),
+          ),
+        db
+          .selectDistinct({ actorId: activityLogs.actorId })
+          .from(activityLogs)
+          .where(
+            and(
+              gte(activityLogs.createdAt, range.start),
+              lt(activityLogs.createdAt, range.end),
+            ),
+          ),
+        db
+          .select({
+            studentId: teacherStudents.studentId,
+            teacherName: users.name,
+          })
+          .from(teacherStudents)
+          .innerJoin(users, eq(teacherStudents.teacherId, users.id))
+          .orderBy(teacherStudents.createdAt),
+      ]);
+
+    const teacherByStudent = new Map<string, string>();
+    for (const row of assignmentRows) {
+      if (!teacherByStudent.has(row.studentId)) {
+        teacherByStudent.set(row.studentId, row.teacherName);
+      }
+    }
+
+    const openedIds = new Set<string>();
+    const studentRows: InactiveUserRow[] = [];
+    const teacherRows: InactiveUserRow[] = [];
+
+    for (const person of people) {
+      const opened = isUserActiveToday(
+        person.lastSeenAt,
+        person.lastLoginAt,
+        range,
+      );
+      if (opened) {
+        openedIds.add(person.id);
+      }
+      const latest =
+        person.lastSeenAt && person.lastLoginAt
+          ? person.lastSeenAt.getTime() >= person.lastLoginAt.getTime()
+            ? person.lastSeenAt
+            : person.lastLoginAt
+          : (person.lastSeenAt ?? person.lastLoginAt);
+      const row: InactiveUserRow = {
+        id: person.id,
+        name: person.name || "İsimsiz kullanıcı",
+        role: person.role === "teacher" ? "teacher" : "student",
+        studentNumber: person.role === "student" ? person.studentNumber : null,
+        lastSeenAt: latest ? latest.toISOString() : null,
+        assignedTeacher: null,
+      };
+      if (person.role === "student") {
+        row.assignedTeacher = teacherByStudent.get(person.id) ?? null;
+        studentRows.push(row);
+      } else {
+        teacherRows.push(row);
+      }
+    }
+
+    const byName = (a: InactiveUserRow, b: InactiveUserRow) =>
+      a.name.localeCompare(b.name, "tr");
+    studentRows.sort(byName);
+    teacherRows.sort(byName);
+
+    const dataSet = new Set(dataTodayRows.map((r) => r.studentId));
+    const actorSet = new Set(actorRows.map((r) => r.actorId));
+
+    const summary: TodayInactivitySummary = {
+      studentTotal: studentRows.length,
+      studentOpenedToday: studentRows.filter((r) => openedIds.has(r.id))
+        .length,
+      studentDataEnteredToday: studentRows.filter((r) => dataSet.has(r.id))
+        .length,
+      teacherTotal: teacherRows.length,
+      teacherOpenedToday: teacherRows.filter((r) => openedIds.has(r.id))
+        .length,
+      teacherActionedToday: teacherRows.filter((r) => actorSet.has(r.id))
+        .length,
+    };
+
+    return {
+      success: true,
+      data: {
+        summary,
+        inactiveStudents: studentRows.filter((r) => !openedIds.has(r.id)),
+        inactiveTeachers: teacherRows.filter((r) => !openedIds.has(r.id)),
+        studentsWithoutData: studentRows.filter((r) => !dataSet.has(r.id)),
+        teachersWithoutActivity: teacherRows.filter((r) => !actorSet.has(r.id)),
+      },
+      message: "Bugün özeti yüklendi.",
     };
   } catch (err) {
     return {

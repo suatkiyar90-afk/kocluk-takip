@@ -4,6 +4,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { logActivity } from "@/lib/activity-log";
 import { qaThreads, teacherStudents, users } from "@/db/schema";
 import { sendPushNotification } from "@/lib/web-push-helper";
 import { isAllowedUploadUrl } from "@/lib/url-guard";
@@ -463,6 +464,12 @@ export async function answerQuestion(
       "Öğretmenin sorduğun soruya yanıt verdi, detayları görmek için tıkla.",
       "/ask",
     );
+
+    await logActivity({
+      actorId: ctx.teacherId,
+      action: "qa_replied",
+      studentId: row.studentId,
+    });
 
     return {
       success: true,

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   addDaysISO,
   getCurrentWeekMonday,
+  isUserActiveToday,
+  istanbulDayRange,
   isValidISODate,
   mondayOfISO,
   parseMonday,
@@ -113,5 +115,63 @@ describe("isValidISODate", () => {
     expect(isValidISODate("2026-13-01")).toBe(false);
     expect(isValidISODate("2026-9-1")).toBe(false);
     expect(isValidISODate("")).toBe(false);
+  });
+});
+
+describe("istanbulDayRange", () => {
+  it("İstanbul gününü UTC aralığı olarak döndürür", () => {
+    const range = istanbulDayRange(new Date("2026-09-30T12:00:00Z"));
+    expect(range.start.toISOString()).toBe("2026-09-29T21:00:00.000Z");
+    expect(range.end.toISOString()).toBe("2026-09-30T21:00:00.000Z");
+  });
+
+  it("İstanbul gece yarısı 23:59 / 00:00 sınırında günü değiştirir", () => {
+    const before = istanbulDayRange(new Date("2026-09-29T20:59:00Z"));
+    expect(before.start.toISOString()).toBe("2026-09-28T21:00:00.000Z");
+    expect(before.end.toISOString()).toBe("2026-09-29T21:00:00.000Z");
+
+    const after = istanbulDayRange(new Date("2026-09-29T21:00:00Z"));
+    expect(after.start.toISOString()).toBe("2026-09-29T21:00:00.000Z");
+    expect(after.end.toISOString()).toBe("2026-09-30T21:00:00.000Z");
+  });
+});
+
+describe("isUserActiveToday", () => {
+  const range = istanbulDayRange(new Date("2026-09-30T12:00:00Z"));
+
+  it("aralık başlangıcı dahil, bitişi hariçtir", () => {
+    expect(isUserActiveToday(new Date("2026-09-29T21:00:00Z"), null, range)).toBe(
+      true,
+    );
+    expect(
+      isUserActiveToday(new Date("2026-09-30T20:59:59Z"), null, range),
+    ).toBe(true);
+    expect(
+      isUserActiveToday(new Date("2026-09-29T20:59:59Z"), null, range),
+    ).toBe(false);
+    expect(isUserActiveToday(new Date("2026-09-30T21:00:00Z"), null, range)).toBe(
+      false,
+    );
+  });
+
+  it("giriş ve görülme zamanının en geçesiyle değerlendirir", () => {
+    expect(isUserActiveToday(null, null, range)).toBe(false);
+    expect(
+      isUserActiveToday(null, new Date("2026-09-30T10:00:00Z"), range),
+    ).toBe(true);
+    expect(
+      isUserActiveToday(
+        new Date("2026-08-01T00:00:00Z"),
+        new Date("2026-09-30T08:00:00Z"),
+        range,
+      ),
+    ).toBe(true);
+    expect(
+      isUserActiveToday(
+        new Date("2026-09-30T10:00:00Z"),
+        new Date("2026-10-02T10:00:00Z"),
+        range,
+      ),
+    ).toBe(false);
   });
 });

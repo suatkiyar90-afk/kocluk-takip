@@ -1,6 +1,7 @@
 import "../globals.css";
 import "@uploadthing/react/styles.css";
 import { auth } from "@/auth";
+import { touchLastSeen } from "@/lib/touch-last-seen";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { SchoolWatermark } from "@/components/brand/school-logo";
 import { pwaMetadata, pwaViewport } from "@/lib/pwa-metadata";
@@ -27,6 +28,9 @@ export default async function TeacherLayout({
   const pendingCount = await getPendingQuestionCount();
   const session = await auth();
   const userName = session?.user?.name || "Kullanıcı";
+  if (session?.user?.id) {
+    void touchLastSeen(session.user.id);
+  }
 
   return (
     <html lang="tr" suppressHydrationWarning>

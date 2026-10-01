@@ -4,6 +4,7 @@ import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
+import { logActivity } from "@/lib/activity-log";
 import {
   coachingFeedbacks,
   curriculumTopics,
@@ -279,6 +280,12 @@ export async function saveWeeklyTarget(
       "Danışman öğretmenin bu hafta için sana yeni hedefler ve değerlendirmeler yazdı.",
       "/weekly-targets",
     );
+
+    await logActivity({
+      actorId: ctx.teacherId,
+      action: "target_saved",
+      studentId,
+    });
 
     return { success: true, data: { id: saved[0].id } };
   } catch (err) {

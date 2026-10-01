@@ -73,3 +73,40 @@ export function parseMonday(value?: string): string {
   }
   return getCurrentWeekMonday();
 }
+
+export interface IstanbulDayRange {
+  start: Date;
+  end: Date;
+}
+
+const ISTANBUL_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+export function istanbulDayRange(now: Date = new Date()): IstanbulDayRange {
+  const shifted = new Date(now.getTime() + ISTANBUL_OFFSET_MS);
+  const dayStartUtc = Date.UTC(
+    shifted.getUTCFullYear(),
+    shifted.getUTCMonth(),
+    shifted.getUTCDate(),
+  );
+  return {
+    start: new Date(dayStartUtc - ISTANBUL_OFFSET_MS),
+    end: new Date(dayStartUtc + 24 * 60 * 60 * 1000 - ISTANBUL_OFFSET_MS),
+  };
+}
+
+export function isUserActiveToday(
+  lastSeenAt: Date | null,
+  lastLoginAt: Date | null,
+  range: IstanbulDayRange,
+): boolean {
+  let latest: Date | null = null;
+  for (const value of [lastSeenAt, lastLoginAt]) {
+    if (value && (!latest || value.getTime() > latest.getTime())) {
+      latest = value;
+    }
+  }
+  if (!latest) {
+    return false;
+  }
+  return latest.getTime() >= range.start.getTime() && latest.getTime() < range.end.getTime();
+}
