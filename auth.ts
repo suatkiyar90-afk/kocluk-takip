@@ -28,7 +28,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Credentials({
       name: "Giriş",
       credentials: {
-        username: { label: "Kullanıcı Adı (e-posta)", type: "text" },
+        username: {
+          label: "Kullanıcı Adı (Öğretmen/Yönetici) veya Öğrenci No",
+          type: "text",
+        },
         password: { label: "Şifre", type: "password" },
       },
       async authorize(credentials, request) {
@@ -49,7 +52,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const rows = await db
           .select()
           .from(users)
-          .where(or(eq(users.email, username), eq(users.studentNumber, username)))
+          .where(
+            or(
+              eq(users.email, identifier),
+              eq(users.studentNumber, username.trim()),
+            ),
+          )
           .limit(1);
         const user = rows[0];
 

@@ -4,12 +4,6 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { SchoolLogo } from "@/components/brand/school-logo";
 
-const TEST_ACCOUNTS = [
-  { label: "Yönetici", username: "admin", password: "test123" },
-  { label: "Öğretmen", username: "teacher", password: "test123" },
-  { label: "Öğrenci", username: "student", password: "test123" },
-];
-
 interface LoginFormProps {
   callbackUrl?: string;
 }
@@ -85,7 +79,7 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
               htmlFor="username"
               className="mb-1.5 block text-sm font-semibold text-gray-700"
             >
-              Kullanıcı Adı (E-posta veya Öğrenci No)
+              Kullanıcı Adı (Öğretmen/Yönetici) veya Öğrenci No
             </label>
             <input
               id="username"
@@ -93,7 +87,7 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
               type="text"
               autoComplete="username"
               autoFocus
-              placeholder="ornek@ornek.com veya 1234"
+              placeholder="kullanıcı adın veya öğrenci numaran"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-base text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
@@ -132,33 +126,6 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
             {loading ? "Giriş yapılıyor…" : "Giriş Yap"}
           </button>
         </form>
-
-        <div className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Test Hesapları
-          </p>
-          <div className="mt-3 grid gap-2">
-            {TEST_ACCOUNTS.map((account) => (
-              <button
-                key={account.username}
-                type="button"
-                onClick={() => {
-                  setUsername(account.username);
-                  setPassword(account.password);
-                  setError(null);
-                }}
-                className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left transition active:scale-[0.98] touch-manipulation"
-              >
-                <span className="text-sm font-semibold text-gray-800">
-                  {account.label}
-                </span>
-                <span className="font-mono text-xs text-gray-400">
-                  {account.username} / {account.password}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
     </main>
   );

@@ -8,6 +8,7 @@ import {
   adminCreateUser,
   adminListUsers,
   adminResetUserPassword,
+  adminUpdateTeacherUsername,
   type AdminStudent,
   type AdminTeacher,
 } from "@/app/actions/admin-actions";
@@ -24,6 +25,12 @@ const TABS: { id: Tab; label: string }[] = [
 const inputClass =
   "h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-base text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200";
 const labelClass = "mb-1.5 block text-sm font-semibold text-gray-700";
+
+function displayUsername(email: string | null): string {
+  if (!email) return "—";
+  const suffix = "@kocluk.local";
+  return email.endsWith(suffix) ? email.slice(0, -suffix.length) : email;
+}
 
 interface AdminPanelProps {
   initialTeachers: AdminTeacher[];
@@ -92,7 +99,15 @@ export function AdminPanel({
       ) : tab === "assign" ? (
         <AssignForm teachers={teachers} students={students} />
       ) : (
-        <CreateUserForm role={tab} onCreated={refreshLists} />
+        <>
+          <CreateUserForm role={tab} onCreated={refreshLists} />
+          {tab === "teacher" ? (
+            <TeacherUsernameEditor
+              teachers={teachers}
+              onUpdated={refreshLists}
+            />
+          ) : null}
+        </>
       )}
     </div>
   );
@@ -152,7 +167,9 @@ function CreateUserForm({
     >
       <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
       <p className="mt-0.5 text-xs text-gray-500">
-        Yeni hesaplar e-posta ile giriş yapar.
+        {role === "teacher"
+          ? "Öğretmenler belirlediğiniz kullanıcı adıyla giriş yapar."
+          : "Öğrenciler öğrenci numarasıyla giriş yapar."}
       </p>
 
       <div className="mt-5 space-y-4">
@@ -173,16 +190,21 @@ function CreateUserForm({
 
         <div>
           <label htmlFor={`${role}-email`} className={labelClass}>
-            Kullanıcı Adı (e-posta)
+            {role === "teacher" ? "Kullanıcı Adı" : "E-posta"}
           </label>
           <input
             id={`${role}-email`}
-            type="email"
+            type={role === "teacher" ? "text" : "email"}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className={inputClass}
-            placeholder="ornk@ornek.com"
+            placeholder={
+              role === "teacher" ? "örn. ayse.yilmaz" : "ornek@ornek.com"
+            }
             autoComplete="off"
+            autoCapitalize={role === "teacher" ? "none" : undefined}
+            autoCorrect={role === "teacher" ? "off" : undefined}
+            spellCheck={role === "teacher" ? false : undefined}
           />
         </div>
 
@@ -232,6 +254,120 @@ function CreateUserForm({
           className="h-12 w-full rounded-xl bg-indigo-600 text-base font-bold text-white shadow-lg shadow-indigo-600/25 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation"
         >
           {loading ? "Kaydediliyor…" : `${title}`}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function TeacherUsernameEditor({
+  teachers,
+  onUpdated,
+}: {
+  teachers: AdminTeacher[];
+  onUpdated: () => void;
+}) {
+  const [teacherId, setTeacherId] = useState(teachers[0]?.id ?? "");
+  const [username, setUsername] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSelectTeacher(nextId: string) {
+    setTeacherId(nextId);
+    const teacher = teachers.find((t) => t.id === nextId);
+    const current = teacher ? displayUsername(teacher.email) : "";
+    setUsername(current === "—" ? "" : current);
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      const result = await adminUpdateTeacherUsername({
+        userId: teacherId,
+        username,
+      });
+      if (result.success === true) {
+        toast.success(result.message);
+        onUpdated();
+      } else {
+        setError(result.message);
+      }
+    } catch {
+      setError("Bilinmeyen bir hata oluştu.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (teachers.length === 0) {
+    return null;
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      noValidate
+      className="mt-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+    >
+      <h2 className="text-sm font-semibold text-gray-900">
+        Kullanıcı Adını Düzenle
+      </h2>
+      <p className="mt-0.5 text-xs text-gray-500">
+        Öğretmenin kullanıcı adını güncelleyin; şifresi değişmez.
+      </p>
+
+      <div className="mt-4 space-y-4">
+        <div>
+          <label htmlFor="edit-teacher" className={labelClass}>
+            Öğretmen
+          </label>
+          <select
+            id="edit-teacher"
+            value={teacherId}
+            onChange={(e) => handleSelectTeacher(e.target.value)}
+            className="h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-base text-gray-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
+          >
+            {teachers.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name} (Kullanıcı adı: {displayUsername(t.email)})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="edit-username" className={labelClass}>
+            Yeni Kullanıcı Adı
+          </label>
+          <input
+            id="edit-username"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className={inputClass}
+            placeholder="örn. ayse.yilmaz"
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+        </div>
+
+        {error ? (
+          <p className="rounded-xl bg-red-50 px-3 py-2.5 text-sm font-medium text-red-600">
+            {error}
+          </p>
+        ) : null}
+
+        <button
+          type="submit"
+          disabled={loading || !teacherId || !username.trim()}
+          className="h-12 w-full rounded-xl bg-indigo-600 text-base font-bold text-white shadow-lg shadow-indigo-600/25 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation"
+        >
+          {loading ? "Kaydediliyor…" : "Kullanıcı Adını Güncelle"}
         </button>
       </div>
     </form>
@@ -297,7 +433,7 @@ function AssignForm({
             >
               {teachers.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name} ({t.email ?? "e-posta yok"})
+                  {t.name} (Kullanıcı adı: {displayUsername(t.email)})
                 </option>
               ))}
             </select>
@@ -321,7 +457,7 @@ function AssignForm({
             >
               {students.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name} ({s.email ?? "e-posta yok"}) — No: {s.studentNumber ?? "-"}
+                  {s.name} (Kullanıcı adı: {s.studentNumber ?? "—"})
                 </option>
               ))}
             </select>
@@ -370,13 +506,13 @@ function ResetPasswordList({
     ...teachers.map((t) => ({
       id: t.id,
       name: t.name,
-      subtitle: t.email ?? "E-posta yok",
+      subtitle: `Kullanıcı adı: ${displayUsername(t.email)}`,
       roleLabel: "Öğretmen",
     })),
     ...students.map((s) => ({
       id: s.id,
       name: s.name,
-      subtitle: `${s.email ?? "E-posta yok"} · No: ${s.studentNumber ?? "-"}`,
+      subtitle: `Kullanıcı adı: ${s.studentNumber ?? "—"}`,
       roleLabel: "Öğrenci",
     })),
   ];

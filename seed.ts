@@ -3,6 +3,12 @@ import { db } from "./db";
 import { teacherStudents, users } from "./db/schema";
 import { eq } from "drizzle-orm";
 
+if (process.env.NODE_ENV === "production") {
+  throw new Error(
+    "Seed production ortamında çalıştırılamaz: test kullanıcıları (test123) oluşturmak güvenlik riskidir.",
+  );
+}
+
 const TEACHER_ID = "11111111-2222-3333-4444-555555555555";
 const TEACHER_NAME = "Test Öğretmen";
 const STUDENT_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";

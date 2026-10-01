@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { randomInt } from "crypto";
 import { z } from "zod";
 import { auth } from "@/auth";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { db } from "@/db";
 import { teacherStudents, users } from "@/db/schema";
 import { actionErrorMessage } from "@/lib/action-error";
@@ -50,21 +50,75 @@ async function getAdminUserId(): Promise<
   return { ok: true, adminId: session.user.id };
 }
 
-const createUserSchema = z.object({
-  name: z.string().trim().min(1, "Ad boş olamaz.").max(100),
-  email: z.string().trim().toLowerCase().email("Geçerli bir e-posta girin."),
-  password: z.string().min(6, "Şifre en az 6 karakter olmalı.").max(200),
-  role: z.enum(["teacher", "student"]),
-  studentNumber: z
-    .string()
-    .trim()
-    .optional()
-    .nullable()
-    .refine(
-      (v) => v === undefined || v === null || v === "" || /^[A-Za-z0-9\-/._]{1,50}$/.test(v),
-      "Öğrenci numarası geçersiz.",
-    ),
-});
+const USERNAME_PATTERN = /^[a-z0-9._-]+$/;
+
+function addUsernameIssues(
+  ctx: z.RefinementCtx,
+  username: string,
+  path: (string | number)[],
+): void {
+  if (username.includes("@")) {
+    ctx.addIssue({
+      code: "custom",
+      path,
+      message: "Kullanıcı adı '@' içeremez.",
+    });
+    return;
+  }
+  if (
+    username.length < 3 ||
+    username.length > 30 ||
+    !USERNAME_PATTERN.test(username)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path,
+      message:
+        "Kullanıcı adı 3-30 karakter olmalı; yalnızca a-z, 0-9, nokta, alt çizgi ve tire içerebilir.",
+    });
+  }
+}
+
+const createUserSchema = z
+  .object({
+    name: z.string().trim().min(1, "Ad boş olamaz.").max(100),
+    email: z.string().trim().toLowerCase(),
+    password: z.string().min(6, "Şifre en az 6 karakter olmalı.").max(200),
+    role: z.enum(["teacher", "student"]),
+    studentNumber: z
+      .string()
+      .trim()
+      .optional()
+      .nullable()
+      .refine(
+        (v) =>
+          v === undefined ||
+          v === null ||
+          v === "" ||
+          /^[A-Za-z0-9\-/._]{1,50}$/.test(v),
+        "Öğrenci numarası geçersiz.",
+      ),
+  })
+  .superRefine((value, ctx) => {
+    if (value.role === "teacher") {
+      addUsernameIssues(ctx, value.email, ["email"]);
+      return;
+    }
+    const parsedEmail = z
+      .string()
+      .trim()
+      .min(1, "E-posta boş olamaz.")
+      .email("Geçerli bir e-posta girin.")
+      .safeParse(value.email);
+    if (!parsedEmail.success) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["email"],
+        message:
+          parsedEmail.error.issues[0]?.message ?? "Geçerli bir e-posta girin.",
+      });
+    }
+  });
 
 export async function adminCreateUser(
   input: unknown,
@@ -87,17 +141,32 @@ export async function adminCreateUser(
     role === "student" && studentNumber ? studentNumber.trim() : null;
 
   try {
-    const existing = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.email, email))
-      .limit(1);
-    if (existing.length > 0) {
-      return {
-        success: false,
-        status: "CONFLICT",
-        message: "Bu e-posta ile kayıtlı bir kullanıcı zaten var.",
-      };
+    if (role === "teacher") {
+      const existingUsername = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(or(eq(users.email, email), eq(users.studentNumber, email)))
+        .limit(1);
+      if (existingUsername.length > 0) {
+        return {
+          success: false,
+          status: "CONFLICT",
+          message: "Bu kullanıcı adı zaten kullanılıyor.",
+        };
+      }
+    } else {
+      const existing = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+      if (existing.length > 0) {
+        return {
+          success: false,
+          status: "CONFLICT",
+          message: "Bu e-posta ile kayıtlı bir kullanıcı zaten var.",
+        };
+      }
     }
 
     if (normalizedStudentNumber) {
@@ -495,6 +564,83 @@ export async function adminResetUserPassword(
       success: true,
       data: { userId: target.id, name: target.name, password },
       message: `${target.name} için yeni şifre oluşturuldu.`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message:
+        actionErrorMessage(err),
+    };
+  }
+}
+
+const updateUsernameSchema = z
+  .object({
+    userId: z.string().uuid("Geçerli bir kullanıcı seçin."),
+    username: z.string().trim().toLowerCase(),
+  })
+  .superRefine((value, ctx) => {
+    addUsernameIssues(ctx, value.username, ["username"]);
+  });
+
+export async function adminUpdateTeacherUsername(
+  input: unknown,
+): Promise<AdminActionResult<{ userId: string; username: string }>> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  const parsed = updateUsernameSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((i) => i.message).join(", "),
+    };
+  }
+  const { userId, username } = parsed.data;
+
+  try {
+    const targetRows = await db
+      .select({ id: users.id, role: users.role })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    const target = targetRows[0];
+    if (!target || target.role !== "teacher") {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message: "Güncellenecek öğretmen bulunamadı.",
+      };
+    }
+
+    const clashRows = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          or(eq(users.email, username), eq(users.studentNumber, username)),
+          ne(users.id, userId),
+        ),
+      )
+      .limit(1);
+    if (clashRows.length > 0) {
+      return {
+        success: false,
+        status: "CONFLICT",
+        message: "Bu kullanıcı adı zaten kullanılıyor.",
+      };
+    }
+
+    await db.update(users).set({ email: username }).where(eq(users.id, userId));
+
+    return {
+      success: true,
+      data: { userId, username },
+      message: "Kullanıcı adı güncellendi.",
     };
   } catch (err) {
     return {
