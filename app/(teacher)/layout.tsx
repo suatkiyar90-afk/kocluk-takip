@@ -1,5 +1,6 @@
 import "../globals.css";
 import "@uploadthing/react/styles.css";
+import { auth } from "@/auth";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { SchoolWatermark } from "@/components/brand/school-logo";
 import { pwaMetadata, pwaViewport } from "@/lib/pwa-metadata";
@@ -24,6 +25,8 @@ export default async function TeacherLayout({
   children: React.ReactNode;
 }) {
   const pendingCount = await getPendingQuestionCount();
+  const session = await auth();
+  const userName = session?.user?.name || "Kullanıcı";
 
   return (
     <html lang="tr" suppressHydrationWarning>
@@ -34,9 +37,14 @@ export default async function TeacherLayout({
           <SchoolWatermark />
           <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur print:hidden">
             <div className="mx-auto flex h-14 w-full max-w-md items-center justify-between gap-3 px-4 md:max-w-3xl xl:max-w-5xl">
-              <span className="text-base font-extrabold tracking-tight text-gray-900">
-                Danışman Öğretmen Paneli
-              </span>
+              <div className="min-w-0">
+                <span className="block text-base font-extrabold tracking-tight text-gray-900">
+                  Danışman Öğretmen Paneli
+                </span>
+                <p className="mt-0.5 truncate text-sm font-medium text-gray-500">
+                  {userName}
+                </p>
+              </div>
               <div className="flex items-center gap-2">
                 <ThemeToggle />
                 <NotificationStatusIcon />
