@@ -74,6 +74,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         await clearLoginAttempts(identifier);
 
+        try {
+          await db
+            .update(users)
+            .set({ lastLoginAt: new Date() })
+            .where(eq(users.id, user.id));
+        } catch {
+          // son giriş zamanı yazılamazsa giriş engellenmez
+        }
+
         return {
           id: user.id,
           name: user.name,

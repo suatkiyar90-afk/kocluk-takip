@@ -60,6 +60,7 @@ export const users = pgTable("users", {
   role: userRoleEnum("role").notNull().default("student"),
   passwordHash: text("password_hash"),
   mustChangePassword: boolean("must_change_password").notNull().default(true),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

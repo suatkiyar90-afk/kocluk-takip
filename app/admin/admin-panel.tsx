@@ -74,6 +74,12 @@ export function AdminPanel({
           >
             Deneme Sınavı Sonucu Yükle
           </Link>
+          <Link
+            href="/admin/activities"
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-emerald-200 bg-white px-4 text-sm font-bold text-emerald-700 transition active:scale-[0.98] touch-manipulation"
+          >
+            Sistem Aktiviteleri
+          </Link>
         </div>
       </header>
 

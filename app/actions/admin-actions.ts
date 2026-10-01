@@ -4,9 +4,14 @@ import bcrypt from "bcryptjs";
 import { randomInt } from "crypto";
 import { z } from "zod";
 import { auth } from "@/auth";
-import { and, eq, inArray, ne, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { teacherStudents, users } from "@/db/schema";
+import {
+  curriculumTopics,
+  dailyQuestionEntries,
+  teacherStudents,
+  users,
+} from "@/db/schema";
 import { actionErrorMessage } from "@/lib/action-error";
 
 export interface AdminTeacher {
@@ -21,6 +26,28 @@ export interface AdminStudent {
   email: string | null;
   studentNumber: string | null;
 }
+
+export interface RecentLogin {
+  id: string;
+  name: string;
+  roleLabel: string;
+  lastLoginAt: string;
+}
+
+export interface RecentDataEntry {
+  id: number;
+  studentName: string;
+  examType: string;
+  subjectName: string;
+  totalSolved: number;
+  createdAt: string;
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  student: "Öğrenci",
+  teacher: "Öğretmen",
+  admin: "Yönetici",
+};
 
 export type AdminActionResult<T> =
   | { success: true; data: T; message: string }
@@ -648,6 +675,104 @@ export async function adminUpdateTeacherUsername(
       status: "DATABASE_ERROR",
       message:
         actionErrorMessage(err),
+    };
+  }
+}
+
+export async function getRecentLogins(): Promise<
+  AdminActionResult<{ logins: RecentLogin[] }>
+> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  try {
+    const rows = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        role: users.role,
+        lastLoginAt: users.lastLoginAt,
+      })
+      .from(users)
+      .where(isNotNull(users.lastLoginAt))
+      .orderBy(desc(users.lastLoginAt))
+      .limit(20);
+
+    const logins: RecentLogin[] = [];
+    for (const row of rows) {
+      if (!row.lastLoginAt) {
+        continue;
+      }
+      logins.push({
+        id: row.id,
+        name: row.name || "İsimsiz kullanıcı",
+        roleLabel: ROLE_LABELS[row.role] ?? row.role,
+        lastLoginAt: row.lastLoginAt.toISOString(),
+      });
+    }
+
+    return {
+      success: true,
+      data: { logins },
+      message: "Son girişler yüklendi.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export async function getRecentDataEntries(): Promise<
+  AdminActionResult<{ entries: RecentDataEntry[] }>
+> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  try {
+    const rows = await db
+      .select({
+        id: dailyQuestionEntries.id,
+        studentName: users.name,
+        examType: dailyQuestionEntries.examType,
+        subjectName: curriculumTopics.subjectName,
+        totalSolved: sql<number>`${dailyQuestionEntries.correct} + ${dailyQuestionEntries.wrong} + ${dailyQuestionEntries.blank}`,
+        createdAt: dailyQuestionEntries.createdAt,
+      })
+      .from(dailyQuestionEntries)
+      .innerJoin(users, eq(dailyQuestionEntries.studentId, users.id))
+      .innerJoin(
+        curriculumTopics,
+        eq(curriculumTopics.id, dailyQuestionEntries.topicId),
+      )
+      .orderBy(desc(dailyQuestionEntries.createdAt))
+      .limit(20);
+
+    const entries: RecentDataEntry[] = rows.map((row) => ({
+      id: row.id,
+      studentName: row.studentName || "İsimsiz öğrenci",
+      examType: row.examType,
+      subjectName: row.subjectName,
+      totalSolved: Number(row.totalSolved),
+      createdAt: row.createdAt.toISOString(),
+    }));
+
+    return {
+      success: true,
+      data: { entries },
+      message: "Son veri girişleri yüklendi.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
     };
   }
 }

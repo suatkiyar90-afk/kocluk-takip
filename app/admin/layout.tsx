@@ -1,4 +1,5 @@
 import "../globals.css";
+import Link from "next/link";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { SchoolWatermark } from "@/components/brand/school-logo";
 import { pwaMetadata, pwaViewport } from "@/lib/pwa-metadata";
@@ -32,6 +33,12 @@ export default function AdminLayout({
                 Akademik Takip — Yönetici
               </span>
               <div className="flex items-center gap-2">
+                <Link
+                  href="/admin/activities"
+                  className="rounded-lg px-2 py-1.5 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 touch-manipulation"
+                >
+                  Aktiviteler
+                </Link>
                 <ThemeToggle />
                 <LogoutButton />
               </div>
