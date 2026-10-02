@@ -18,3 +18,15 @@ export async function touchLastSeen(userId: string): Promise<void> {
     console.error("touchLastSeen error:", err);
   }
 }
+
+export async function markUserSeen(userId: string): Promise<void> {
+  try {
+    await db.execute(sql`
+      update users
+      set last_seen_at = now()
+      where id = ${userId}
+    `);
+  } catch (err) {
+    console.error("markUserSeen error:", err);
+  }
+}

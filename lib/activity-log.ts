@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { activityLogs } from "@/db/schema";
+import { markUserSeen } from "@/lib/touch-last-seen";
 
 export const ACTIVITY_ACTIONS = [
   "feedback_saved",
@@ -31,4 +32,5 @@ export async function logActivity({
   } catch (err) {
     console.error("logActivity error:", err);
   }
+  await markUserSeen(actorId);
 }

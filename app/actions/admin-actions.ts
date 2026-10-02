@@ -48,7 +48,8 @@ export interface RecentLogin {
   name: string;
   role: "student" | "teacher" | "admin";
   roleLabel: string;
-  lastLoginAt: string;
+  lastActiveAt: string;
+  lastLoginAt: string | null;
 }
 
 export interface RecentDataEntry {
@@ -705,21 +706,27 @@ export async function getRecentLogins(): Promise<
   }
 
   try {
+    const greatestDate = (a: Date | null, b: Date | null): Date | null =>
+      a && b ? (a > b ? a : b) : (a ?? b);
+    const lastActive = sql<Date | null>`greatest(${users.lastSeenAt}, ${users.lastLoginAt})`;
+
     const rows = await db
       .select({
         id: users.id,
         name: users.name,
         role: users.role,
         lastLoginAt: users.lastLoginAt,
+        lastSeenAt: users.lastSeenAt,
       })
       .from(users)
-      .where(isNotNull(users.lastLoginAt))
-      .orderBy(desc(users.lastLoginAt))
+      .where(isNotNull(lastActive))
+      .orderBy(desc(lastActive))
       .limit(20);
 
     const logins: RecentLogin[] = [];
     for (const row of rows) {
-      if (!row.lastLoginAt) {
+      const lastActiveAt = greatestDate(row.lastSeenAt, row.lastLoginAt);
+      if (!lastActiveAt) {
         continue;
       }
       logins.push({
@@ -727,14 +734,15 @@ export async function getRecentLogins(): Promise<
         name: row.name || "İsimsiz kullanıcı",
         role: row.role,
         roleLabel: ROLE_LABELS[row.role] ?? row.role,
-        lastLoginAt: row.lastLoginAt.toISOString(),
+        lastActiveAt: lastActiveAt.toISOString(),
+        lastLoginAt: row.lastLoginAt ? row.lastLoginAt.toISOString() : null,
       });
     }
 
     return {
       success: true,
       data: { logins },
-      message: "Son girişler yüklendi.",
+      message: "Son görülenler yüklendi.",
     };
   } catch (err) {
     return {
@@ -805,9 +813,11 @@ const ACTIVITY_LABELS: Record<string, string> = {
 
 export interface RecentTeacherActivity {
   id: number;
+  actorId: string;
   actorName: string;
   action: string;
   actionLabel: string;
+  studentId: string | null;
   studentName: string | null;
   createdAt: string;
 }
@@ -827,7 +837,9 @@ export async function getRecentTeacherActivities(): Promise<
     const rows = await db
       .select({
         id: activityLogs.id,
+        actorId: activityLogs.actorId,
         action: activityLogs.action,
+        studentId: activityLogs.studentId,
         createdAt: activityLogs.createdAt,
         actorName: actor.name,
         studentName: student.name,
@@ -843,8 +855,10 @@ export async function getRecentTeacherActivities(): Promise<
       data: {
         activities: rows.map((row) => ({
           id: row.id,
+          actorId: row.actorId,
           actorName: row.actorName || "İsimsiz kullanıcı",
           action: row.action,
+          studentId: row.studentId,
           actionLabel: ACTIVITY_LABELS[row.action] ?? row.action,
           studentName: row.studentName,
           createdAt: row.createdAt.toISOString(),

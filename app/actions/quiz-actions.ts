@@ -29,6 +29,7 @@ import type {
   SubjectOptions,
 } from "@/components/quiz-entry/daily-entry-types";
 import { actionErrorMessage } from "@/lib/action-error";
+import { markUserSeen } from "@/lib/touch-last-seen";
 
 async function getStudentId(): Promise<
   | { ok: true; studentId: string }
@@ -223,6 +224,7 @@ export async function saveDailyEntry(
       })
       .returning({ id: dailyQuestionEntries.id });
 
+    await markUserSeen(studentId);
     return { success: true, data: { id: inserted[0].id, date } };
   } catch (err) {
     return {

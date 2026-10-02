@@ -5,7 +5,8 @@ import {
   getRecentTeacherActivities,
   getTodayInactivity,
 } from "@/app/actions/admin-actions";
-import type { RecentLogin } from "@/app/actions/admin-actions";
+import type { RecentLogin, RecentTeacherActivity } from "@/app/actions/admin-actions";
+import { groupConsecutiveActivities } from "@/lib/activity-group";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { ActivitiesAutoRefresh } from "./auto-refresh";
 import { InactiveUserList } from "./inactive-user-list";
@@ -87,7 +88,7 @@ function LoginsTable({
   showRole: boolean;
 }) {
   if (logins.length === 0) {
-    return <EmptyBox message="Henüz giriş kaydı yok." />;
+    return <EmptyBox message="Henüz görülen kullanıcı yok." />;
   }
   return (
     <div className="overflow-x-auto">
@@ -96,7 +97,7 @@ function LoginsTable({
           <tr>
             <th className={tableHeadClass}>Ad Soyad</th>
             {showRole ? <th className={tableHeadClass}>Rol</th> : null}
-            <th className={tableHeadClass}>Son Giriş</th>
+            <th className={tableHeadClass}>Son Görülme</th>
           </tr>
         </thead>
         <tbody>
@@ -116,7 +117,12 @@ function LoginsTable({
                 </td>
               ) : null}
               <td className="whitespace-nowrap px-3 py-2.5 text-gray-500">
-                {formatTimeAgo(login.lastLoginAt)}
+                {formatTimeAgo(login.lastActiveAt)}
+                {login.lastLoginAt ? (
+                  <span className="ml-2 text-xs text-gray-400">
+                    son şifreli giriş: {formatTimeAgo(login.lastLoginAt)}
+                  </span>
+                ) : null}
               </td>
             </tr>
           ))}
@@ -247,8 +253,8 @@ export default async function ActivitiesPage({
             </CardShell>
 
             <CardShell
-              title="Son Giriş Yapanlar"
-              subtitle="Son giriş yapan öğrenciler"
+              title="Son Görülenler"
+              subtitle="Son görülen öğrenciler (şifreli giriş dahil)"
             >
               {loginsResult.success === false ? (
                 <ErrorBox message={loginsResult.message} />
@@ -335,8 +341,8 @@ export default async function ActivitiesPage({
             </CardShell>
 
             <CardShell
-              title="Son Giriş Yapanlar"
-              subtitle="Son giriş yapan yönetici ve öğretmenler"
+              title="Son Görülenler"
+              subtitle="Son görülen yönetici ve öğretmenler (şifreli giriş dahil)"
             >
               {loginsResult.success === false ? (
                 <ErrorBox message={loginsResult.message} />
@@ -347,7 +353,7 @@ export default async function ActivitiesPage({
 
             <CardShell
               title="Son İşlemler"
-              subtitle="Son 30 öğretmen işlemi (yeniden eskiye)"
+              subtitle="Son 30 öğretmen işlemi (yeniden eskiye, ardışık tekrarlar tek satırda)"
             >
               {activityResult === null ? null : activityResult.success ===
                 false ? (
@@ -366,25 +372,35 @@ export default async function ActivitiesPage({
                       </tr>
                     </thead>
                     <tbody>
-                      {activityResult.data.activities.map((activity) => (
-                        <tr
-                          key={activity.id}
-                          className="border-b border-gray-100 last:border-0"
-                        >
-                          <td className="px-3 py-2.5 font-semibold text-gray-900">
-                            {activity.actorName}
-                          </td>
-                          <td className="px-3 py-2.5 text-gray-700">
-                            {activity.actionLabel}
-                          </td>
-                          <td className="px-3 py-2.5 text-gray-700">
-                            {activity.studentName ?? "—"}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-2.5 text-gray-500">
-                            {formatTimeAgo(activity.createdAt)}
-                          </td>
-                        </tr>
-                      ))}
+                      {groupConsecutiveActivities<RecentTeacherActivity>(
+                        activityResult.data.activities,
+                      ).map((group) => {
+                        const activity = group.items[0];
+                        return (
+                          <tr
+                            key={activity.id}
+                            className="border-b border-gray-100 last:border-0"
+                          >
+                            <td className="px-3 py-2.5 font-semibold text-gray-900">
+                              {activity.actorName}
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-700">
+                              {activity.actionLabel}
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-700">
+                              {activity.studentName ?? "—"}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2.5 text-gray-500">
+                              {formatTimeAgo(activity.createdAt)}
+                              {group.count > 1 ? (
+                                <span className="ml-2 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs font-bold text-gray-500">
+                                  ×{group.count}
+                                </span>
+                              ) : null}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

@@ -1,6 +1,7 @@
 import "../globals.css";
 import { auth } from "@/auth";
 import { touchLastSeen } from "@/lib/touch-last-seen";
+import { TouchSeenObserver } from "@/components/touch-seen-observer";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { SchoolWatermark } from "@/components/brand/school-logo";
 import { pwaMetadata, pwaViewport } from "@/lib/pwa-metadata";
@@ -34,6 +35,7 @@ export default async function StudentLayout({
           <AppleWebAppMeta />
           <SwRegister />
           <SchoolWatermark />
+          <TouchSeenObserver />
           <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/90 backdrop-blur print:hidden">
             <div className="mx-auto flex h-14 w-full max-w-md items-center justify-between px-4">
               <div className="min-w-0">
