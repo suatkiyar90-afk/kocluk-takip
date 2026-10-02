@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { saveDailyEntry } from "@/app/actions/quiz-actions";
@@ -31,7 +31,7 @@ const stepperMeta: Record<
   blank: {
     label: "Boş",
     buttonClass:
-      "border-stone-200 bg-stone-50 text-stone-600 active:bg-stone-300",
+      "border-stone-200 bg-stone-50 text-stone-700 active:bg-stone-300",
     accentClass: "text-stone-500",
   },
 };
@@ -45,10 +45,12 @@ function CountStepper({
   field,
   value,
   onChange,
+  disabled,
 }: {
   field: CountField;
   value: number;
   onChange: (value: number) => void;
+  disabled: boolean;
 }) {
   const meta = stepperMeta[field];
   const clamp = (n: number) => Math.max(0, Math.floor(n));
@@ -64,7 +66,7 @@ function CountStepper({
         <button
           type="button"
           aria-label={`${meta.label} azalt`}
-          disabled={value <= 0}
+          disabled={disabled || value <= 0}
           onClick={() => onChange(clamp(value - 1))}
           className={`flex h-11 w-11 items-center justify-center rounded-xl border text-xl font-bold transition active:scale-90 disabled:cursor-not-allowed disabled:opacity-40 touch-manipulation select-none ${meta.buttonClass}`}
         >
@@ -78,16 +80,18 @@ function CountStepper({
           autoComplete="off"
           aria-label={meta.label}
           value={value}
+          disabled={disabled}
           onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => {
             const n = e.currentTarget.valueAsNumber;
             onChange(Number.isNaN(n) ? 0 : n);
           }}
-          className="h-11 w-full min-w-[5rem] rounded-xl border border-gray-200 bg-white px-3 text-center text-lg font-bold text-gray-900 outline-none transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
+          className="h-11 w-full min-w-[5rem] rounded-xl border border-gray-200 bg-white px-3 text-center text-lg font-bold text-gray-900 outline-none transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400 disabled:opacity-60"
         />
         <button
           type="button"
           aria-label={`${meta.label} artır`}
+          disabled={disabled}
           onClick={() => onChange(clamp(value + 1))}
           className={`flex h-11 w-11 items-center justify-center rounded-xl border text-xl font-bold transition active:scale-90 disabled:cursor-not-allowed disabled:opacity-40 touch-manipulation select-none ${meta.buttonClass}`}
         >
@@ -101,12 +105,14 @@ function CountStepper({
 interface DailyEntryFormProps {
   date: string;
   subjects: SubjectOptions;
+  windowOpen: boolean;
   onSaved?: () => void;
 }
 
 export function DailyEntryForm({
   date,
   subjects,
+  windowOpen,
   onSaved,
 }: DailyEntryFormProps) {
   const router = useRouter();
@@ -123,8 +129,21 @@ export function DailyEntryForm({
     subjectList.find((subject) => subject.subjectId === subjectId)?.topics ??
     [];
   const total = correct + wrong + blank;
-  const canSubmit = subjectId !== "" && topicId !== "" && total > 0;
+  const dirty = subjectId !== "" || topicId !== "" || total > 0;
+  const canSubmit = windowOpen && subjectId !== "" && topicId !== "" && total > 0;
   const net = netScore(correct, wrong);
+
+  useEffect(() => {
+    if (!windowOpen || !dirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => {
+      window.removeEventListener("beforeunload", handler);
+    };
+  }, [windowOpen, dirty]);
 
   function changeExamType(next: ExamType) {
     setExamType(next);
@@ -156,6 +175,8 @@ export function DailyEntryForm({
         setCorrect(0);
         setWrong(0);
         setBlank(0);
+        setSubjectId("");
+        setTopicId("");
         if (onSaved) {
           onSaved();
         } else {
@@ -175,7 +196,9 @@ export function DailyEntryForm({
     <form
       noValidate
       onSubmit={handleSubmit}
-      className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+      className={`rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition ${
+        windowOpen ? "" : "opacity-60"
+      }`}
     >
       <p className={labelClass}>Sınav Türü</p>
       <div
@@ -188,8 +211,9 @@ export function DailyEntryForm({
             type="button"
             role="tab"
             aria-selected={examType === t}
+            disabled={!windowOpen}
             onClick={() => changeExamType(t)}
-            className={`h-12 rounded-xl text-sm font-semibold transition-colors touch-manipulation ${
+            className={`h-12 rounded-xl text-sm font-semibold transition-colors touch-manipulation disabled:cursor-not-allowed disabled:opacity-50 ${
               examType === t ? "bg-white text-indigo-700 shadow" : "text-gray-500"
             }`}
           >
@@ -205,6 +229,7 @@ export function DailyEntryForm({
         <select
           id="entry-subject"
           value={subjectId}
+          disabled={!windowOpen}
           onChange={(e) => changeSubject(e.target.value)}
           className={selectClass}
         >
@@ -224,8 +249,8 @@ export function DailyEntryForm({
         <select
           id="entry-topic"
           value={topicId}
+          disabled={!windowOpen || subjectId === ""}
           onChange={(e) => setTopicId(e.target.value)}
-          disabled={subjectId === ""}
           className={selectClass}
         >
           <option value="">
@@ -240,9 +265,24 @@ export function DailyEntryForm({
       </div>
 
       <div className="mt-5 space-y-3">
-        <CountStepper field="correct" value={correct} onChange={setCorrect} />
-        <CountStepper field="wrong" value={wrong} onChange={setWrong} />
-        <CountStepper field="blank" value={blank} onChange={setBlank} />
+        <CountStepper
+          field="correct"
+          value={correct}
+          onChange={setCorrect}
+          disabled={!windowOpen}
+        />
+        <CountStepper
+          field="wrong"
+          value={wrong}
+          onChange={setWrong}
+          disabled={!windowOpen}
+        />
+        <CountStepper
+          field="blank"
+          value={blank}
+          onChange={setBlank}
+          disabled={!windowOpen}
+        />
       </div>
 
       <p className="mt-4 rounded-xl bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-600">
@@ -260,10 +300,19 @@ export function DailyEntryForm({
         >
           {saving ? "Kaydediliyor…" : "Günü Kaydet"}
         </button>
-        {!canSubmit && !saving && (
-          <p className="mt-2 text-center text-xs font-medium text-gray-500">
-            Kaydetmek için ders ve konu seç, en az 1 soru gir.
+        {!windowOpen && dirty ? (
+          <p className="mt-2 text-center text-xs font-semibold text-red-600">
+            Süre doldu, giriş kaydedilemedi.
           </p>
+        ) : (
+          !canSubmit &&
+          !saving && (
+            <p className="mt-2 text-center text-xs font-medium text-gray-500">
+              {windowOpen
+                ? "Kaydetmek için ders ve konu seç, en az 1 soru gir."
+                : "Günlük giriş 22.00–23.00 arasında açık."}
+            </p>
+          )
         )}
       </div>
     </form>

@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { auth } from "@/auth";
-import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   curriculumTopics,
@@ -29,6 +29,12 @@ import type {
   SubjectOptions,
 } from "@/components/quiz-entry/daily-entry-types";
 import { actionErrorMessage } from "@/lib/action-error";
+import {
+  assertEntryWindowOpen,
+  ENTRY_DATE_MESSAGE,
+  ENTRY_WINDOW_MESSAGE,
+  getEntryWindow,
+} from "@/lib/entry-window";
 import { markUserSeen } from "@/lib/touch-last-seen";
 
 async function getStudentId(): Promise<
@@ -160,6 +166,25 @@ export async function saveDailyEntry(
     };
   }
 
+  const now = new Date();
+  try {
+    assertEntryWindowOpen(now);
+  } catch (err) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: err instanceof Error ? err.message : ENTRY_WINDOW_MESSAGE,
+    };
+  }
+  const entryWindow = getEntryWindow(now);
+  if (date !== entryWindow.today) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: ENTRY_DATE_MESSAGE,
+    };
+  }
+
   try {
     const topicRows = await db
       .select({ id: curriculumTopics.id })
@@ -265,6 +290,24 @@ export async function saveDailyNote(
       success: false,
       status: "VALIDATION_FAILED",
       message: "Geçersiz tarih.",
+    };
+  }
+
+  const now = new Date();
+  try {
+    assertEntryWindowOpen(now);
+  } catch (err) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: err instanceof Error ? err.message : ENTRY_WINDOW_MESSAGE,
+    };
+  }
+  if (date !== getEntryWindow(now).today) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: ENTRY_DATE_MESSAGE,
     };
   }
 
@@ -980,6 +1023,146 @@ export async function getDailyEntryData(
       status: "DATABASE_ERROR",
       message:
         actionErrorMessage(err),
+    };
+  }
+}
+
+export interface EntryWindowStatusData {
+  state: "before" | "open" | "after";
+  serverNow: string;
+  opensAt: string;
+  closesAt: string;
+  hasEntryToday: boolean;
+}
+
+export type EntryWindowStatusResult =
+  | { success: true; data: EntryWindowStatusData; message: string }
+  | {
+      success: false;
+      status: "UNAUTHORIZED" | "FORBIDDEN" | "DATABASE_ERROR";
+      message: string;
+    };
+
+export async function getEntryWindowStatus(): Promise<EntryWindowStatusResult> {
+  const guard = await getStudentId();
+  if (guard.ok === false) {
+    return { success: false, status: guard.status, message: guard.message };
+  }
+
+  try {
+    const now = new Date();
+    const entryWindow = getEntryWindow(now);
+
+    const [entryRows, noteRows] = await Promise.all([
+      db
+        .select({ id: dailyQuestionEntries.id })
+        .from(dailyQuestionEntries)
+        .where(
+          and(
+            eq(dailyQuestionEntries.studentId, guard.studentId),
+            eq(dailyQuestionEntries.date, entryWindow.today),
+          ),
+        )
+        .limit(1),
+      db
+        .select({ id: studentDailyNotes.id })
+        .from(studentDailyNotes)
+        .where(
+          and(
+            eq(studentDailyNotes.studentId, guard.studentId),
+            eq(studentDailyNotes.date, entryWindow.today),
+          ),
+        )
+        .limit(1),
+    ]);
+
+    return {
+      success: true,
+      data: {
+        state: entryWindow.state,
+        serverNow: now.toISOString(),
+        opensAt: entryWindow.opensAt.toISOString(),
+        closesAt: entryWindow.closesAt.toISOString(),
+        hasEntryToday: entryRows.length > 0 || noteRows.length > 0,
+      },
+      message: "Giriş penceresi durumu yüklendi.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export interface PastEntryRow {
+  id: number;
+  date: string;
+  examType: ExamType;
+  subjectName: string;
+  topicName: string;
+  correct: number;
+  wrong: number;
+  blank: number;
+}
+
+export type PastEntriesResult =
+  | { success: true; data: { entries: PastEntryRow[] }; message: string }
+  | {
+      success: false;
+      status: "UNAUTHORIZED" | "FORBIDDEN" | "DATABASE_ERROR";
+      message: string;
+    };
+
+export async function getPastWeekEntries(): Promise<PastEntriesResult> {
+  const guard = await getStudentId();
+  if (guard.ok === false) {
+    return { success: false, status: guard.status, message: guard.message };
+  }
+
+  try {
+    const today = todayInIstanbul();
+    const weekStart = mondayOfISO(today);
+
+    const rows = await db
+      .select({
+        id: dailyQuestionEntries.id,
+        date: dailyQuestionEntries.date,
+        examType: dailyQuestionEntries.examType,
+        subjectName: curriculumTopics.subjectName,
+        topicName: curriculumTopics.topicName,
+        correct: dailyQuestionEntries.correct,
+        wrong: dailyQuestionEntries.wrong,
+        blank: dailyQuestionEntries.blank,
+      })
+      .from(dailyQuestionEntries)
+      .innerJoin(
+        curriculumTopics,
+        eq(curriculumTopics.id, dailyQuestionEntries.topicId),
+      )
+      .where(
+        and(
+          eq(dailyQuestionEntries.studentId, guard.studentId),
+          gte(dailyQuestionEntries.date, weekStart),
+          lt(dailyQuestionEntries.date, today),
+        ),
+      )
+      .orderBy(
+        desc(dailyQuestionEntries.date),
+        asc(curriculumTopics.subjectName),
+      );
+
+    return {
+      success: true,
+      data: { entries: rows },
+      message: "Geçmiş girişler yüklendi.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
     };
   }
 }

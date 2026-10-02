@@ -1,31 +1,54 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getDailyEntryData, type DailyEntryData } from "@/app/actions/quiz-actions";
+import {
+  getDailyEntryData,
+  getPastWeekEntries,
+  type DailyEntryData,
+  type PastEntryRow,
+} from "@/app/actions/quiz-actions";
 import { QuizEntryClient } from "@/components/student/quiz-entry-client";
 import { todayInIstanbul } from "@/lib/week-utils";
 import { NotificationBanner } from "@/components/notifications/notification-banner";
 import { PanelError, PanelSkeleton } from "@/components/student/panel-ui";
+import { EntryWindowBanner } from "@/components/quiz-entry/entry-window-banner";
+import { useEntryWindow } from "@/components/quiz-entry/use-entry-window";
 
 export function QuizPanel() {
-  const [date, setDate] = useState(() => todayInIstanbul());
+  const [date] = useState(() => todayInIstanbul());
   const [reloadKey, setReloadKey] = useState(0);
   const [result, setResult] = useState<
     { success: true; data: DailyEntryData } | { success: false; message: string } | null
   >(null);
+  const [pastEntries, setPastEntries] = useState<PastEntryRow[]>([]);
+  const { status, entryWindow, alert, refresh } = useEntryWindow();
 
   useEffect(() => {
     let cancelled = false;
     setResult(null);
     void (async () => {
-      const res = await getDailyEntryData(date);
+      const [daily, past] = await Promise.all([
+        getDailyEntryData(date),
+        getPastWeekEntries(),
+      ]);
       if (cancelled) return;
-      setResult(res);
+      setResult(daily);
+      if (past.success) {
+        setPastEntries(past.data.entries);
+      }
     })();
     return () => {
       cancelled = true;
     };
   }, [date, reloadKey]);
+
+  const windowState = entryWindow?.state ?? status?.state ?? "before";
+  const windowOpen = windowState === "open";
+
+  function handleSaved() {
+    setReloadKey((k) => k + 1);
+    refresh();
+  }
 
   return (
     <>
@@ -38,6 +61,12 @@ export function QuizPanel() {
 
       <NotificationBanner />
 
+      <EntryWindowBanner
+        status={status}
+        entryWindow={entryWindow}
+        alert={alert}
+      />
+
       {result === null ? (
         <PanelSkeleton rows={6} />
       ) : result.success === false ? (
@@ -46,11 +75,12 @@ export function QuizPanel() {
         <QuizEntryClient
           date={date}
           entries={result.data.entries}
+          pastEntries={pastEntries}
           subjects={result.data.subjects}
           initialDailyNote={result.data.dailyNote}
-          onDateChange={setDate}
-          onSaved={() => setReloadKey((k) => k + 1)}
-          onNoteSaved={() => setReloadKey((k) => k + 1)}
+          windowOpen={windowOpen}
+          onSaved={handleSaved}
+          onNoteSaved={handleSaved}
         />
       )}
     </>

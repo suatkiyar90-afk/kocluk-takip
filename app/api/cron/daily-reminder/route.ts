@@ -48,8 +48,8 @@ async function runDailyReminder(): Promise<NextResponse> {
       inactiveIds.map((studentId) =>
         sendPushNotification(
           studentId,
-          "Günün Özeti Eksik!",
-          "Bugün henüz soru çözümü girmedin. Hedeflerinden geri kalmamak için hemen sisteme gir.",
+          "Günlük Giriş Hatırlatması",
+          "Bugünkü veri girişi 22.00–23.00 arasında açık. Kaçırma!",
           "/quiz-entry",
         ),
       ),
