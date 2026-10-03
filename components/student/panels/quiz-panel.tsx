@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import {
   getDailyEntryData,
-  getPastWeekEntries,
+  getPastEntryDays,
   type DailyEntryData,
-  type PastEntryRow,
+  type PastDayPageData,
 } from "@/app/actions/quiz-actions";
 import { QuizEntryClient } from "@/components/student/quiz-entry-client";
 import { todayInIstanbul } from "@/lib/week-utils";
@@ -14,27 +14,36 @@ import { PanelError, PanelSkeleton } from "@/components/student/panel-ui";
 import { EntryWindowBanner } from "@/components/quiz-entry/entry-window-banner";
 import { useEntryWindow } from "@/components/quiz-entry/use-entry-window";
 
-export function QuizPanel() {
+interface QuizPanelProps {
+  studentId: string;
+}
+
+export function QuizPanel({ studentId }: QuizPanelProps) {
   const [date] = useState(() => todayInIstanbul());
   const [reloadKey, setReloadKey] = useState(0);
   const [result, setResult] = useState<
     { success: true; data: DailyEntryData } | { success: false; message: string } | null
   >(null);
-  const [pastEntries, setPastEntries] = useState<PastEntryRow[]>([]);
+  const [pastData, setPastData] = useState<PastDayPageData | null>(null);
+  const [pastError, setPastError] = useState<string | null>(null);
   const { status, entryWindow, alert, refresh } = useEntryWindow();
 
   useEffect(() => {
     let cancelled = false;
     setResult(null);
+    setPastData(null);
+    setPastError(null);
     void (async () => {
       const [daily, past] = await Promise.all([
         getDailyEntryData(date),
-        getPastWeekEntries(),
+        getPastEntryDays(),
       ]);
       if (cancelled) return;
       setResult(daily);
-      if (past.success) {
-        setPastEntries(past.data.entries);
+      if (past.success === false) {
+        setPastError(past.message);
+      } else {
+        setPastData(past.data);
       }
     })();
     return () => {
@@ -73,14 +82,15 @@ export function QuizPanel() {
         <PanelError message={result.message} />
       ) : (
         <QuizEntryClient
+          studentId={studentId}
           date={date}
           entries={result.data.entries}
-          pastEntries={pastEntries}
+          initialPast={pastData}
+          pastError={pastError}
           subjects={result.data.subjects}
           initialDailyNote={result.data.dailyNote}
           windowOpen={windowOpen}
           onSaved={handleSaved}
-          onNoteSaved={handleSaved}
         />
       )}
     </>

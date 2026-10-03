@@ -15,6 +15,8 @@ export type SubjectOptions = Record<ExamType, SubjectOption[]>;
 
 export interface DayEntryRow {
   id: number;
+  topicId: number;
+  subjectId: string;
   examType: ExamType;
   subjectName: string;
   topicName: string;

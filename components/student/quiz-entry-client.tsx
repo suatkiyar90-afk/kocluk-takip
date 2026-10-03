@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
-import { saveDailyNote, type PastEntryRow } from "@/app/actions/quiz-actions";
+import { ChevronDown, Loader2 } from "lucide-react";
 import { DailyEntryForm } from "@/components/quiz-entry/daily-entry-form";
+import {
+  getPastEntryDays,
+  type PastDayGroup,
+  type PastDayPageData,
+} from "@/app/actions/quiz-actions";
 import type {
   DayEntryRow,
   SubjectOptions,
@@ -18,109 +22,90 @@ function formatFullDate(iso: string): string {
   });
 }
 
-function formatShortDate(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("tr-TR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-interface EntryListItemProps {
-  title: string;
-  examType: string;
-  correct: number;
-  wrong: number;
-  blank: number;
-}
-
-function EntryListItem({
-  title,
-  examType,
-  correct,
-  wrong,
-  blank,
-}: EntryListItemProps) {
-  return (
-    <li className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start gap-2">
-        <span className="mt-0.5 shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-700">
-          {examType}
-        </span>
-        <p className="min-w-0 text-sm font-semibold text-gray-900">{title}</p>
-      </div>
-      <p className="mt-1.5 pl-1 text-xs font-medium text-gray-500">
-        <span className="font-bold text-green-600">{correct} Doğru</span> ,{" "}
-        <span className="font-bold text-red-600">{wrong} Yanlış</span> ,{" "}
-        <span className="font-bold text-stone-500">{blank} Boş</span>
-      </p>
-    </li>
-  );
+function formatNet(value: number): string {
+  return value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
 }
 
 interface QuizEntryClientProps {
+  studentId: string;
   date: string;
   entries: DayEntryRow[];
-  pastEntries: PastEntryRow[];
+  initialPast: PastDayPageData | null;
+  pastError: string | null;
   subjects: SubjectOptions;
   initialDailyNote: string | null;
   windowOpen: boolean;
   onSaved?: () => void;
-  onNoteSaved?: () => void;
 }
 
 export function QuizEntryClient({
+  studentId,
   date,
   entries,
-  pastEntries,
+  initialPast,
+  pastError,
   subjects,
   initialDailyNote,
   windowOpen,
   onSaved,
-  onNoteSaved,
 }: QuizEntryClientProps) {
-  const [dailyNote, setDailyNote] = useState(initialDailyNote ?? "");
-  const [savingNote, setSavingNote] = useState(false);
-  const noteDirty = dailyNote !== (initialDailyNote ?? "");
+  const [pastDays, setPastDays] = useState<PastDayGroup[]>(
+    initialPast?.days ?? [],
+  );
+  const [hasMore, setHasMore] = useState(initialPast?.hasMore ?? false);
+  const [nextCursor, setNextCursor] = useState<string | null>(
+    initialPast?.nextCursor ?? null,
+  );
+  const [openDates, setOpenDates] = useState<string[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!windowOpen || !noteDirty) return;
-    const handler = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => {
-      window.removeEventListener("beforeunload", handler);
-    };
-  }, [windowOpen, noteDirty]);
+    setPastDays(initialPast?.days ?? []);
+    setHasMore(initialPast?.hasMore ?? false);
+    setNextCursor(initialPast?.nextCursor ?? null);
+    setMoreError(null);
+    setOpenDates([]);
+  }, [initialPast]);
 
-  async function handleSaveNote() {
-    if (savingNote || !windowOpen) return;
-    const trimmed = dailyNote.trim();
-    if (trimmed === "") {
-      toast.error("Not boş olamaz.");
-      return;
-    }
-    setSavingNote(true);
+  const pastLoading = initialPast === null && pastError === null;
+  const allOpen =
+    pastDays.length > 0 && pastDays.every((day) => openDates.includes(day.date));
+
+  function toggleDay(dateKey: string) {
+    setOpenDates((prev) =>
+      prev.includes(dateKey)
+        ? prev.filter((value) => value !== dateKey)
+        : [...prev, dateKey],
+    );
+  }
+
+  function toggleAll() {
+    setOpenDates(allOpen ? [] : pastDays.map((day) => day.date));
+  }
+
+  async function loadMore() {
+    if (loadingMore || !hasMore || nextCursor === null) return;
+    setLoadingMore(true);
+    setMoreError(null);
     try {
-      const result = await saveDailyNote(date, trimmed);
-      if (result.success === true) {
-        toast.success("Günün özeti kaydedildi.");
-        if (onNoteSaved) onNoteSaved();
+      const res = await getPastEntryDays({ cursor: nextCursor });
+      if (res.success === false) {
+        setMoreError(res.message);
       } else {
-        toast.error(result.message);
+        setPastDays((prev) => [...prev, ...res.data.days]);
+        setHasMore(res.data.hasMore);
+        setNextCursor(res.data.nextCursor);
       }
     } catch {
-      toast.error("Not kaydedilirken beklenmeyen bir hata oluştu.");
+      setMoreError("Beklenmeyen bir hata oluştu.");
     } finally {
-      setSavingNote(false);
+      setLoadingMore(false);
     }
   }
 
   return (
-    <>
+    <div className="pb-[calc(11rem+env(safe-area-inset-bottom))]">
       <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
           Tarih
@@ -135,124 +120,172 @@ export function QuizEntryClient({
           className="mt-1 text-xs font-medium text-gray-500"
           suppressHydrationWarning
         >
-          Girişler yalnızca bugün için kaydedilir.
+          Girişler yalnızca bugün için kaydedilir. Değişiklikler
+          &ldquo;Günü Kaydet&rdquo; ile birlikte gönderilir.
         </p>
       </section>
 
       <DailyEntryForm
+        studentId={studentId}
         date={date}
         subjects={subjects}
+        initialEntries={entries}
+        initialSummary={initialDailyNote ?? ""}
         windowOpen={windowOpen}
-        onSaved={onSaved}
+        onSaved={onSaved ?? (() => {})}
       />
 
       <section className="mt-6">
-        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
-          Bugün · Kayıtlar
-        </h2>
-        {entries.length === 0 ? (
-          <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm font-medium text-gray-500">
-            Bugün için henüz kayıt yok.
-          </div>
-        ) : (
-          <ul className="space-y-2">
-            {entries.map((row) => (
-              <EntryListItem
-                key={row.id}
-                title={`Bugün - ${row.subjectName} - ${row.topicName}`}
-                examType={row.examType}
-                correct={row.correct}
-                wrong={row.wrong}
-                blank={row.blank}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="mt-6">
-        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
-          Geçmiş girişlerim
-        </h2>
-        {pastEntries.length === 0 ? (
-          <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm font-medium text-gray-500">
-            Bu hafta için geçmiş gün kaydı yok.
-          </div>
-        ) : (
-          <ul className="space-y-2">
-            {pastEntries.map((row) => (
-              <EntryListItem
-                key={row.id}
-                title={`${formatShortDate(row.date)} - ${row.subjectName} - ${row.topicName}`}
-                examType={row.examType}
-                correct={row.correct}
-                wrong={row.wrong}
-                blank={row.blank}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-2 flex items-center justify-between gap-2">
           <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">
-            Günün Özeti
+            Geçmiş girişlerim
           </h2>
-          <span
-            className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700"
-            suppressHydrationWarning
-          >
-            Bugün
-          </span>
+          {pastDays.length > 0 && (
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="shrink-0 touch-manipulation text-xs font-semibold text-indigo-600 transition hover:text-indigo-700"
+            >
+              {allOpen ? "Tümünü kapat" : "Tümünü aç"}
+            </button>
+          )}
         </div>
-        <p className="mt-1.5 text-xs font-medium text-gray-500">
-          O gün çözdüğün soruları, izlediğin videoları ve notlarını buraya yaz.
-          Soru girişinden bağımsızdır, sadece bugüne kaydedilir.
-        </p>
-        <label htmlFor="daily-note" className="sr-only">
-          Günün özeti
-        </label>
-        <textarea
-          id="daily-note"
-          value={dailyNote}
-          onChange={(e) => setDailyNote(e.target.value)}
-          maxLength={2000}
-          rows={5}
-          disabled={!windowOpen}
-          placeholder={
-            windowOpen
-              ? "Bugün ne yaptın? İzlediğin videolar, dikkatini çeken konular..."
-              : "Giriş kapalıyken özet yazılamaz."
-          }
-          className="mt-3 w-full resize-y rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400 disabled:opacity-60"
-        />
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <p className="text-[11px] font-medium text-gray-400">
-            {dailyNote.length}/2000
-          </p>
-          <button
-            type="button"
-            onClick={handleSaveNote}
-            disabled={
-              savingNote || dailyNote.trim() === "" || !windowOpen
-            }
-            className="h-12 shrink-0 rounded-xl bg-indigo-600 px-6 text-sm font-bold text-white shadow-lg shadow-indigo-600/25 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 touch-manipulation"
+
+        {pastLoading ? (
+          <div
+            className="space-y-2"
+            role="status"
+            aria-label="Geçmiş girişler yükleniyor"
           >
-            {savingNote ? "Kaydediliyor…" : "Notu Kaydet"}
-          </button>
-        </div>
-        {!windowOpen && (
-          <p className="mt-2 text-right text-[11px] font-semibold text-amber-600">
-            Günün özeti yalnızca 22.00–23.00 arasında kaydedilebilir.
-          </p>
-        )}
-        {windowOpen && dailyNote.trim() === "" && !savingNote && (
-          <p className="mt-2 text-right text-[11px] font-medium text-gray-400">
-            Kaydetmek için alana bir şeyler yaz.
-          </p>
+            {[0, 1, 2].map((index) => (
+              <div
+                key={index}
+                aria-hidden="true"
+                className="h-12 animate-pulse rounded-xl bg-gray-200"
+              />
+            ))}
+          </div>
+        ) : pastError !== null ? (
+          <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm font-medium text-red-600">
+            {pastError}
+          </div>
+        ) : pastDays.length === 0 ? (
+          <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm font-medium text-gray-500">
+            Henüz geçmiş girişin yok.
+          </div>
+        ) : (
+          <>
+            <ul className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+              {pastDays.map((day) => {
+                const open = openDates.includes(day.date);
+                return (
+                  <li
+                    key={day.date}
+                    className="border-b border-gray-100 last:border-b-0"
+                  >
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      aria-controls={`past-day-${day.date}`}
+                      onClick={() => toggleDay(day.date)}
+                      className="flex min-h-[48px] w-full touch-manipulation items-center gap-2 px-3 py-2 text-left transition hover:bg-gray-50 active:bg-gray-100"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">
+                        {day.label}
+                      </span>
+                      <span className="shrink-0 text-[11px] font-medium text-gray-500">
+                        {day.topics.length} konu · {day.questions} soru ·{" "}
+                        <span className="font-bold text-indigo-700">
+                          Net {formatNet(day.net)}
+                        </span>
+                      </span>
+                      <ChevronDown
+                        aria-hidden="true"
+                        className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${
+                          open ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                    <div id={`past-day-${day.date}`} hidden={!open}>
+                      <ul className="border-t border-gray-100 bg-gray-50/60">
+                        {day.topics.map((topic) => (
+                          <li
+                            key={topic.id}
+                            className="flex h-11 items-center gap-2 border-b border-gray-100 px-3 last:border-b-0"
+                          >
+                            <span className="w-9 shrink-0 rounded-full bg-indigo-50 px-1 py-0.5 text-center text-[10px] font-bold text-indigo-700">
+                              {topic.examType}
+                            </span>
+                            <span
+                              className="min-w-0 flex-1 truncate text-[13px] font-medium text-gray-700"
+                              title={`${topic.subjectName} · ${topic.topicName}`}
+                            >
+                              {topic.subjectName} · {topic.topicName}
+                            </span>
+                            <span className="shrink-0 text-[11px] font-bold text-green-600">
+                              {topic.correct}D
+                            </span>
+                            <span className="shrink-0 text-[11px] font-bold text-red-500">
+                              {topic.wrong}Y
+                            </span>
+                            <span className="shrink-0 text-[11px] font-bold text-stone-400">
+                              {topic.blank}B
+                            </span>
+                            <span
+                              aria-label={`Net ${formatNet(topic.net)}`}
+                              className="w-10 shrink-0 text-right text-[11px] font-bold text-indigo-700"
+                            >
+                              {formatNet(topic.net)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      {day.summary && (
+                        <div className="border-t border-gray-100 bg-white px-3 py-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                            Günün özeti
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-gray-600">
+                            {day.summary}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {hasMore && (
+              <div className="mt-3">
+                {moreError !== null && (
+                  <p className="mb-2 text-center text-xs font-medium text-red-600">
+                    {moreError}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="flex h-11 w-full touch-manipulation items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 transition hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60"
+                >
+                  {loadingMore ? (
+                    <>
+                      <Loader2
+                        className="h-4 w-4 animate-spin"
+                        aria-hidden="true"
+                      />
+                      Yükleniyor…
+                    </>
+                  ) : (
+                    "Daha eski günleri göster"
+                  )}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
-    </>
+    </div>
   );
 }

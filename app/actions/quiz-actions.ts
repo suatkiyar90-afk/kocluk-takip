@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { auth } from "@/auth";
-import { and, asc, desc, eq, gte, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   curriculumTopics,
@@ -29,6 +29,12 @@ import type {
   SubjectOptions,
 } from "@/components/quiz-entry/daily-entry-types";
 import { actionErrorMessage } from "@/lib/action-error";
+import { MAX_DAY_ENTRIES } from "@/lib/daily-entry-list";
+import {
+  groupPastRows,
+  paginatePastGroups,
+  type PastDayGroup,
+} from "@/lib/past-entry-days";
 import {
   assertEntryWindowOpen,
   ENTRY_DATE_MESSAGE,
@@ -36,6 +42,7 @@ import {
   getEntryWindow,
 } from "@/lib/entry-window";
 import { markUserSeen } from "@/lib/touch-last-seen";
+import { planSaveDay, saveDaySchema } from "@/lib/save-day-plan";
 
 async function getStudentId(): Promise<
   | { ok: true; studentId: string }
@@ -108,250 +115,6 @@ async function isAssigned(
 
 function roundNet(n: number): number {
   return Math.round(n * 100) / 100;
-}
-
-const dailyEntrySchema = z.object({
-  date: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Tarih YYYY-AA-AA formatında olmalı."),
-  examType: z.enum(examTypes),
-  subjectId: z.string().min(1).max(50),
-  topicId: z.number().int().positive(),
-  correct: z.number().int().min(0).max(500),
-  wrong: z.number().int().min(0).max(500),
-  blank: z.number().int().min(0).max(500),
-});
-
-export type SaveDailyEntryResult =
-  | {
-      success: true;
-      data: { id: number; date: string };
-    }
-  | {
-      success: false;
-      status: "UNAUTHORIZED" | "FORBIDDEN" | "VALIDATION_FAILED" | "DATABASE_ERROR";
-      message: string;
-    };
-
-export async function saveDailyEntry(
-  payload: unknown,
-): Promise<SaveDailyEntryResult> {
-  const authCtx = await getStudentId();
-  if (authCtx.ok === false) {
-    return {
-      success: false,
-      status: authCtx.status,
-      message: authCtx.message,
-    };
-  }
-  const studentId = authCtx.studentId;
-
-  const parsed = dailyEntrySchema.safeParse(payload);
-  if (!parsed.success) {
-    return {
-      success: false,
-      status: "VALIDATION_FAILED",
-      message: parsed.error.issues.map((issue) => issue.message).join(", "),
-    };
-  }
-
-  const { date, examType, subjectId, topicId, correct, wrong, blank } =
-    parsed.data;
-
-  if (!isValidISODate(date)) {
-    return {
-      success: false,
-      status: "VALIDATION_FAILED",
-      message: "Geçersiz tarih.",
-    };
-  }
-
-  const now = new Date();
-  try {
-    assertEntryWindowOpen(now);
-  } catch (err) {
-    return {
-      success: false,
-      status: "VALIDATION_FAILED",
-      message: err instanceof Error ? err.message : ENTRY_WINDOW_MESSAGE,
-    };
-  }
-  const entryWindow = getEntryWindow(now);
-  if (date !== entryWindow.today) {
-    return {
-      success: false,
-      status: "VALIDATION_FAILED",
-      message: ENTRY_DATE_MESSAGE,
-    };
-  }
-
-  try {
-    const topicRows = await db
-      .select({ id: curriculumTopics.id })
-      .from(curriculumTopics)
-      .where(
-        and(
-          eq(curriculumTopics.id, topicId),
-          eq(curriculumTopics.examType, examType),
-          eq(curriculumTopics.subjectId, subjectId),
-        ),
-      )
-      .limit(1);
-
-    if (topicRows.length === 0) {
-      return {
-        success: false,
-        status: "VALIDATION_FAILED",
-        message: "Seçilen konu, ders ve sınav türü ile eşleşmiyor.",
-      };
-    }
-
-    const setValues = {
-      correct: sql`excluded.correct`,
-      wrong: sql`excluded.wrong`,
-      blank: sql`excluded.blank`,
-    } as {
-      id?: number;
-      studentId?: string;
-      date?: string;
-      examType?: ExamType;
-      subjectId?: string;
-      topicId?: number;
-      correct?: unknown;
-      wrong?: unknown;
-      blank?: unknown;
-      createdAt?: Date;
-    };
-
-    const row = {
-      studentId,
-      date,
-      examType,
-      subjectId,
-      topicId,
-      correct,
-      wrong,
-      blank,
-    };
-
-    const inserted = await db
-      .insert(dailyQuestionEntries)
-      .values(row)
-      .onConflictDoUpdate({
-        target: [
-          dailyQuestionEntries.studentId,
-          dailyQuestionEntries.date,
-          dailyQuestionEntries.examType,
-          dailyQuestionEntries.subjectId,
-          dailyQuestionEntries.topicId,
-        ],
-        set: setValues,
-      })
-      .returning({ id: dailyQuestionEntries.id });
-
-    await markUserSeen(studentId);
-    return { success: true, data: { id: inserted[0].id, date } };
-  } catch (err) {
-    return {
-      success: false,
-      status: "DATABASE_ERROR",
-      message:
-        actionErrorMessage(err),
-    };
-  }
-}
-
-export type SaveDailyNoteResult =
-  | {
-      success: true;
-      data: { date: string };
-    }
-  | {
-      success: false;
-      status: "UNAUTHORIZED" | "FORBIDDEN" | "VALIDATION_FAILED" | "DATABASE_ERROR";
-      message: string;
-    };
-
-export async function saveDailyNote(
-  date: string,
-  note: string,
-): Promise<SaveDailyNoteResult> {
-  const authCtx = await getStudentId();
-  if (authCtx.ok === false) {
-    return {
-      success: false,
-      status: authCtx.status,
-      message: authCtx.message,
-    };
-  }
-
-  if (!isValidPastDate(date)) {
-    return {
-      success: false,
-      status: "VALIDATION_FAILED",
-      message: "Geçersiz tarih.",
-    };
-  }
-
-  const now = new Date();
-  try {
-    assertEntryWindowOpen(now);
-  } catch (err) {
-    return {
-      success: false,
-      status: "VALIDATION_FAILED",
-      message: err instanceof Error ? err.message : ENTRY_WINDOW_MESSAGE,
-    };
-  }
-  if (date !== getEntryWindow(now).today) {
-    return {
-      success: false,
-      status: "VALIDATION_FAILED",
-      message: ENTRY_DATE_MESSAGE,
-    };
-  }
-
-  const trimmed = note.trim();
-  if (trimmed.length === 0) {
-    return {
-      success: false,
-      status: "VALIDATION_FAILED",
-      message: "Not boş olamaz.",
-    };
-  }
-  if (trimmed.length > 2000) {
-    return {
-      success: false,
-      status: "VALIDATION_FAILED",
-      message: "Not en fazla 2000 karakter olabilir.",
-    };
-  }
-
-  try {
-    await db
-      .insert(studentDailyNotes)
-      .values({
-        studentId: authCtx.studentId,
-        date,
-        note: trimmed,
-      })
-      .onConflictDoUpdate({
-        target: [studentDailyNotes.studentId, studentDailyNotes.date],
-        set: {
-          note: trimmed,
-          updatedAt: new Date(),
-        } as Partial<typeof studentDailyNotes.$inferInsert>,
-      });
-
-    return { success: true, data: { date } };
-  } catch (err) {
-    return {
-      success: false,
-      status: "DATABASE_ERROR",
-      message:
-        actionErrorMessage(err),
-    };
-  }
 }
 
 export interface DailyReportDay {
@@ -937,6 +700,8 @@ export async function getDailyEntryData(
       db
         .select({
           id: dailyQuestionEntries.id,
+          topicId: dailyQuestionEntries.topicId,
+          subjectId: dailyQuestionEntries.subjectId,
           examType: dailyQuestionEntries.examType,
           subjectName: curriculumTopics.subjectName,
           topicName: curriculumTopics.topicName,
@@ -1096,26 +861,25 @@ export async function getEntryWindowStatus(): Promise<EntryWindowStatusResult> {
   }
 }
 
-export interface PastEntryRow {
-  id: number;
-  date: string;
-  examType: ExamType;
-  subjectName: string;
-  topicName: string;
-  correct: number;
-  wrong: number;
-  blank: number;
+export type { PastDayGroup };
+
+export interface PastDayPageData {
+  days: PastDayGroup[];
+  hasMore: boolean;
+  nextCursor: string | null;
 }
 
-export type PastEntriesResult =
-  | { success: true; data: { entries: PastEntryRow[] }; message: string }
+export type GetPastEntryDaysResult =
+  | { success: true; data: PastDayPageData }
   | {
       success: false;
       status: "UNAUTHORIZED" | "FORBIDDEN" | "DATABASE_ERROR";
       message: string;
     };
 
-export async function getPastWeekEntries(): Promise<PastEntriesResult> {
+export async function getPastEntryDays(
+  args?: { cursor?: string | null; limit?: number },
+): Promise<GetPastEntryDaysResult> {
   const guard = await getStudentId();
   if (guard.ok === false) {
     return { success: false, status: guard.status, message: guard.message };
@@ -1123,18 +887,340 @@ export async function getPastWeekEntries(): Promise<PastEntriesResult> {
 
   try {
     const today = todayInIstanbul();
-    const weekStart = mondayOfISO(today);
+    const rawLimit = Math.trunc(args?.limit ?? 7);
+    const limit = Number.isFinite(rawLimit)
+      ? Math.min(30, Math.max(1, rawLimit))
+      : 7;
+    const cursor =
+      typeof args?.cursor === "string" &&
+      isValidISODate(args.cursor) &&
+      args.cursor < today
+        ? args.cursor
+        : null;
+    const upperBound = cursor ?? today;
 
+    const [rows, noteRows] = await Promise.all([
+      db
+        .select({
+          id: dailyQuestionEntries.id,
+          date: dailyQuestionEntries.date,
+          examType: dailyQuestionEntries.examType,
+          subjectName: curriculumTopics.subjectName,
+          topicName: curriculumTopics.topicName,
+          correct: dailyQuestionEntries.correct,
+          wrong: dailyQuestionEntries.wrong,
+          blank: dailyQuestionEntries.blank,
+        })
+        .from(dailyQuestionEntries)
+        .innerJoin(
+          curriculumTopics,
+          eq(curriculumTopics.id, dailyQuestionEntries.topicId),
+        )
+        .where(
+          and(
+            eq(dailyQuestionEntries.studentId, guard.studentId),
+            lt(dailyQuestionEntries.date, upperBound),
+          ),
+        )
+        .orderBy(
+          desc(dailyQuestionEntries.date),
+          asc(curriculumTopics.examType),
+          asc(curriculumTopics.subjectName),
+          asc(curriculumTopics.sortOrder),
+        )
+        .limit((limit + 1) * MAX_DAY_ENTRIES),
+      db
+        .select({
+          date: studentDailyNotes.date,
+          note: studentDailyNotes.note,
+        })
+        .from(studentDailyNotes)
+        .where(
+          and(
+            eq(studentDailyNotes.studentId, guard.studentId),
+            lt(studentDailyNotes.date, upperBound),
+          ),
+        ),
+    ]);
+
+    const notes: Record<string, string> = {};
+    for (const row of noteRows) {
+      if (row.note.trim()) {
+        notes[row.date] = row.note;
+      }
+    }
+
+    const groups = groupPastRows(rows, notes, today);
+    return { success: true, data: paginatePastGroups(groups, limit) };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export type SaveDayResult =
+  | {
+      success: true;
+      data: { entries: DayEntryRow[]; summary: string };
+    }
+  | {
+      success: false;
+      status: "UNAUTHORIZED" | "FORBIDDEN" | "VALIDATION_FAILED" | "DATABASE_ERROR";
+      message: string;
+    };
+
+export async function saveDay(payload: unknown): Promise<SaveDayResult> {
+  const authCtx = await getStudentId();
+  if (authCtx.ok === false) {
+    return {
+      success: false,
+      status: authCtx.status,
+      message: authCtx.message,
+    };
+  }
+  const studentId = authCtx.studentId;
+
+  const parsed = saveDaySchema.safeParse(payload);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((issue) => issue.message).join(", "),
+    };
+  }
+
+  const now = new Date();
+  try {
+    assertEntryWindowOpen(now);
+  } catch (err) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: err instanceof Error ? err.message : ENTRY_WINDOW_MESSAGE,
+    };
+  }
+  const today = getEntryWindow(now).today;
+
+  try {
+    const rows = parsed.data.entries;
+    const topicIds = rows.map((row) => row.topicId);
+    const topicRows =
+      topicIds.length > 0
+        ? await db
+            .select({
+              id: curriculumTopics.id,
+              examType: curriculumTopics.examType,
+              subjectId: curriculumTopics.subjectId,
+            })
+            .from(curriculumTopics)
+            .where(inArray(curriculumTopics.id, topicIds))
+        : [];
+    const topicMap = new Map(topicRows.map((topic) => [topic.id, topic]));
+    if (topicMap.size !== new Set(topicIds).size) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message: "Seçilen konu bulunamadı.",
+      };
+    }
+    for (const row of rows) {
+      const topic = topicMap.get(row.topicId)!;
+      if (
+        topic.examType !== row.examType ||
+        topic.subjectId !== row.subjectId
+      ) {
+        return {
+          success: false,
+          status: "VALIDATION_FAILED",
+          message: "Seçilen konu, ders ve sınav türü ile eşleşmiyor.",
+        };
+      }
+    }
+
+    const existing = await db
+      .select({ topicId: dailyQuestionEntries.topicId })
+      .from(dailyQuestionEntries)
+      .where(
+        and(
+          eq(dailyQuestionEntries.studentId, studentId),
+          eq(dailyQuestionEntries.date, today),
+        ),
+      );
+
+    const plan = planSaveDay(existing, parsed.data);
+
+    const entries = await db.transaction(async (tx) => {
+      if (plan.deleteTopicIds.length > 0) {
+        await tx
+          .delete(dailyQuestionEntries)
+          .where(
+            and(
+              eq(dailyQuestionEntries.studentId, studentId),
+              eq(dailyQuestionEntries.date, today),
+              inArray(dailyQuestionEntries.topicId, plan.deleteTopicIds),
+            ),
+          );
+      }
+
+      if (plan.upserts.length > 0) {
+        await tx
+          .insert(dailyQuestionEntries)
+          .values(
+            plan.upserts.map((row) => ({
+              studentId,
+              date: today,
+              examType: row.examType,
+              subjectId: row.subjectId,
+              topicId: row.topicId,
+              correct: row.correct,
+              wrong: row.wrong,
+              blank: row.blank,
+            })),
+          )
+          .onConflictDoUpdate({
+            target: [
+              dailyQuestionEntries.studentId,
+              dailyQuestionEntries.date,
+              dailyQuestionEntries.examType,
+              dailyQuestionEntries.subjectId,
+              dailyQuestionEntries.topicId,
+            ],
+            set: {
+              correct: sql`excluded.correct`,
+              wrong: sql`excluded.wrong`,
+              blank: sql`excluded.blank`,
+            } as {
+              id?: number;
+              studentId?: string;
+              date?: string;
+              examType?: ExamType;
+              subjectId?: string;
+              topicId?: number;
+              correct?: unknown;
+              wrong?: unknown;
+              blank?: unknown;
+              createdAt?: Date;
+            },
+          });
+      }
+
+      if (plan.note.op === "upsert") {
+        await tx
+          .insert(studentDailyNotes)
+          .values({
+            studentId,
+            date: today,
+            note: plan.note.value,
+          })
+          .onConflictDoUpdate({
+            target: [studentDailyNotes.studentId, studentDailyNotes.date],
+            set: {
+              note: plan.note.value,
+              updatedAt: new Date(),
+            } as Partial<typeof studentDailyNotes.$inferInsert>,
+          });
+      } else {
+        await tx
+          .delete(studentDailyNotes)
+          .where(
+            and(
+              eq(studentDailyNotes.studentId, studentId),
+              eq(studentDailyNotes.date, today),
+            ),
+          );
+      }
+
+      return await tx
+        .select({
+          id: dailyQuestionEntries.id,
+          topicId: dailyQuestionEntries.topicId,
+          subjectId: dailyQuestionEntries.subjectId,
+          examType: dailyQuestionEntries.examType,
+          subjectName: curriculumTopics.subjectName,
+          topicName: curriculumTopics.topicName,
+          correct: dailyQuestionEntries.correct,
+          wrong: dailyQuestionEntries.wrong,
+          blank: dailyQuestionEntries.blank,
+        })
+        .from(dailyQuestionEntries)
+        .innerJoin(
+          curriculumTopics,
+          eq(curriculumTopics.id, dailyQuestionEntries.topicId),
+        )
+        .where(
+          and(
+            eq(dailyQuestionEntries.studentId, studentId),
+            eq(dailyQuestionEntries.date, today),
+          ),
+        )
+        .orderBy(
+          asc(dailyQuestionEntries.examType),
+          asc(curriculumTopics.subjectName),
+          asc(curriculumTopics.sortOrder),
+        );
+    });
+
+    await markUserSeen(studentId);
+    return {
+      success: true,
+      data: {
+        entries,
+        summary: plan.note.op === "upsert" ? plan.note.value : "",
+      },
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export interface RecentTopicRow {
+  topicId: number;
+  topicName: string;
+  examType: ExamType;
+}
+
+export type RecentTopicsResult =
+  | { success: true; data: { topics: RecentTopicRow[] } }
+  | {
+      success: false;
+      status: "UNAUTHORIZED" | "FORBIDDEN" | "VALIDATION_FAILED" | "DATABASE_ERROR";
+      message: string;
+    };
+
+export async function getRecentTopicsForSubject(
+  subjectId: string,
+): Promise<RecentTopicsResult> {
+  const guard = await getStudentId();
+  if (guard.ok === false) {
+    return { success: false, status: guard.status, message: guard.message };
+  }
+
+  if (
+    typeof subjectId !== "string" ||
+    subjectId.length === 0 ||
+    subjectId.length > 50
+  ) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: "Geçersiz ders.",
+    };
+  }
+
+  try {
     const rows = await db
       .select({
-        id: dailyQuestionEntries.id,
-        date: dailyQuestionEntries.date,
-        examType: dailyQuestionEntries.examType,
-        subjectName: curriculumTopics.subjectName,
+        topicId: dailyQuestionEntries.topicId,
         topicName: curriculumTopics.topicName,
-        correct: dailyQuestionEntries.correct,
-        wrong: dailyQuestionEntries.wrong,
-        blank: dailyQuestionEntries.blank,
+        examType: curriculumTopics.examType,
+        lastUsed: sql<string>`max(${dailyQuestionEntries.createdAt})`,
       })
       .from(dailyQuestionEntries)
       .innerJoin(
@@ -1144,19 +1230,26 @@ export async function getPastWeekEntries(): Promise<PastEntriesResult> {
       .where(
         and(
           eq(dailyQuestionEntries.studentId, guard.studentId),
-          gte(dailyQuestionEntries.date, weekStart),
-          lt(dailyQuestionEntries.date, today),
+          eq(dailyQuestionEntries.subjectId, subjectId),
         ),
       )
-      .orderBy(
-        desc(dailyQuestionEntries.date),
-        asc(curriculumTopics.subjectName),
-      );
+      .groupBy(
+        dailyQuestionEntries.topicId,
+        curriculumTopics.topicName,
+        curriculumTopics.examType,
+      )
+      .orderBy(desc(sql`max(${dailyQuestionEntries.createdAt})`))
+      .limit(6);
 
     return {
       success: true,
-      data: { entries: rows },
-      message: "Geçmiş girişler yüklendi.",
+      data: {
+        topics: rows.map((row) => ({
+          topicId: row.topicId,
+          topicName: row.topicName,
+          examType: row.examType,
+        })),
+      },
     };
   } catch (err) {
     return {

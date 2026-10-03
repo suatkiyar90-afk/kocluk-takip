@@ -234,7 +234,7 @@ export function StudentPanel({ studentId }: StudentPanelProps) {
         </nav>
 
         <div {...panelProps("quiz")}>
-          {mounted.has("quiz") ? <QuizPanel /> : null}
+          {mounted.has("quiz") ? <QuizPanel studentId={studentId} /> : null}
         </div>
         <div {...panelProps("targets")}>
           {mounted.has("targets") ? <WeeklyTargetsPanel /> : null}

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   assertEntryWindowOpen,
   ENTRY_WINDOW_MESSAGE,
@@ -9,6 +9,43 @@ import {
 function at(iso: string): Date {
   return new Date(iso);
 }
+
+describe("yerel test kipi: NEXT_PUBLIC_ENTRY_WINDOW_FORCE_OPEN", () => {
+  afterEach(() => {
+    delete process.env.NEXT_PUBLIC_ENTRY_WINDOW_FORCE_OPEN;
+  });
+
+  it("true iken her saatte state open ve assert geçer", () => {
+    process.env.NEXT_PUBLIC_ENTRY_WINDOW_FORCE_OPEN = "true";
+    const noon = at("2026-10-03T12:00:00+03:00");
+    const w = getEntryWindow(noon);
+    expect(w.state).toBe("open");
+    expect(w.today).toBe("2026-10-03");
+    expect(w.msUntilOpen).toBe(0);
+    expect(w.msUntilClose).toBe(3600000);
+    expect(() => assertEntryWindowOpen(noon)).not.toThrow();
+  });
+
+  it("true iken gece yarısında bile open", () => {
+    process.env.NEXT_PUBLIC_ENTRY_WINDOW_FORCE_OPEN = "true";
+    expect(getEntryWindow(at("2026-10-03T23:30:00+03:00")).state).toBe(
+      "open",
+    );
+    expect(getEntryWindow(at("2026-10-03T05:00:00+03:00")).state).toBe(
+      "open",
+    );
+  });
+
+  it("tanımlı değilse normal 22-23 davranışı sürer", () => {
+    expect(process.env.NEXT_PUBLIC_ENTRY_WINDOW_FORCE_OPEN).toBeUndefined();
+    expect(getEntryWindow(at("2026-10-03T12:00:00+03:00")).state).toBe(
+      "before",
+    );
+    expect(() =>
+      assertEntryWindowOpen(at("2026-10-03T12:00:00+03:00")),
+    ).toThrow(EntryWindowError);
+  });
+});
 
 describe("getEntryWindow", () => {
   it("21:59:59 durumu before", () => {

@@ -29,6 +29,12 @@ export class EntryWindowError extends Error {
 
 const ISTANBUL_OFFSET_MS = 3 * 60 * 60 * 1000;
 
+const FORCE_OPEN_DURATION_MS = 60 * 60 * 1000;
+
+export function isEntryWindowForceOpen(): boolean {
+  return process.env.NEXT_PUBLIC_ENTRY_WINDOW_FORCE_OPEN === "true";
+}
+
 const istanbulFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: ISTANBUL_TIME_ZONE,
   year: "numeric",
@@ -58,6 +64,18 @@ export function getEntryWindow(now: Date = new Date()): EntryWindow {
   }
 
   const today = `${year}-${pad2(month)}-${pad2(day)}`;
+
+  if (isEntryWindowForceOpen()) {
+    return {
+      state: "open",
+      today,
+      opensAt: now,
+      closesAt: new Date(now.getTime() + FORCE_OPEN_DURATION_MS),
+      msUntilOpen: 0,
+      msUntilClose: FORCE_OPEN_DURATION_MS,
+    };
+  }
+
   const opensAt = new Date(
     Date.UTC(year, month - 1, day, ENTRY_OPEN_HOUR) - ISTANBUL_OFFSET_MS,
   );
