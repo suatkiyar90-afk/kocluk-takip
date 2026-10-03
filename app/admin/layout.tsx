@@ -41,6 +41,12 @@ export default async function AdminLayout({
               </span>
               <div className="flex items-center gap-2">
                 <Link
+                  href="/admin/announcements"
+                  className="rounded-lg px-2 py-1.5 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 touch-manipulation"
+                >
+                  Duyurular
+                </Link>
+                <Link
                   href="/admin/activities"
                   className="rounded-lg px-2 py-1.5 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 touch-manipulation"
                 >

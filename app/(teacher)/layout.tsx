@@ -13,6 +13,9 @@ import { NotificationStatusIcon } from "@/components/teacher/notification-status
 import { getPendingQuestionCount } from "@/app/actions/qa-actions";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AnnouncementDialog } from "@/components/announcements/announcement-dialog";
+import { getMyPendingAnnouncements } from "@/app/actions/announcement-actions";
+import { shouldShowAnnouncements } from "@/lib/announcements";
 
 export const metadata = {
   ...pwaMetadata,
@@ -31,6 +34,20 @@ export default async function TeacherLayout({
   const userName = session?.user?.name || "Kullanıcı";
   if (session?.user?.id) {
     void touchLastSeen(session.user.id);
+  }
+
+  let announcements: Awaited<
+    ReturnType<typeof getMyPendingAnnouncements>
+  >["data"]["announcements"] = [];
+  if (shouldShowAnnouncements({
+    mustChangePassword: session?.user?.mustChangePassword === true,
+  })) {
+    try {
+      const pending = await getMyPendingAnnouncements();
+      announcements = pending.data.announcements;
+    } catch (err) {
+      console.error("Duyurular yüklenemedi:", err);
+    }
   }
 
   return (
@@ -59,6 +76,9 @@ export default async function TeacherLayout({
             </div>
           </header>
           {children}
+          {announcements.length > 0 ? (
+            <AnnouncementDialog initialAnnouncements={announcements} />
+          ) : null}
           <TeacherBottomNav pendingCount={pendingCount} />
         </ThemeProvider>
       </body>

@@ -453,6 +453,86 @@ export const qaThreads = pgTable(
   }),
 );
 
+export const announcementKindEnum = pgEnum("announcement_kind", [
+  "info",
+  "update",
+  "important",
+]);
+
+export const announcements = pgTable(
+  "announcements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    kind: announcementKindEnum("kind").notNull().default("info"),
+    audienceStudent: boolean("audience_student").notNull().default(false),
+    audienceTeacher: boolean("audience_teacher").notNull().default(false),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+  },
+  (t) => ({
+    announcementsCreatedByIdx: index("announcements_created_by_idx").on(
+      t.createdBy,
+    ),
+    announcementsCreatedAtIdx: index("announcements_created_at_idx").on(
+      t.createdAt,
+    ),
+  }),
+);
+
+export const announcementDismissals = pgTable(
+  "announcement_dismissals",
+  {
+    id: serial("id").primaryKey(),
+    announcementId: uuid("announcement_id")
+      .notNull()
+      .references(() => announcements.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    announcementDismissalsUnique: uniqueIndex(
+      "announcement_dismissals_unique",
+    ).on(t.announcementId, t.userId),
+    announcementDismissalsUserIdIdx: index(
+      "announcement_dismissals_user_id_idx",
+    ).on(t.userId),
+  }),
+);
+
+export const announcementTargets = pgTable(
+  "announcement_targets",
+  {
+    id: serial("id").primaryKey(),
+    announcementId: uuid("announcement_id")
+      .notNull()
+      .references(() => announcements.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+  },
+  (t) => ({
+    announcementTargetsUnique: uniqueIndex("announcement_targets_unique").on(
+      t.announcementId,
+      t.userId,
+    ),
+    announcementTargetsUserIdIdx: index(
+      "announcement_targets_user_id_idx",
+    ).on(t.userId),
+  }),
+);
+
 export type WeeklyQuestionEntry = typeof weeklyQuestionEntries.$inferSelect;
 export type NewWeeklyQuestionEntry = typeof weeklyQuestionEntries.$inferInsert;
 export type DailyQuestionEntry = typeof dailyQuestionEntries.$inferSelect;

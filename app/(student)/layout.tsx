@@ -9,6 +9,9 @@ import { SwRegister } from "@/components/pwa/sw-register";
 import { AppleWebAppMeta } from "@/components/pwa/apple-web-app-meta";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AnnouncementDialog } from "@/components/announcements/announcement-dialog";
+import { getMyPendingAnnouncements } from "@/app/actions/announcement-actions";
+import { shouldShowAnnouncements } from "@/lib/announcements";
 
 export const metadata = {
   ...pwaMetadata,
@@ -26,6 +29,20 @@ export default async function StudentLayout({
   const userName = session?.user?.name || "Kullanıcı";
   if (session?.user?.id) {
     void touchLastSeen(session.user.id);
+  }
+
+  let announcements: Awaited<
+    ReturnType<typeof getMyPendingAnnouncements>
+  >["data"]["announcements"] = [];
+  if (shouldShowAnnouncements({
+    mustChangePassword: session?.user?.mustChangePassword === true,
+  })) {
+    try {
+      const pending = await getMyPendingAnnouncements();
+      announcements = pending.data.announcements;
+    } catch (err) {
+      console.error("Duyurular yüklenemedi:", err);
+    }
   }
 
   return (
@@ -53,6 +70,9 @@ export default async function StudentLayout({
             </div>
           </header>
           {children}
+          {announcements.length > 0 ? (
+            <AnnouncementDialog initialAnnouncements={announcements} />
+          ) : null}
         </ThemeProvider>
       </body>
     </html>
