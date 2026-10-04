@@ -73,12 +73,12 @@ export default async function StudentDetailPage({
       <div className="mx-auto w-full max-w-md md:max-w-3xl xl:max-w-5xl">
         <Link
           href="/dashboard"
-          className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-indigo-600 print:hidden"
+          className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-indigo-600"
         >
           ← Öğrencilerim
         </Link>
 
-        <header className="mb-4 print:hidden">
+        <header className="mb-4">
           <h1 className="text-xl font-bold text-gray-900">
             {student.name}
           </h1>

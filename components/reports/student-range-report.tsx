@@ -64,6 +64,18 @@ function formatDateTimeLabel(iso: string): string {
   });
 }
 
+function buildPrintHref(report: StudentRangeReportData): string {
+  const params = new URLSearchParams({
+    student: report.student.id,
+    from: report.range.from,
+    to: report.range.to,
+    detail: report.days.length > 0 ? "1" : "0",
+    notes: report.notes.length > 0 ? "1" : "0",
+    auto: "1",
+  });
+  return `/rapor-yazdir?${params.toString()}`;
+}
+
 function NetBar({
   correct,
   wrong,
@@ -154,6 +166,8 @@ export interface StudentRangeReportProps {
   fixedStudentId?: string;
   generateLabel?: string;
   introText?: string;
+  printMode?: boolean;
+  initialReport?: StudentRangeReportData | null;
 }
 
 export function StudentRangeReport({
@@ -167,6 +181,8 @@ export function StudentRangeReport({
   fixedStudentId,
   generateLabel = "Raporu Oluştur",
   introText,
+  printMode = false,
+  initialReport = null,
 }: StudentRangeReportProps) {
   const isFixed =
     fixedStudentId !== undefined && fixedStudentId.trim().length > 0;
@@ -184,7 +200,9 @@ export function StudentRangeReport({
   const [includeDetail, setIncludeDetail] = useState(initialDetail);
   const [includeNotes, setIncludeNotes] = useState(initialNotes);
 
-  const [report, setReport] = useState<StudentRangeReportData | null>(null);
+  const [report, setReport] = useState<StudentRangeReportData | null>(
+    initialReport,
+  );
   const [loading, setLoading] = useState(false);
   const [closedSubjects, setClosedSubjects] = useState<Set<string>>(
     () => new Set(),
@@ -279,6 +297,7 @@ export function StudentRangeReport({
 
   useEffect(() => {
     if (isFixed) return;
+    if (printMode) return;
     if (initializedRef.current) return;
     initializedRef.current = true;
     if (initialStudentId && initialFrom && initialTo) {
@@ -376,16 +395,8 @@ export function StudentRangeReport({
 
   return (
     <div className="min-h-dvh bg-gray-50 px-4 py-6 pb-16 print:bg-white">
-      <style>{`
-        @media print {
-          @page { size: A4 portrait; margin: 12mm; }
-          html, body { background: #ffffff !important; }
-          .report-block { break-inside: avoid; page-break-inside: avoid; }
-          .report-root { background: #ffffff !important; color: #111111 !important; }
-        }
-      `}</style>
-
       <div className="report-root mx-auto w-full max-w-2xl">
+        {printMode ? null : (
         <div className="print:hidden">
           <header className="mb-5">
             <h1 className="text-xl font-bold text-gray-900">
@@ -560,6 +571,7 @@ export function StudentRangeReport({
             </div>
           </section>
         </div>
+        )}
 
         {loading && report === null ? (
           <div
@@ -601,14 +613,16 @@ export function StudentRangeReport({
                     Oluşturulma: {formatDateTimeLabel(report.generatedAt)}
                   </p>
                 </div>
+                {printMode ? null : (
                 <div className="flex shrink-0 gap-2 print:hidden">
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
+                  <a
+                    href={buildPrintHref(report)}
+                    target="_blank"
+                    rel="noopener"
                     className="flex h-11 touch-manipulation items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-xs font-bold text-gray-700 transition hover:bg-gray-50 active:bg-gray-100"
                   >
                     Yazdır / PDF
-                  </button>
+                  </a>
                   <button
                     type="button"
                     onClick={handleExcel}
@@ -617,6 +631,7 @@ export function StudentRangeReport({
                     Excel indir
                   </button>
                 </div>
+                )}
               </div>
             </div>
 

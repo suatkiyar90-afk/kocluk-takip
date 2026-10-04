@@ -419,14 +419,24 @@ export function excelSafeCell(value: unknown): unknown {
   return value;
 }
 
+export function reportFileNumberPart(studentNumber: string | null): string {
+  return (studentNumber ?? "").replace(/[^0-9a-zA-Z]/g, "") || "ogrenci";
+}
+
+export function reportFileName(
+  studentNumber: string | null,
+  from: string,
+  to: string,
+): string {
+  return `rapor_${reportFileNumberPart(studentNumber)}_${from}_${to}`;
+}
+
 export function excelFileName(
   studentNumber: string | null,
   from: string,
   to: string,
 ): string {
-  const safeNumber =
-    (studentNumber ?? "").replace(/[^0-9a-zA-Z]/g, "") || "ogrenci";
-  return `rapor_${safeNumber}_${from}_${to}.xlsx`;
+  return `${reportFileName(studentNumber, from, to)}.xlsx`;
 }
 
 export interface ReportSheet {

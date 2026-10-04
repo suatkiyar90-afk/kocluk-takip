@@ -44,6 +44,13 @@ export const proxy = auth((request) => {
     return NextResponse.redirect(new URL(homeFor(role), request.url));
   }
 
+  if (pathname.startsWith("/rapor-yazdir")) {
+    if (role !== "admin" && role !== "teacher") {
+      return NextResponse.redirect(new URL(homeFor(role), request.url));
+    }
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith("/admin")) {
     if (role !== "admin") {
       return NextResponse.redirect(new URL(homeFor(role), request.url));
