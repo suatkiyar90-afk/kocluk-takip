@@ -8,6 +8,7 @@ export const ACTIVITY_ACTIONS = [
   "qa_replied",
   "mock_exam_uploaded",
   "announcement_sent",
+  "report_viewed",
 ] as const;
 
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number];

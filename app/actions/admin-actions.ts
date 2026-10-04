@@ -809,6 +809,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   qa_replied: "Soruyu cevapladı",
   mock_exam_uploaded: "Deneme sonucu yükledi",
   announcement_sent: "Duyuru gönderdi",
+  report_viewed: "Öğrenci raporu oluşturdu",
 };
 
 export interface RecentTeacherActivity {

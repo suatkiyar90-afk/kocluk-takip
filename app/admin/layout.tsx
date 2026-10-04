@@ -35,11 +35,17 @@ export default async function AdminLayout({
           <SwRegister />
           <SchoolWatermark />
           <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/90 backdrop-blur print:hidden">
-            <div className="mx-auto flex h-14 w-full max-w-md items-center justify-between px-4">
+            <div className="mx-auto flex min-h-14 w-full max-w-md flex-wrap items-center justify-between gap-y-1 px-4 py-1.5">
               <span className="text-base font-extrabold tracking-tight text-gray-900">
                 Akademik Takip — Yönetici
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Link
+                  href="/admin/reports"
+                  className="rounded-lg px-2 py-1.5 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 touch-manipulation"
+                >
+                  Raporlar
+                </Link>
                 <Link
                   href="/admin/announcements"
                   className="rounded-lg px-2 py-1.5 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 touch-manipulation"
