@@ -23,6 +23,10 @@ function isActive(pathname: string, href: string): boolean {
 export function TeacherBottomNav({ pendingCount }: TeacherBottomNavProps) {
   const pathname = usePathname();
 
+  if (pathname.startsWith("/students/")) {
+    return null;
+  }
+
   return (
     <nav
       aria-label="Panel gezinmesi"

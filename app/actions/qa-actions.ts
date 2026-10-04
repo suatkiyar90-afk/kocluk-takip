@@ -255,6 +255,35 @@ export async function getPendingQuestionCount(): Promise<number> {
   }
 }
 
+export async function getStudentPendingQuestionCount(
+  studentId: string,
+): Promise<number> {
+  const ctx = await getTeacherId();
+  if (ctx.ok === false) {
+    return 0;
+  }
+
+  try {
+    const rows = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(qaThreads)
+      .innerJoin(
+        teacherStudents,
+        eq(teacherStudents.studentId, qaThreads.studentId),
+      )
+      .where(
+        and(
+          eq(teacherStudents.teacherId, ctx.teacherId),
+          eq(qaThreads.studentId, studentId),
+          eq(qaThreads.status, "bekliyor"),
+        ),
+      );
+    return rows[0]?.count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 export interface PendingQuestionCard {
   id: number;
   studentId: string;

@@ -2,6 +2,14 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import {
+  BarChart3,
+  BookOpen,
+  ClipboardList,
+  FileText,
+  MessageCircle,
+  Target,
+} from "lucide-react";
 import { WeekPicker } from "@/components/ui/week-picker";
 import { TopicAnalysis } from "@/components/reports/topic-analysis";
 import { FeedbackForm } from "@/components/coaching/feedback-form";
@@ -11,8 +19,11 @@ import { TeacherQASection } from "@/components/qa/teacher-qa-section";
 import { TargetsPanel } from "@/components/reports/targets-panel";
 import { TeacherReportsTab } from "@/components/reports/teacher-reports-tab";
 import { ChartSkeleton } from "@/components/charts/chart-ui";
+import { BottomTabBar } from "@/components/ui/bottom-tab-bar";
 import { netScore } from "@/components/quiz-entry/weekly-quiz-schema";
 import { weekdayOfISO } from "@/lib/week-utils";
+import { normalizeStudentDetailTab } from "@/lib/student-detail-tabs";
+import { getStudentPendingQuestionCount } from "@/app/actions/qa-actions";
 import type { WeeklyReportResult } from "@/app/actions/quiz-actions";
 import type { MockExamsResult } from "@/app/actions/mock-exam-actions";
 import type {
@@ -37,12 +48,12 @@ const TargetComparisonChart = dynamic(
 );
 
 const TABS = [
-  { id: "report", label: "Haftalık Rapor" },
-  { id: "targets", label: "Hedef Ver" },
-  { id: "exams", label: "Deneme Sınavları" },
-  { id: "curriculum", label: "Müfredat" },
-  { id: "qa", label: "Soru-Cevap" },
-  { id: "reports", label: "Raporlar" },
+  { id: "report", label: "Haftalık", icon: BarChart3 },
+  { id: "targets", label: "Hedef", icon: Target },
+  { id: "exams", label: "Deneme", icon: ClipboardList },
+  { id: "curriculum", label: "Müfredat", icon: BookOpen },
+  { id: "qa", label: "Soru", icon: MessageCircle },
+  { id: "reports", label: "Raporlar", icon: FileText },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -98,18 +109,33 @@ export function StudentDetailTabs({
   actorName,
   schoolName,
 }: StudentDetailTabsProps) {
-  const normalizedTab =
-    initialTab === "stats" ? "reports" : initialTab;
   const [activeTab, setActiveTab] = useState<TabId>(
-    normalizedTab !== undefined && TABS.some((tab) => tab.id === normalizedTab)
-      ? (normalizedTab as TabId)
-      : "report",
+    normalizeStudentDetailTab(initialTab) as TabId,
   );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     setSelectedDate(null);
   }, [weekStart]);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeTab]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getStudentPendingQuestionCount(studentId)
+      .then((count) => {
+        if (!cancelled && Number.isFinite(count)) {
+          setPendingCount(count);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [studentId]);
 
   const report = reportResult.success === true ? reportResult.data : null;
   const reportError =
@@ -144,32 +170,9 @@ export function StudentDetailTabs({
 
   return (
     <div>
-      <div
-        role="tablist"
-        aria-label="Öğrenci detay sekmeleri"
-        className="sticky top-14 z-30 -mx-4 mb-5 flex w-auto flex-nowrap items-center gap-2 overflow-x-auto border-b border-gray-200 bg-gray-50 px-4 py-2.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden print:hidden"
-      >
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`h-11 flex-shrink-0 rounded-full px-4 text-xs font-semibold transition touch-manipulation ${
-              activeTab === tab.id
-                ? "bg-white text-indigo-700 shadow ring-1 ring-gray-200"
-                : "text-gray-500"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div role="tabpanel" hidden={activeTab !== "report"}>
+      <div role="tabpanel" id="detail-panel-report" aria-labelledby="detail-tab-report" hidden={activeTab !== "report"}>
         <div className="space-y-6">
-          <WeekPicker monday={weekStart} />
+          <WeekPicker monday={weekStart} compact />
 
           {reportError !== null ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
@@ -427,7 +430,7 @@ export function StudentDetailTabs({
         </div>
       </div>
 
-      <div role="tabpanel" hidden={activeTab !== "targets"}>
+      <div role="tabpanel" id="detail-panel-targets" aria-labelledby="detail-tab-targets" hidden={activeTab !== "targets"}>
         <TargetsPanel
           studentId={studentId}
           weekStart={weekStart}
@@ -435,7 +438,7 @@ export function StudentDetailTabs({
         />
       </div>
 
-      <div role="tabpanel" hidden={activeTab !== "exams"}>
+      <div role="tabpanel" id="detail-panel-exams" aria-labelledby="detail-tab-exams" hidden={activeTab !== "exams"}>
         {examsResult.success === false ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
             {examsResult.message}
@@ -445,7 +448,7 @@ export function StudentDetailTabs({
         )}
       </div>
 
-      <div role="tabpanel" hidden={activeTab !== "curriculum"}>
+      <div role="tabpanel" id="detail-panel-curriculum" aria-labelledby="detail-tab-curriculum" hidden={activeTab !== "curriculum"}>
         {curriculumResult.success === false ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
             {curriculumResult.message}
@@ -455,7 +458,7 @@ export function StudentDetailTabs({
         )}
       </div>
 
-      <div role="tabpanel" hidden={activeTab !== "qa"}>
+      <div role="tabpanel" id="detail-panel-qa" aria-labelledby="detail-tab-qa" hidden={activeTab !== "qa"}>
         {qaResult.success === false ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
             {qaResult.message}
@@ -468,7 +471,7 @@ export function StudentDetailTabs({
         )}
       </div>
 
-      <div role="tabpanel" hidden={activeTab !== "reports"}>
+      <div role="tabpanel" id="detail-panel-reports" aria-labelledby="detail-tab-reports" hidden={activeTab !== "reports"}>
         {activeTab === "reports" ? (
           <TeacherReportsTab
             studentId={studentId}
@@ -477,6 +480,24 @@ export function StudentDetailTabs({
           />
         ) : null}
       </div>
+
+      <BottomTabBar
+        ariaLabel="Öğrenci detay sekmeleri"
+        activeId={activeTab}
+        onSelect={(id) => setActiveTab(id as TabId)}
+        items={TABS.map((tab) => ({
+          id: tab.id,
+          label: tab.label,
+          icon: tab.icon,
+          panelId: `detail-panel-${tab.id}`,
+          tabId: `detail-tab-${tab.id}`,
+          badge: tab.id === "qa" ? pendingCount : undefined,
+          badgeSrText:
+            tab.id === "qa" && pendingCount > 0
+              ? `${pendingCount} soru cevap bekliyor`
+              : undefined,
+        }))}
+      />
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   Target,
 } from "lucide-react";
 import { getStudentBadges, type StudentBadges } from "@/app/actions/student-badge-actions";
+import { BottomTabBar } from "@/components/ui/bottom-tab-bar";
 import { InstallBanner } from "@/components/student/install-banner";
 import { QuizPanel } from "@/components/student/panels/quiz-panel";
 import { WeeklyTargetsPanel } from "@/components/student/panels/weekly-targets-panel";
@@ -85,7 +86,6 @@ export function StudentPanel({ studentId }: StudentPanelProps) {
   const [badges, setBadges] = useState<StudentBadges | null>(null);
   const [seen, setSeen] = useState({ feedback: 0, qa: 0 });
   const topRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const bottomRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   function selectTab(id: TabId, updateHash = true) {
     setTab(id);
@@ -264,51 +264,20 @@ export function StudentPanel({ studentId }: StudentPanelProps) {
         </div>
       </div>
 
-      <nav
-        aria-label="Panel sekmeleri"
-        role="tablist"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(0,0,0,0.04)] backdrop-blur md:hidden print:hidden"
-      >
-        <ul className="grid grid-cols-6">
-          {TABS.map((item, index) => {
-            const active = tab === item.id;
-            const Icon = item.icon;
-            return (
-              <li key={item.id}>
-                <button
-                  ref={(el) => {
-                    bottomRefs.current[index] = el;
-                  }}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  aria-controls={`student-panel-${item.id}`}
-                  tabIndex={active ? 0 : -1}
-                  onClick={() => selectTab(item.id)}
-                  onKeyDown={(event) => handleTabKeyDown(event, index, bottomRefs)}
-                  className={`relative flex h-16 w-full flex-col items-center justify-center gap-1 px-1 text-center transition touch-manipulation focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 ${
-                    active
-                      ? "text-indigo-600"
-                      : "text-gray-500"
-                  }`}
-                >
-                  <Icon
-                    aria-hidden="true"
-                    className={`h-5 w-5 ${active ? "stroke-2" : "stroke-1"}`}
-                  />
-                  <span className="w-full truncate text-[10px] font-bold leading-tight">
-                    {item.shortLabel}
-                  </span>
-                  <TabBadge
-                    show={hasBadge(item.id)}
-                    srText="okunmamış yeni içerik var"
-                  />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
+      <BottomTabBar
+        ariaLabel="Panel sekmeleri"
+        activeId={tab}
+        onSelect={(id) => selectTab(id as TabId)}
+        className="md:hidden"
+        items={TABS.map((item) => ({
+          id: item.id,
+          label: item.shortLabel,
+          icon: item.icon,
+          panelId: `student-panel-${item.id}`,
+          badge: hasBadge(item.id) ? "dot" : undefined,
+          badgeSrText: "okunmamış yeni içerik var",
+        }))}
+      />
 
       <Toaster position="top-center" richColors />
     </main>
