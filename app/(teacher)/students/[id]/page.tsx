@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Toaster } from "sonner";
+import { auth } from "@/auth";
 import { getStudentWeeklySummary } from "@/app/actions/teacher-actions";
 import { getWeeklyReportByStudent } from "@/app/actions/quiz-actions";
 import { listStudentThreads } from "@/app/actions/qa-actions";
@@ -23,7 +24,7 @@ interface StudentDetailPageProps {
   searchParams?: Promise<{ week?: string; tab?: string }>;
 }
 
-const VALID_TABS = ["report", "targets", "exams", "curriculum", "qa", "stats"];
+const VALID_TABS = ["report", "targets", "exams", "curriculum", "qa", "reports"];
 
 export default async function StudentDetailPage({
   params,
@@ -32,10 +33,13 @@ export default async function StudentDetailPage({
   const { id } = await params;
   const resolvedParams = searchParams ? await searchParams : undefined;
   const weekStart = parseMonday(resolvedParams?.week);
+  const requestedTab =
+    resolvedParams?.tab === "stats" ? "reports" : resolvedParams?.tab;
   const initialTab =
-    resolvedParams?.tab && VALID_TABS.includes(resolvedParams.tab)
-      ? resolvedParams.tab
+    requestedTab && VALID_TABS.includes(requestedTab)
+      ? requestedTab
       : undefined;
+  const session = await auth();
 
   const result = await getStudentWeeklySummary(id, weekStart);
   const reportResult = await getWeeklyReportByStudent(id, weekStart);
@@ -69,12 +73,12 @@ export default async function StudentDetailPage({
       <div className="mx-auto w-full max-w-md md:max-w-3xl xl:max-w-5xl">
         <Link
           href="/dashboard"
-          className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-indigo-600"
+          className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-indigo-600 print:hidden"
         >
           ← Öğrencilerim
         </Link>
 
-        <header className="mb-4">
+        <header className="mb-4 print:hidden">
           <h1 className="text-xl font-bold text-gray-900">
             {student.name}
           </h1>
@@ -93,6 +97,8 @@ export default async function StudentDetailPage({
           targetsResult={targetsResult}
           curriculumResult={curriculumResult}
           qaResult={qaResult}
+          actorName={session?.user?.name ?? ""}
+          schoolName={process.env.SCHOOL_NAME ?? "Koçluk Takip Sistemi"}
         />
       </div>
 

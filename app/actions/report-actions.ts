@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 import { actionErrorMessage } from "@/lib/action-error";
 import { logActivity } from "@/lib/activity-log";
+import { assertCanViewStudentReport } from "@/lib/report-access";
 import {
   buildDayRows,
   buildSubjectBreakdown,
@@ -161,11 +162,6 @@ export interface StudentRangeReportData {
 export async function getStudentRangeReport(
   input: StudentRangeReportInput,
 ): Promise<ReportActionResult<{ report: StudentRangeReportData }>> {
-  const guard = await requireAdmin();
-  if (guard.ok === false) {
-    return { success: false, status: guard.status, message: guard.message };
-  }
-
   const parsed = reportInputSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -176,16 +172,24 @@ export async function getStudentRangeReport(
     };
   }
 
-  const range = validateReportRange(parsed.data.from, parsed.data.to);
-  if (range.ok === false) {
-    return {
-      success: false,
-      status: "VALIDATION_FAILED",
-      message: range.message,
-    };
-  }
-
   try {
+    const access = await assertCanViewStudentReport(
+      await auth(),
+      parsed.data.studentId,
+    );
+    if (access.ok === false) {
+      return { success: false, status: access.status, message: access.message };
+    }
+
+    const range = validateReportRange(parsed.data.from, parsed.data.to);
+    if (range.ok === false) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message: range.message,
+      };
+    }
+
     const studentRows = await db
       .select({
         id: users.id,
@@ -343,7 +347,7 @@ export async function getStudentRangeReport(
     };
 
     await logActivity({
-      actorId: guard.adminId,
+      actorId: access.actorId,
       action: "report_viewed",
       studentId: studentRows[0].id,
     });

@@ -9,7 +9,7 @@ import { MockExamHistory } from "@/components/exams/mock-exam-history";
 import { CurriculumProgress } from "@/components/curriculum/curriculum-progress";
 import { TeacherQASection } from "@/components/qa/teacher-qa-section";
 import { TargetsPanel } from "@/components/reports/targets-panel";
-import { StudentStatisticsTab } from "@/components/student/student-statistics";
+import { TeacherReportsTab } from "@/components/reports/teacher-reports-tab";
 import { ChartSkeleton } from "@/components/charts/chart-ui";
 import { netScore } from "@/components/quiz-entry/weekly-quiz-schema";
 import { weekdayOfISO } from "@/lib/week-utils";
@@ -42,7 +42,7 @@ const TABS = [
   { id: "exams", label: "Deneme Sınavları" },
   { id: "curriculum", label: "Müfredat" },
   { id: "qa", label: "Soru-Cevap" },
-  { id: "stats", label: "İstatistikler" },
+  { id: "reports", label: "Raporlar" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -81,6 +81,8 @@ interface StudentDetailTabsProps {
   targetsResult: WeeklyTargetActionResult<WeeklyTargetView[]>;
   curriculumResult: CurriculumActionResult<CurriculumSnapshot>;
   qaResult: QaActionResult<QaThreadSummary[]>;
+  actorName?: string;
+  schoolName?: string;
 }
 
 export function StudentDetailTabs({
@@ -93,10 +95,14 @@ export function StudentDetailTabs({
   targetsResult,
   curriculumResult,
   qaResult,
+  actorName,
+  schoolName,
 }: StudentDetailTabsProps) {
+  const normalizedTab =
+    initialTab === "stats" ? "reports" : initialTab;
   const [activeTab, setActiveTab] = useState<TabId>(
-    initialTab !== undefined && TABS.some((tab) => tab.id === initialTab)
-      ? (initialTab as TabId)
+    normalizedTab !== undefined && TABS.some((tab) => tab.id === normalizedTab)
+      ? (normalizedTab as TabId)
       : "report",
   );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -462,11 +468,14 @@ export function StudentDetailTabs({
         )}
       </div>
 
-      <div role="tabpanel" hidden={activeTab !== "stats"}>
-        <StudentStatisticsTab
-          studentId={studentId}
-          active={activeTab === "stats"}
-        />
+      <div role="tabpanel" hidden={activeTab !== "reports"}>
+        {activeTab === "reports" ? (
+          <TeacherReportsTab
+            studentId={studentId}
+            actorName={actorName}
+            schoolName={schoolName}
+          />
+        ) : null}
       </div>
     </div>
   );

@@ -25,14 +25,16 @@ export default async function ReportsPage({
   const initialNotes = params.notes === "1";
 
   return (
-    <StudentRangeReport
-      initialStudentId={initialStudentId}
-      initialFrom={initialFrom}
-      initialTo={initialTo}
-      initialDetail={initialDetail}
-      initialNotes={initialNotes}
-      adminName={session?.user?.name ?? ""}
-      schoolName={process.env.SCHOOL_NAME ?? "Koçluk Takip Sistemi"}
-    />
+    <main>
+      <StudentRangeReport
+        initialStudentId={initialStudentId}
+        initialFrom={initialFrom}
+        initialTo={initialTo}
+        initialDetail={initialDetail}
+        initialNotes={initialNotes}
+        adminName={session?.user?.name ?? ""}
+        schoolName={process.env.SCHOOL_NAME ?? "Koçluk Takip Sistemi"}
+      />
+    </main>
   );
 }

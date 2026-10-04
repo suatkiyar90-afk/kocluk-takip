@@ -151,6 +151,9 @@ export interface StudentRangeReportProps {
   initialNotes: boolean;
   adminName: string;
   schoolName: string;
+  fixedStudentId?: string;
+  generateLabel?: string;
+  introText?: string;
 }
 
 export function StudentRangeReport({
@@ -161,7 +164,12 @@ export function StudentRangeReport({
   initialNotes,
   adminName,
   schoolName,
+  fixedStudentId,
+  generateLabel = "Raporu Oluştur",
+  introText,
 }: StudentRangeReportProps) {
+  const isFixed =
+    fixedStudentId !== undefined && fixedStudentId.trim().length > 0;
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ReportStudentOption[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -246,17 +254,19 @@ export function StudentRangeReport({
       setFrom(range.from);
       setTo(range.to);
       setClosedSubjects(new Set());
-      const params = new URLSearchParams();
-      params.set("student", next.student.id);
-      params.set("from", range.from);
-      params.set("to", range.to);
-      if (input.detail) params.set("detail", "1");
-      if (input.notes) params.set("notes", "1");
-      window.history.replaceState(
-        null,
-        "",
-        `${window.location.pathname}?${params.toString()}`,
-      );
+      if (!isFixed) {
+        const params = new URLSearchParams();
+        params.set("student", next.student.id);
+        params.set("from", range.from);
+        params.set("to", range.to);
+        if (input.detail) params.set("detail", "1");
+        if (input.notes) params.set("notes", "1");
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}?${params.toString()}`,
+        );
+      }
       if (input.silent !== true) {
         toast.success(result.message);
       }
@@ -268,6 +278,7 @@ export function StudentRangeReport({
   }
 
   useEffect(() => {
+    if (isFixed) return;
     if (initializedRef.current) return;
     initializedRef.current = true;
     if (initialStudentId && initialFrom && initialTo) {
@@ -312,12 +323,13 @@ export function StudentRangeReport({
   }
 
   function handleGenerate() {
-    if (!selectedStudent) {
+    const studentId = isFixed ? fixedStudentId : selectedStudent?.id;
+    if (!studentId) {
       toast.error("Önce öğrenci seçin.");
       return;
     }
     void generate({
-      studentId: selectedStudent.id,
+      studentId,
       rangeFrom: from,
       rangeTo: to,
       detail: includeDetail,
@@ -363,7 +375,7 @@ export function StudentRangeReport({
     report.mocks.length === 0;
 
   return (
-    <main className="min-h-dvh bg-gray-50 px-4 py-6 pb-16 print:bg-white">
+    <div className="min-h-dvh bg-gray-50 px-4 py-6 pb-16 print:bg-white">
       <style>{`
         @media print {
           @page { size: A4 portrait; margin: 12mm; }
@@ -380,17 +392,19 @@ export function StudentRangeReport({
               Öğrenci Raporu
             </h1>
             <p className="mt-1 text-sm text-gray-500">
-              Tarih aralığına göre günlük soru çözümü ve deneme sonuçları.
+              {introText ??
+                "Tarih aralığına göre günlük soru çözümü ve deneme sonuçları."}
             </p>
           </header>
 
           <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="space-y-4">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wide text-gray-500">
-                  Öğrenci
-                </span>
-                {selectedStudent ? (
+              {!isFixed ? (
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                    Öğrenci
+                  </span>
+                  {selectedStudent ? (
                   <div className="mt-1.5 flex min-h-11 items-center justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2">
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-bold text-indigo-900">
@@ -459,13 +473,26 @@ export function StudentRangeReport({
                     ) : null}
                   </div>
                 )}
-              </div>
+                </div>
+              ) : null}
 
               <div>
                 <span className="text-xs font-bold uppercase tracking-wide text-gray-500">
                   Tarih aralığı
                 </span>
-                <div className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {QUICK_CHIPS.map((chip) => (
+                    <button
+                      key={chip.kind}
+                      type="button"
+                      onClick={() => applyQuickRange(chip.kind)}
+                      className="min-h-11 touch-manipulation rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-600 transition hover:border-indigo-300 hover:text-indigo-700 active:bg-gray-50"
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <label className="block">
                     <span className="text-[11px] font-semibold text-gray-500">
                       Başlangıç
@@ -490,18 +517,6 @@ export function StudentRangeReport({
                       className="mt-1 h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
                     />
                   </label>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {QUICK_CHIPS.map((chip) => (
-                    <button
-                      key={chip.kind}
-                      type="button"
-                      onClick={() => applyQuickRange(chip.kind)}
-                      className="min-h-9 touch-manipulation rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-600 transition hover:border-indigo-300 hover:text-indigo-700 active:bg-gray-50"
-                    >
-                      {chip.label}
-                    </button>
-                  ))}
                 </div>
               </div>
 
@@ -533,10 +548,14 @@ export function StudentRangeReport({
               <button
                 type="button"
                 onClick={handleGenerate}
-                disabled={!selectedStudent || loading}
+                disabled={
+                  (!isFixed && !selectedStudent) ||
+                  (isFixed && !fixedStudentId) ||
+                  loading
+                }
                 className="flex h-11 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-bold text-white transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {loading ? "Rapor hazırlanıyor…" : "Raporu Oluştur"}
+                {loading ? "Rapor hazırlanıyor…" : generateLabel}
               </button>
             </div>
           </section>
@@ -948,6 +967,6 @@ export function StudentRangeReport({
           </div>
         ) : null}
       </div>
-    </main>
+    </div>
   );
 }
