@@ -3,7 +3,7 @@ import "@uploadthing/react/styles.css";
 import { auth } from "@/auth";
 import { touchLastSeen } from "@/lib/touch-last-seen";
 import { TouchSeenObserver } from "@/components/touch-seen-observer";
-import { LogoutButton } from "@/components/auth/logout-button";
+import { AccountMenu } from "@/components/account-menu";
 import { SchoolWatermark } from "@/components/brand/school-logo";
 import { pwaMetadata, pwaViewport } from "@/lib/pwa-metadata";
 import { SwRegister } from "@/components/pwa/sw-register";
@@ -58,20 +58,20 @@ export default async function TeacherLayout({
           <SwRegister />
           <SchoolWatermark />
           <TouchSeenObserver />
-          <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur print:hidden">
+          <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur print:hidden">
             <div className="mx-auto flex h-14 w-full max-w-md items-center justify-between gap-3 px-4 md:max-w-3xl xl:max-w-5xl">
-              <div className="min-w-0">
-                <span className="block text-base font-extrabold tracking-tight text-gray-900">
-                  Danışman Öğretmen Paneli
+              <div className="min-w-0 flex-1">
+                <span className="block truncate text-base font-extrabold tracking-tight text-gray-900">
+                  Koç Paneli
                 </span>
-                <p className="mt-0.5 truncate text-sm font-medium text-gray-500">
+                <p className="truncate text-xs font-medium text-gray-500">
                   {userName}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <ThemeToggle />
                 <NotificationStatusIcon />
-                <LogoutButton className="flex h-11 items-center rounded-xl border border-red-200 bg-red-50 px-4 text-xs font-bold text-red-600 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation" />
+                <AccountMenu userName={userName} />
               </div>
             </div>
           </header>

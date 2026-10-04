@@ -13,15 +13,6 @@ import type {
   SubjectOptions,
 } from "@/components/quiz-entry/daily-entry-types";
 
-function formatFullDate(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("tr-TR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-
 function formatNet(value: number): string {
   return value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
 }
@@ -105,26 +96,7 @@ export function QuizEntryClient({
   }
 
   return (
-    <div className="pb-[calc(11rem+env(safe-area-inset-bottom))]">
-      <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-          Tarih
-        </p>
-        <p
-          className="mt-1 text-base font-bold text-gray-900"
-          suppressHydrationWarning
-        >
-          Bugün: {formatFullDate(date)}
-        </p>
-        <p
-          className="mt-1 text-xs font-medium text-gray-500"
-          suppressHydrationWarning
-        >
-          Girişler yalnızca bugün için kaydedilir. Değişiklikler
-          &ldquo;Günü Kaydet&rdquo; ile birlikte gönderilir.
-        </p>
-      </section>
-
+    <div className="pb-4">
       <DailyEntryForm
         studentId={studentId}
         date={date}

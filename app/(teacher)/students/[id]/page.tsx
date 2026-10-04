@@ -65,7 +65,7 @@ export default async function StudentDetailPage({
   return (
     <main className="min-h-dvh bg-gray-50 px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))]">
       <div className="mx-auto w-full max-w-md md:max-w-3xl xl:max-w-5xl">
-        <div className="sticky top-14 z-30 -mx-4 mb-4 flex items-center gap-2 border-b border-gray-200 bg-gray-50/95 px-4 py-1.5 backdrop-blur print:hidden">
+        <div className="sticky top-[calc(env(safe-area-inset-top)+3.5rem)] z-30 -mx-4 mb-4 flex items-center gap-2 border-b border-gray-200 bg-gray-50/95 px-4 py-1.5 backdrop-blur print:hidden">
           <Link
             href="/dashboard"
             aria-label="Öğrencilerim"

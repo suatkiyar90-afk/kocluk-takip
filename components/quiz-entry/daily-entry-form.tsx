@@ -151,6 +151,8 @@ export function DailyEntryForm({
     windowOpen &&
     !saving &&
     (list.length > 0 || serverHadEntries);
+  const showSaveBar =
+    windowOpen && (list.length > 0 || serverHadEntries || editing !== null);
 
   useEffect(() => {
     initialListRef.current = mapRows(initialEntries);
@@ -526,7 +528,8 @@ export function DailyEntryForm({
       : undefined;
 
   return (
-    <div className={windowOpen ? "" : "opacity-60"}>
+    <div>
+      {windowOpen ? (
       <form noValidate onSubmit={handleSubmit}>
         <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className={labelClass}>Sınav Türü</p>
@@ -814,11 +817,13 @@ export function DailyEntryForm({
           )}
         </section>
       </form>
+      ) : null}
 
       <p className="sr-only" aria-live="polite">
         {announce}
       </p>
 
+      {windowOpen || list.length > 0 ? (
       <section className="mt-6">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">
@@ -885,24 +890,26 @@ export function DailyEntryForm({
                       <p className="shrink-0 text-xs font-bold text-indigo-700">
                         Net {formatNet(entryNet(entry))}
                       </p>
-                      <button
-                        type="button"
-                        disabled={!windowOpen}
-                        aria-label={`${entry.topicName} düzenle`}
-                        onClick={() => startEdit(entry)}
-                        className="h-11 shrink-0 rounded-lg px-2 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40 touch-manipulation"
-                      >
-                        Düzenle
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!windowOpen}
-                        aria-label={`${entry.topicName} sil`}
-                        onClick={() => removeRow(entry)}
-                        className="h-11 shrink-0 rounded-lg px-2 text-xs font-bold text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 touch-manipulation"
-                      >
-                        Sil
-                      </button>
+                      {windowOpen ? (
+                        <>
+                          <button
+                            type="button"
+                            aria-label={`${entry.topicName} düzenle`}
+                            onClick={() => startEdit(entry)}
+                            className="h-11 shrink-0 rounded-lg px-2 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 touch-manipulation"
+                          >
+                            Düzenle
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`${entry.topicName} sil`}
+                            onClick={() => removeRow(entry)}
+                            className="h-11 shrink-0 rounded-lg px-2 text-xs font-bold text-red-500 transition hover:bg-red-50 touch-manipulation"
+                          >
+                            Sil
+                          </button>
+                        </>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -911,7 +918,9 @@ export function DailyEntryForm({
           </div>
         )}
       </section>
+      ) : null}
 
+      {windowOpen ? (
       <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">
@@ -946,45 +955,48 @@ export function DailyEntryForm({
           {summary.length}/2000
         </p>
       </section>
+      ) : null}
 
-      <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-indigo-500 bg-indigo-600 md:bottom-0">
-        <div className="mx-auto flex max-w-md items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-indigo-100">
-              {totals.topics} konu · {totals.questions} soru
-            </p>
-            <p className="text-sm font-bold text-white">
-              Net{" "}
-              <span className="text-white">
-                {formatNet(totals.net)}
-              </span>
-            </p>
+      {showSaveBar ? (
+        <>
+          <div aria-hidden="true" className="h-24" />
+          <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 bg-indigo-600 md:bottom-0">
+            <div className="mx-auto flex max-w-md items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-indigo-100">
+                  {totals.topics} konu · {totals.questions} soru
+                </p>
+                <p className="text-sm font-bold text-white">
+                  Net{" "}
+                  <span className="text-white">
+                    {formatNet(totals.net)}
+                  </span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveDay}
+                disabled={!canSaveDay}
+                className="flex h-12 min-w-[8.5rem] shrink-0 touch-manipulation items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-bold text-indigo-700 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? (
+                  <>
+                    <span
+                      aria-hidden="true"
+                      className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-700"
+                    />
+                    Kaydediliyor…
+                  </>
+                ) : savedFlash ? (
+                  "Kaydedildi ✓"
+                ) : (
+                  "Günü Kaydet"
+                )}
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={handleSaveDay}
-            disabled={!canSaveDay}
-            className="flex h-12 min-w-[8.5rem] shrink-0 touch-manipulation items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-bold text-indigo-700 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {saving ? (
-              <>
-                <span
-                  aria-hidden="true"
-                  className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-700"
-                />
-                Kaydediliyor…
-              </>
-            ) : savedFlash ? (
-              "Kaydedildi ✓"
-            ) : (
-              "Günü Kaydet"
-            )}
-          </button>
-        </div>
-        <p className="border-t border-indigo-500/70 px-4 pb-1.5 pt-1.5 text-center text-[11px] font-semibold text-indigo-100">
-          Günlük giriş 22.00–23.00 arasında açık.
-        </p>
-      </div>
+        </>
+      ) : null}
     </div>
   );
 }

@@ -18,6 +18,15 @@ interface QuizPanelProps {
   studentId: string;
 }
 
+function formatFullDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("tr-TR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export function QuizPanel({ studentId }: QuizPanelProps) {
   const [date] = useState(() => todayInIstanbul());
   const [reloadKey, setReloadKey] = useState(0);
@@ -63,6 +72,12 @@ export function QuizPanel({ studentId }: QuizPanelProps) {
     <>
       <header className="mb-6">
         <h1 className="text-xl font-bold text-gray-900">Günlük Soru Girişi</h1>
+        <p
+          className="mt-1 text-sm font-semibold text-gray-600"
+          suppressHydrationWarning
+        >
+          Bugün: {formatFullDate(date)}
+        </p>
         <p className="mt-1 text-sm text-gray-500">
           Sınav türü, ders ve konuyu seçip o gün çözdüğün soruları kaydet.
         </p>
