@@ -9,9 +9,12 @@ import {
   adminListUsers,
   adminResetUserPassword,
   adminUpdateTeacherUsername,
+  getPolicyAcknowledgmentOverview,
   type AdminStudent,
   type AdminTeacher,
 } from "@/app/actions/admin-actions";
+import type { PolicyAcknowledgmentOverview } from "@/lib/policy-overview";
+import { PolicyOverviewSection } from "./policy-overview-section";
 
 type Tab = "teacher" | "student" | "assign" | "reset";
 
@@ -35,22 +38,39 @@ function displayUsername(email: string | null): string {
 interface AdminPanelProps {
   initialTeachers: AdminTeacher[];
   initialStudents: AdminStudent[];
+  initialPolicyOverview: PolicyAcknowledgmentOverview | null;
+  initialPolicyError: string | null;
 }
 
 export function AdminPanel({
   initialTeachers,
   initialStudents,
+  initialPolicyOverview,
+  initialPolicyError,
 }: AdminPanelProps) {
   const [tab, setTab] = useState<Tab>("teacher");
   const [teachers, setTeachers] =
     useState<AdminTeacher[]>(initialTeachers);
   const [students, setStudents] = useState<AdminStudent[]>(initialStudents);
+  const [policyOverview, setPolicyOverview] =
+    useState<PolicyAcknowledgmentOverview | null>(initialPolicyOverview);
+  const [policyError, setPolicyError] =
+    useState<string | null>(initialPolicyError);
 
   async function refreshLists() {
-    const result = await adminListUsers();
+    const [result, policyResult] = await Promise.all([
+      adminListUsers(),
+      getPolicyAcknowledgmentOverview(),
+    ]);
     if (result.success === true) {
       setTeachers(result.data.teachers);
       setStudents(result.data.students);
+    }
+    if (policyResult.success === true) {
+      setPolicyOverview(policyResult.data);
+      setPolicyError(null);
+    } else {
+      setPolicyError(policyResult.message);
     }
   }
 
@@ -94,6 +114,11 @@ export function AdminPanel({
           </Link>
         </div>
       </header>
+
+      <PolicyOverviewSection
+        overview={policyOverview}
+        errorMessage={policyError}
+      />
 
       <nav className="mb-6 grid grid-cols-2 gap-1 rounded-2xl border border-gray-200 bg-white p-1 shadow-sm sm:grid-cols-4">
         {TABS.map((t) => (
@@ -526,12 +551,14 @@ function ResetPasswordList({
       name: t.name,
       subtitle: `Kullanıcı adı: ${displayUsername(t.email)}`,
       roleLabel: "Öğretmen",
+      policyAcknowledged: t.policyAcknowledged,
     })),
     ...students.map((s) => ({
       id: s.id,
       name: s.name,
       subtitle: `Kullanıcı adı: ${s.studentNumber ?? "—"}`,
       roleLabel: "Öğrenci",
+      policyAcknowledged: s.policyAcknowledged,
     })),
   ];
 
@@ -614,9 +641,22 @@ function ResetPasswordList({
                 className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-gray-900">
-                    {u.name}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <p className="truncate text-sm font-semibold text-gray-900">
+                      {u.name}
+                    </p>
+                    <span
+                      className={
+                        u.policyAcknowledged
+                          ? "whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700"
+                          : "whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700"
+                      }
+                    >
+                      {u.policyAcknowledged
+                        ? "KVKK onaylı"
+                        : "KVKK onaylamadı"}
+                    </span>
+                  </div>
                   <p className="truncate text-xs text-gray-500">
                     {u.subtitle} · {u.roleLabel}
                   </p>

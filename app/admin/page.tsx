@@ -1,8 +1,14 @@
-import { adminListUsers } from "@/app/actions/admin-actions";
+import {
+  adminListUsers,
+  getPolicyAcknowledgmentOverview,
+} from "@/app/actions/admin-actions";
 import { AdminPanel } from "./admin-panel";
 
 export default async function AdminPage() {
-  const result = await adminListUsers();
+  const [result, policyResult] = await Promise.all([
+    adminListUsers(),
+    getPolicyAcknowledgmentOverview(),
+  ]);
 
   if (result.success === false) {
     return (
@@ -22,6 +28,8 @@ export default async function AdminPage() {
         <AdminPanel
           initialTeachers={result.data.teachers}
           initialStudents={result.data.students}
+          initialPolicyOverview={policyResult.success ? policyResult.data : null}
+          initialPolicyError={policyResult.success ? null : policyResult.message}
         />
       </div>
     </main>

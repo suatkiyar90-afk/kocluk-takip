@@ -6,6 +6,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import {
   and,
+  asc,
   desc,
   eq,
   gte,
@@ -24,16 +25,23 @@ import {
   activityLogs,
   curriculumTopics,
   dailyQuestionEntries,
+  policyAcknowledgments,
   teacherStudents,
   users,
 } from "@/db/schema";
 import { actionErrorMessage } from "@/lib/action-error";
+import { getLegalDocument } from "@/lib/legal";
+import {
+  buildPolicyAcknowledgmentOverview,
+  type PolicyAcknowledgmentOverview,
+} from "@/lib/policy-overview";
 import { isUserActiveToday, istanbulDayRange } from "@/lib/week-utils";
 
 export interface AdminTeacher {
   id: string;
   name: string;
   email: string | null;
+  policyAcknowledged: boolean;
 }
 
 export interface AdminStudent {
@@ -41,6 +49,7 @@ export interface AdminStudent {
   name: string;
   email: string | null;
   studentNumber: string | null;
+  policyAcknowledged: boolean;
 }
 
 export interface RecentLogin {
@@ -406,6 +415,11 @@ export async function adminListUsers(): Promise<
   }
 
   try {
+    const studentDoc = getLegalDocument("kvkk_student");
+    const teacherDoc = getLegalDocument("kvkk_teacher");
+    const ackStudent = alias(policyAcknowledgments, "list_ack_student");
+    const ackTeacher = alias(policyAcknowledgments, "list_ack_teacher");
+
     const rows = await db
       .select({
         id: users.id,
@@ -413,8 +427,26 @@ export async function adminListUsers(): Promise<
         email: users.email,
         role: users.role,
         studentNumber: users.studentNumber,
+        studentAckAt: ackStudent.acceptedAt,
+        teacherAckAt: ackTeacher.acceptedAt,
       })
       .from(users)
+      .leftJoin(
+        ackStudent,
+        and(
+          eq(ackStudent.userId, users.id),
+          eq(ackStudent.documentKey, studentDoc.key),
+          eq(ackStudent.version, studentDoc.version),
+        ),
+      )
+      .leftJoin(
+        ackTeacher,
+        and(
+          eq(ackTeacher.userId, users.id),
+          eq(ackTeacher.documentKey, teacherDoc.key),
+          eq(ackTeacher.version, teacherDoc.version),
+        ),
+      )
       .where(
         or(eq(users.role, "teacher"), eq(users.role, "student")),
       );
@@ -422,7 +454,12 @@ export async function adminListUsers(): Promise<
     const teachers = rows
       .filter((r) => r.role === "teacher")
       .sort((a, b) => a.name.localeCompare(b.name, "tr"))
-      .map((r) => ({ id: r.id, name: r.name, email: r.email }));
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        policyAcknowledged: r.teacherAckAt !== null,
+      }));
     const students = rows
       .filter((r) => r.role === "student")
       .sort((a, b) => a.name.localeCompare(b.name, "tr"))
@@ -431,6 +468,7 @@ export async function adminListUsers(): Promise<
         name: r.name,
         email: r.email,
         studentNumber: r.studentNumber,
+        policyAcknowledged: r.studentAckAt !== null,
       }));
 
     return {
@@ -1034,9 +1072,110 @@ export async function getTodayInactivity(): Promise<
         inactiveStudents: studentRows.filter((r) => !openedIds.has(r.id)),
         inactiveTeachers: teacherRows.filter((r) => !openedIds.has(r.id)),
         studentsWithoutData: studentRows.filter((r) => !dataSet.has(r.id)),
-        teachersWithoutActivity: teacherRows.filter((r) => !actorSet.has(r.id)),
+        teachersWithoutActivity: teacherRows.filter(
+          (r) => !actorSet.has(r.id),
+        ),
       },
       message: "Bugün özeti yüklendi.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export async function getPolicyAcknowledgmentOverview(): Promise<
+  AdminActionResult<PolicyAcknowledgmentOverview>
+> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  try {
+    const studentDoc = getLegalDocument("kvkk_student");
+    const teacherDoc = getLegalDocument("kvkk_teacher");
+    const ackStudent = alias(policyAcknowledgments, "overview_ack_student");
+    const ackTeacher = alias(policyAcknowledgments, "overview_ack_teacher");
+    const assignedTeacher = alias(users, "overview_assigned_teacher");
+
+    const rows = await db
+      .selectDistinctOn([users.id], {
+        id: users.id,
+        name: users.name,
+        role: users.role,
+        studentNumber: users.studentNumber,
+        lastSeenAt: users.lastSeenAt,
+        lastLoginAt: users.lastLoginAt,
+        assignedTeacherName: assignedTeacher.name,
+        studentAckAt: ackStudent.acceptedAt,
+        teacherAckAt: ackTeacher.acceptedAt,
+      })
+      .from(users)
+      .leftJoin(
+        ackStudent,
+        and(
+          eq(ackStudent.userId, users.id),
+          eq(ackStudent.documentKey, studentDoc.key),
+          eq(ackStudent.version, studentDoc.version),
+        ),
+      )
+      .leftJoin(
+        ackTeacher,
+        and(
+          eq(ackTeacher.userId, users.id),
+          eq(ackTeacher.documentKey, teacherDoc.key),
+          eq(ackTeacher.version, teacherDoc.version),
+        ),
+      )
+      .leftJoin(teacherStudents, eq(teacherStudents.studentId, users.id))
+      .leftJoin(
+        assignedTeacher,
+        eq(assignedTeacher.id, teacherStudents.teacherId),
+      )
+      .where(
+        and(
+          inArray(users.role, ["student", "teacher"]),
+          or(
+            isNull(users.email),
+            not(inArray(users.email, SEED_TEST_EMAILS)),
+          ),
+        ),
+      )
+      .orderBy(asc(users.id), asc(teacherStudents.createdAt));
+
+    const people = rows.map((row) => {
+      const acknowledgedAt =
+        row.role === "student" ? row.studentAckAt : row.teacherAckAt;
+      const latest =
+        row.lastSeenAt && row.lastLoginAt
+          ? row.lastSeenAt.getTime() >= row.lastLoginAt.getTime()
+            ? row.lastSeenAt
+            : row.lastLoginAt
+          : (row.lastSeenAt ?? row.lastLoginAt);
+      return {
+        id: row.id,
+        name: row.name,
+        role: row.role,
+        studentNumber: row.studentNumber,
+        lastSeenAt: latest ? latest.toISOString() : null,
+        assignedTeacher: row.assignedTeacherName,
+        acknowledgedAt: acknowledgedAt ? acknowledgedAt.toISOString() : null,
+      };
+    });
+
+    const overview = buildPolicyAcknowledgmentOverview(people, {
+      studentVersion: studentDoc.version,
+      teacherVersion: teacherDoc.version,
+    });
+
+    return {
+      success: true,
+      data: overview,
+      message: "KVKK onay durumu yüklendi.",
     };
   } catch (err) {
     return {
