@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { logActivity } from "@/lib/activity-log";
@@ -9,10 +9,20 @@ import {
   coachingFeedbacks,
   curriculumTopics,
   dailyQuestionEntries,
+  studentDenemeAttempts,
   teacherStudents,
+  weeklyDenemeTargets,
   weeklyTargets,
 } from "@/db/schema";
 import { addDaysISO, parseMonday } from "@/lib/week-utils";
+import {
+  MAX_DENEME_TARGET_ROWS,
+  computeDenemeProgress,
+  denemeTargetRowSchema,
+  getDenemeLabel,
+  mergeDenemeTargetRows,
+} from "@/lib/deneme";
+import { netScore } from "@/components/quiz-entry/weekly-quiz-schema";
 import { sendPushNotification } from "@/lib/web-push-helper";
 import { isAllowedUploadUrl } from "@/lib/url-guard";
 import { actionErrorMessage } from "@/lib/action-error";
@@ -526,6 +536,259 @@ export async function getMyWeeklySchedule(
       status: "DATABASE_ERROR",
       message:
         actionErrorMessage(err),
+    };
+  }
+}
+
+export interface DenemeTargetProgress {
+  denemeKey: string;
+  label: string;
+  targetCount: number;
+  solvedCount: number;
+  reached: boolean;
+}
+
+export interface DenemeAttemptView {
+  id: number;
+  date: string;
+  denemeKey: string;
+  label: string;
+  correct: number;
+  wrong: number;
+  blank: number;
+  net: number;
+}
+
+export interface WeeklyDenemeBundle {
+  targets: DenemeTargetProgress[];
+  attempts: DenemeAttemptView[];
+}
+
+async function loadWeeklyDenemeBundle(
+  studentId: string,
+  weekStart: string,
+): Promise<WeeklyDenemeBundle> {
+  const weekEnd = addDaysISO(weekStart, 6);
+  const [targetRows, attemptRows] = await Promise.all([
+    db
+      .select({
+        denemeKey: weeklyDenemeTargets.denemeKey,
+        targetCount: weeklyDenemeTargets.targetCount,
+      })
+      .from(weeklyDenemeTargets)
+      .where(
+        and(
+          eq(weeklyDenemeTargets.studentId, studentId),
+          eq(weeklyDenemeTargets.weekStartDate, weekStart),
+        ),
+      ),
+    db
+      .select({
+        id: studentDenemeAttempts.id,
+        date: studentDenemeAttempts.date,
+        denemeKey: studentDenemeAttempts.denemeKey,
+        correct: studentDenemeAttempts.correct,
+        wrong: studentDenemeAttempts.wrong,
+        blank: studentDenemeAttempts.blank,
+      })
+      .from(studentDenemeAttempts)
+      .where(
+        and(
+          eq(studentDenemeAttempts.studentId, studentId),
+          gte(studentDenemeAttempts.date, weekStart),
+          lte(studentDenemeAttempts.date, weekEnd),
+        ),
+      )
+      .orderBy(asc(studentDenemeAttempts.date), asc(studentDenemeAttempts.id)),
+  ]);
+
+  const progress = computeDenemeProgress(
+    weekStart,
+    targetRows.map((row) => ({
+      denemeKey: row.denemeKey,
+      targetCount: row.targetCount,
+    })),
+    attemptRows.map((row) => ({
+      date: row.date,
+      denemeKey: row.denemeKey,
+    })),
+  );
+
+  const targets: DenemeTargetProgress[] = progress.map((row) => ({
+    denemeKey: row.denemeKey,
+    label: getDenemeLabel(row.denemeKey) ?? row.denemeKey,
+    targetCount: row.targetCount,
+    solvedCount: row.solvedCount,
+    reached: row.reached,
+  }));
+
+  const attempts: DenemeAttemptView[] = attemptRows.map((row) => ({
+    id: row.id,
+    date: row.date,
+    denemeKey: row.denemeKey,
+    label: getDenemeLabel(row.denemeKey) ?? row.denemeKey,
+    correct: row.correct,
+    wrong: row.wrong,
+    blank: row.blank,
+    net: Math.round(netScore(row.correct, row.wrong) * 100) / 100,
+  }));
+
+  return { targets, attempts };
+}
+
+const saveWeeklyDenemeTargetsSchema = z.object({
+  studentId: z.string().uuid("Geçerli bir öğrenci seçin."),
+  weekStart: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Hafta başlangıcı geçersiz."),
+  items: z
+    .array(denemeTargetRowSchema)
+    .max(
+      MAX_DENEME_TARGET_ROWS,
+      `En fazla ${MAX_DENEME_TARGET_ROWS} deneme hedefi girilebilir.`,
+    ),
+});
+
+export async function saveWeeklyDenemeTargets(
+  input: unknown,
+): Promise<WeeklyTargetActionResult<{ saved: number }>> {
+  const ctx = await getTeacherId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  const parsed = saveWeeklyDenemeTargetsSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((i) => i.message).join(", "),
+    };
+  }
+
+  const weekStart = parseMonday(parsed.data.weekStart);
+  const merged = mergeDenemeTargetRows(parsed.data.items);
+  if (merged.error !== null) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: merged.error,
+    };
+  }
+
+  try {
+    if (!(await isAssigned(ctx.teacherId, parsed.data.studentId))) {
+      return {
+        success: false,
+        status: "FORBIDDEN",
+        message: "Bu öğrenci size atanmamış.",
+      };
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(weeklyDenemeTargets)
+        .where(
+          and(
+            eq(weeklyDenemeTargets.studentId, parsed.data.studentId),
+            eq(weeklyDenemeTargets.weekStartDate, weekStart),
+          ),
+        );
+      if (merged.rows.length > 0) {
+        await tx.insert(weeklyDenemeTargets).values(
+          merged.rows.map((row) => ({
+            studentId: parsed.data.studentId,
+            teacherId: ctx.teacherId,
+            weekStartDate: weekStart,
+            denemeKey: row.denemeKey,
+            targetCount: row.targetCount,
+          })),
+        );
+      }
+    });
+
+    await sendPushNotification(
+      parsed.data.studentId,
+      "Yeni Haftalık Dönüt",
+      "Danışman öğretmenin bu hafta için sana yeni hedefler ve değerlendirmeler yazdı.",
+      "/weekly-targets",
+    );
+
+    await logActivity({
+      actorId: ctx.teacherId,
+      action: "target_saved",
+      studentId: parsed.data.studentId,
+    });
+
+    return { success: true, data: { saved: merged.rows.length } };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export type WeeklyDenemeBundleResult =
+  | { success: true; data: WeeklyDenemeBundle }
+  | {
+      success: false;
+      status: "UNAUTHORIZED" | "FORBIDDEN" | "DATABASE_ERROR";
+      message: string;
+    };
+
+export async function getWeeklyDenemeBundle(
+  studentId: string,
+  weekStartArg?: string,
+): Promise<WeeklyDenemeBundleResult> {
+  const ctx = await getTeacherId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  try {
+    if (!(await isAssigned(ctx.teacherId, studentId))) {
+      return {
+        success: false,
+        status: "FORBIDDEN",
+        message: "Bu öğrenci size atanmamış.",
+      };
+    }
+
+    const bundle = await loadWeeklyDenemeBundle(
+      studentId,
+      parseMonday(weekStartArg),
+    );
+    return { success: true, data: bundle };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export async function getMyWeeklyDenemeBundle(
+  weekStartArg?: string,
+): Promise<WeeklyDenemeBundleResult> {
+  const ctx = await getStudentId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  try {
+    const bundle = await loadWeeklyDenemeBundle(
+      ctx.studentId,
+      parseMonday(weekStartArg),
+    );
+    return { success: true, data: bundle };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
     };
   }
 }

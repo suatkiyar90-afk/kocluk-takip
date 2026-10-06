@@ -9,6 +9,7 @@ import {
   type PastDayPageData,
 } from "@/app/actions/quiz-actions";
 import type {
+  DayAttemptRow,
   DayEntryRow,
   SubjectOptions,
 } from "@/components/quiz-entry/daily-entry-types";
@@ -21,6 +22,7 @@ interface QuizEntryClientProps {
   studentId: string;
   date: string;
   entries: DayEntryRow[];
+  attempts: DayAttemptRow[];
   initialPast: PastDayPageData | null;
   pastError: string | null;
   subjects: SubjectOptions;
@@ -33,6 +35,7 @@ export function QuizEntryClient({
   studentId,
   date,
   entries,
+  attempts,
   initialPast,
   pastError,
   subjects,
@@ -102,6 +105,7 @@ export function QuizEntryClient({
         date={date}
         subjects={subjects}
         initialEntries={entries}
+        initialAttempts={attempts}
         initialSummary={initialDailyNote ?? ""}
         windowOpen={windowOpen}
         onSaved={onSaved ?? (() => {})}

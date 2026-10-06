@@ -20,6 +20,7 @@ import {
   type ExamType,
 } from "@/components/quiz-entry/weekly-quiz-schema";
 import type {
+  DayAttemptRow,
   DayEntryRow,
   SubjectOptions,
   TopicOption,
@@ -37,8 +38,17 @@ import {
   restoreEntry,
   serializeDraft,
   validateEntryList,
+  type DraftAttempt,
   type ListEntry,
 } from "@/lib/daily-entry-list";
+import {
+  bransSubjects,
+  denemeTypeOptions,
+  getDenemeLabel,
+  MAX_DAY_ATTEMPTS,
+  resolveTytBlank,
+  validateDenemeCounts,
+} from "@/lib/deneme";
 
 function formatNet(value: number): string {
   return value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
@@ -51,6 +61,15 @@ function mapRows(rows: DayEntryRow[]): ListEntry[] {
     subjectName: row.subjectName,
     examType: row.examType,
     topicName: row.topicName,
+    correct: row.correct,
+    wrong: row.wrong,
+    blank: row.blank,
+  }));
+}
+
+function mapAttemptRows(rows: DayAttemptRow[]): DraftAttempt[] {
+  return rows.map((row) => ({
+    denemeKey: row.denemeKey,
     correct: row.correct,
     wrong: row.wrong,
     blank: row.blank,
@@ -72,6 +91,7 @@ interface DailyEntryFormProps {
   date: string;
   subjects: SubjectOptions;
   initialEntries: DayEntryRow[];
+  initialAttempts: DayAttemptRow[];
   initialSummary: string;
   windowOpen: boolean;
   onSaved: () => void;
@@ -82,11 +102,17 @@ export function DailyEntryForm({
   date,
   subjects,
   initialEntries,
+  initialAttempts,
   initialSummary,
   windowOpen,
   onSaved,
 }: DailyEntryFormProps) {
   const [examType, setExamType] = useState<ExamType>("TYT");
+  const [entryMode, setEntryMode] = useState<"konular" | "deneme">("konular");
+  const [denemeBaseType, setDenemeBaseType] = useState<
+    "tyt" | "ayt" | "brans"
+  >("tyt");
+  const [denemeSubjectId, setDenemeSubjectId] = useState<string>("turkce");
   const [subjectId, setSubjectId] = useState("");
   const [topicId, setTopicId] = useState("");
   const [topicQuery, setTopicQuery] = useState("");
@@ -97,6 +123,9 @@ export function DailyEntryForm({
   const [blank, setBlank] = useState(0);
   const [recentTopics, setRecentTopics] = useState<RecentTopicRow[]>([]);
   const [list, setList] = useState<ListEntry[]>(() => mapRows(initialEntries));
+  const [attempts, setAttempts] = useState<DraftAttempt[]>(() =>
+    mapAttemptRows(initialAttempts),
+  );
   const [summary, setSummary] = useState(initialSummary);
   const [editing, setEditing] = useState<{
     entry: ListEntry;
@@ -108,6 +137,9 @@ export function DailyEntryForm({
   const [announce, setAnnounce] = useState("");
 
   const initialListRef = useRef<ListEntry[]>(mapRows(initialEntries));
+  const initialAttemptsRef = useRef<DraftAttempt[]>(
+    mapAttemptRows(initialAttempts),
+  );
   const initialSummaryRef = useRef(initialSummary);
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -131,33 +163,63 @@ export function DailyEntryForm({
     );
   }, [topicList, topicQuery]);
 
-  const total = correct + wrong + blank;
+  const denemeKey =
+    denemeBaseType === "brans"
+      ? `brans:${denemeSubjectId}`
+      : denemeBaseType;
+  const denemeBlankValue =
+    denemeBaseType === "tyt" ? resolveTytBlank(correct, wrong) : blank;
+  const liveDenemeError =
+    entryMode === "deneme"
+      ? validateDenemeCounts(denemeKey, {
+          correct,
+          wrong,
+          blank: denemeBlankValue,
+        })
+      : null;
+
+  const total =
+    entryMode === "deneme" && denemeBaseType === "tyt"
+      ? correct + wrong + denemeBlankValue
+      : correct + wrong + blank;
   const net = netScore(correct, wrong);
   const totals = listTotals(list);
   const groups = groupEntriesBySubject(list);
   const serverHadEntries = initialEntries.length > 0;
+  const serverHadAttempts = initialAttempts.length > 0;
 
   const dirty =
     JSON.stringify(list) !== JSON.stringify(initialListRef.current) ||
+    JSON.stringify(attempts) !== JSON.stringify(initialAttemptsRef.current) ||
     summary !== initialSummaryRef.current;
   const storageKey = draftKey(studentId, date);
 
   const canAdd =
     windowOpen &&
-    topicId !== "" &&
-    total > 0 &&
-    (editing !== null || list.length < MAX_DAY_ENTRIES);
+    entryMode === "deneme"
+      ? attempts.length < MAX_DAY_ATTEMPTS && total > 0 && liveDenemeError === null
+      : windowOpen && topicId !== "" && total > 0 &&
+        (editing !== null || list.length < MAX_DAY_ENTRIES);
   const canSaveDay =
     windowOpen &&
     !saving &&
-    (list.length > 0 || serverHadEntries);
+    (list.length > 0 ||
+      serverHadEntries ||
+      attempts.length > 0 ||
+      serverHadAttempts);
   const showSaveBar =
-    windowOpen && (list.length > 0 || serverHadEntries || editing !== null);
+    windowOpen &&
+    (list.length > 0 ||
+      serverHadEntries ||
+      attempts.length > 0 ||
+      serverHadAttempts ||
+      editing !== null);
 
   useEffect(() => {
     initialListRef.current = mapRows(initialEntries);
+    initialAttemptsRef.current = mapAttemptRows(initialAttempts);
     initialSummaryRef.current = initialSummary;
-  }, [initialEntries, initialSummary]);
+  }, [initialEntries, initialAttempts, initialSummary]);
 
   useEffect(() => {
     if (dirty) {
@@ -166,6 +228,7 @@ export function DailyEntryForm({
           v: 1,
           date,
           entries: list,
+          attempts,
           summary,
           savedAt: new Date().toISOString(),
         });
@@ -182,7 +245,7 @@ export function DailyEntryForm({
         // yok say
       }
     }
-  }, [dirty, list, summary, date, storageKey]);
+  }, [dirty, list, attempts, summary, date, storageKey]);
 
   const prevOpenRef = useRef<boolean | null>(null);
   useEffect(() => {
@@ -206,15 +269,22 @@ export function DailyEntryForm({
               (entry) => !serverIds.has(entry.topicId),
             );
             const summaryChanged = draft.summary !== initialSummaryRef.current;
+            const hasDraftAttempts =
+              draft.attempts !== undefined &&
+              JSON.stringify(draft.attempts) !==
+                JSON.stringify(initialAttemptsRef.current);
             if (conflicts > 0) {
               toast.info(
                 "Taslak geri yüklendi; çakışan satırlar sunucudaki güncel değerlerle güncellendi.",
               );
-            } else if (hasDraftOnly || summaryChanged) {
+            } else if (hasDraftOnly || summaryChanged || hasDraftAttempts) {
               toast.info("Kaydedilmemiş taslak geri yüklendi.");
             }
             if (hasDraftOnly || conflicts > 0) {
               setList(entries);
+            }
+            if (hasDraftAttempts && draft.attempts !== undefined) {
+              setAttempts(draft.attempts);
             }
             if (summaryChanged) {
               setSummary(draft.summary);
@@ -324,10 +394,24 @@ export function DailyEntryForm({
 
   function changeExamType(next: ExamType) {
     if (editing) cancelEdit();
+    setEntryMode("konular");
     setExamType(next);
     setSubjectId("");
     resetTopicAndCounts();
     setRecentTopics([]);
+  }
+
+  function changeEntryMode(next: "konular" | "deneme") {
+    if (editing) cancelEdit();
+    setEntryMode(next);
+    resetTopicAndCounts();
+    setRecentTopics([]);
+  }
+
+  function changeDenemeBaseType(next: "tyt" | "ayt" | "brans") {
+    if (editing) cancelEdit();
+    setDenemeBaseType(next);
+    resetTopicAndCounts();
   }
 
   function changeSubject(next: string) {
@@ -347,6 +431,10 @@ export function DailyEntryForm({
 
   function handleAdd() {
     if (!windowOpen) return;
+    if (entryMode === "deneme") {
+      handleAddDeneme();
+      return;
+    }
     if (topicId === "") {
       toast.error("Önce konu seçin.");
       return;
@@ -393,6 +481,49 @@ export function DailyEntryForm({
     setTimeout(() => topicInputRef.current?.focus(), 0);
   }
 
+  function handleAddDeneme() {
+    if (liveDenemeError !== null) {
+      toast.error(liveDenemeError);
+      return;
+    }
+    if (attempts.length >= MAX_DAY_ATTEMPTS) {
+      toast.error(`En fazla ${MAX_DAY_ATTEMPTS} deneme kaydedilebilir.`);
+      return;
+    }
+    const row: DraftAttempt = {
+      denemeKey,
+      correct,
+      wrong,
+      blank: denemeBlankValue,
+    };
+    setAttempts((current) => [...current, row]);
+    setAnnounce(`${getDenemeLabel(denemeKey) ?? "Deneme"} listeye eklendi.`);
+    resetTopicAndCounts();
+  }
+
+  function removeDenemeRow(index: number) {
+    if (!windowOpen) return;
+    const target = attempts[index];
+    if (!target) return;
+    const label = getDenemeLabel(target.denemeKey) ?? "Deneme";
+    setAttempts((current) => current.filter((_, i) => i !== index));
+    toast(`${label} listeden silindi.`, {
+      duration: 5000,
+      action: {
+        label: "Geri al",
+        onClick: () => {
+          setAttempts((current) => {
+            const next = [...current];
+            next.splice(Math.min(index, next.length), 0, target);
+            return next;
+          });
+          setAnnounce(`${label} geri alındı.`);
+        },
+      },
+    });
+    setAnnounce(`${label} silindi. Geri alabilirsin.`);
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     handleAdd();
@@ -437,7 +568,11 @@ export function DailyEntryForm({
 
   async function handleSaveDay() {
     if (saving || !windowOpen) return;
-    if (list.length === 0 && serverHadEntries) {
+    if (
+      list.length === 0 &&
+      attempts.length === 0 &&
+      (serverHadEntries || serverHadAttempts)
+    ) {
       const confirmed = window.confirm(
         "Bugünün tüm girişlerini silmek istiyor musun? Bu işlem geri alınamaz.",
       );
@@ -452,13 +587,17 @@ export function DailyEntryForm({
     try {
       const result = await saveDay({
         entries: list,
+        attempts,
         summary,
       });
       if (result.success === true) {
         const serverList = mapRows(result.data.entries);
+        const serverAttempts = mapAttemptRows(result.data.attempts);
         initialListRef.current = serverList;
+        initialAttemptsRef.current = serverAttempts;
         initialSummaryRef.current = result.data.summary;
         setList(serverList);
+        setAttempts(serverAttempts);
         setSummary(result.data.summary);
         setEditing(null);
         try {
@@ -536,18 +675,18 @@ export function DailyEntryForm({
           <div
             role="radiogroup"
             aria-label="Sınav türü"
-            className="grid grid-cols-3 gap-2 rounded-2xl bg-gray-100 p-1"
+            className="grid grid-cols-4 gap-2 rounded-2xl bg-gray-100 p-1"
           >
             {examTypes.map((type) => (
               <button
                 key={type}
                 type="button"
                 role="radio"
-                aria-checked={examType === type}
+                aria-checked={entryMode === "konular" && examType === type}
                 disabled={!windowOpen}
                 onClick={() => changeExamType(type)}
                 className={`h-12 rounded-xl text-sm font-semibold transition-colors touch-manipulation disabled:cursor-not-allowed disabled:opacity-50 ${
-                  examType === type
+                  entryMode === "konular" && examType === type
                     ? "bg-white text-indigo-700 shadow"
                     : "text-gray-500"
                 }`}
@@ -555,8 +694,24 @@ export function DailyEntryForm({
                 {type}
               </button>
             ))}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={entryMode === "deneme"}
+              disabled={!windowOpen}
+              onClick={() => changeEntryMode("deneme")}
+              className={`h-12 rounded-xl text-sm font-semibold transition-colors touch-manipulation disabled:cursor-not-allowed disabled:opacity-50 ${
+                entryMode === "deneme"
+                  ? "bg-white text-indigo-700 shadow"
+                  : "text-gray-500"
+              }`}
+            >
+              Deneme
+            </button>
           </div>
 
+          {entryMode === "konular" ? (
+            <>
           <p className={`${labelClass} mt-4`}>Ders</p>
           <div
             className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -703,13 +858,69 @@ export function DailyEntryForm({
                     className={`h-11 rounded-full border px-3.5 text-xs font-semibold transition touch-manipulation disabled:cursor-not-allowed disabled:opacity-50 ${
                       String(topic.topicId) === topicId
                         ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                        : "border-gray-200 bg-gray-50 text-gray-600 active:bg-gray-100"
+                        : "border-gray-200 bg-white text-gray-600 active:bg-gray-100"
                     }`}
                   >
                     {topic.topicName}
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+            </>
+          ) : (
+            <div className="mt-4">
+              <p className={labelClass}>Deneme Türü</p>
+              <div
+                role="radiogroup"
+                aria-label="Deneme türü"
+                className="grid grid-cols-3 gap-2 rounded-2xl bg-gray-100 p-1"
+              >
+                {denemeTypeOptions.map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={denemeBaseType === option.key}
+                    disabled={!windowOpen}
+                    onClick={() => changeDenemeBaseType(option.key)}
+                    className={`h-11 rounded-xl text-[13px] font-semibold transition-colors touch-manipulation disabled:cursor-not-allowed disabled:opacity-50 ${
+                      denemeBaseType === option.key
+                        ? "bg-white text-indigo-700 shadow"
+                        : "text-gray-500"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              {denemeBaseType === "brans" ? (
+                <>
+                  <p className={`${labelClass} mt-3`}>Ders</p>
+                  <select
+                    aria-label="Branş dersi"
+                    disabled={!windowOpen}
+                    value={denemeSubjectId}
+                    onChange={(event) => setDenemeSubjectId(event.target.value)}
+                    className="h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-base text-gray-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50"
+                  >
+                    {bransSubjects.map((subject) => (
+                      <option key={subject.id} value={subject.id}>
+                        {subject.name}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : null}
+
+              <p className="mt-3 rounded-xl bg-indigo-50 px-3 py-2.5 text-xs font-semibold text-indigo-700">
+                {denemeBaseType === "tyt"
+                  ? "TYT: Boş değeri otomatik — 120 − Doğru − Yanlış."
+                  : denemeBaseType === "ayt"
+                    ? "AYT: Doğru + Yanlış + Boş en fazla 160."
+                    : "Branş: Doğru + Yanlış + Boş en fazla 120."}
+              </p>
             </div>
           )}
 
@@ -769,8 +980,15 @@ export function DailyEntryForm({
               step={1}
               autoComplete="off"
               aria-label="Boş"
-              disabled={!windowOpen}
-              value={blank}
+              disabled={
+                !windowOpen ||
+                (entryMode === "deneme" && denemeBaseType === "tyt")
+              }
+              value={
+                entryMode === "deneme" && denemeBaseType === "tyt"
+                  ? denemeBlankValue
+                  : blank
+              }
               onFocus={(event) => event.currentTarget.select()}
               onChange={(event) =>
                 setBlank(clampCount(event.currentTarget.valueAsNumber))
@@ -823,23 +1041,30 @@ export function DailyEntryForm({
         {announce}
       </p>
 
-      {windowOpen || list.length > 0 ? (
+      {windowOpen || list.length > 0 || attempts.length > 0 ? (
       <section className="mt-6">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 flex items-center justify-between gap-2">
           <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">
             Bugünkü Liste
           </h2>
-          {list.length > 0 && (
-            <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700">
-              {list.length} konu
-            </span>
-          )}
+          <div className="flex shrink-0 gap-1.5">
+            {list.length > 0 && (
+              <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700">
+                {list.length} konu
+              </span>
+            )}
+            {attempts.length > 0 && (
+              <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700">
+                {attempts.length} deneme
+              </span>
+            )}
+          </div>
         </div>
 
-        {list.length === 0 ? (
+        {list.length === 0 && attempts.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-5 text-center text-sm font-medium text-gray-500">
-            Henüz konu eklemedin. Ders ve konu seçip Kayda Ekle&apos;ye
-            dokun.
+            Henüz giriş eklemedin. Ders ve konu seçip Kayda Ekle&apos;ye
+            dokun ya da Deneme sekmesinden deneme gir.
           </div>
         ) : (
           <div className="space-y-4">
@@ -915,6 +1140,72 @@ export function DailyEntryForm({
                 </ul>
               </section>
             ))}
+
+            {attempts.length > 0 ? (
+              <section className="rounded-2xl border border-violet-200 bg-white shadow-sm">
+                <header className="flex items-center justify-between gap-2 border-b border-violet-100 px-4 py-2.5">
+                  <p className="min-w-0 truncate text-xs font-bold text-violet-800">
+                    Denemeler
+                  </p>
+                  <p className="shrink-0 text-[11px] font-semibold text-gray-500">
+                    {attempts.length} deneme · Net{" "}
+                    <span className="text-indigo-700">
+                      {formatNet(
+                        Math.round(
+                          attempts.reduce(
+                            (sum, row) => sum + netScore(row.correct, row.wrong),
+                            0,
+                          ) * 100,
+                        ) / 100,
+                      )}
+                    </span>
+                  </p>
+                </header>
+                <ul className="divide-y divide-gray-50 px-2">
+                  {attempts.map((attempt, index) => {
+                    const label = getDenemeLabel(attempt.denemeKey) ?? "Deneme";
+                    return (
+                      <li
+                        key={`${attempt.denemeKey}:${index}`}
+                        className="flex items-center gap-1.5 rounded-lg px-2 py-1.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-gray-900">
+                            {label}
+                          </p>
+                          <p className="mt-0.5 text-xs">
+                            <span className="font-bold text-green-600">
+                              {attempt.correct} D
+                            </span>{" "}
+                            ·{" "}
+                            <span className="font-bold text-red-600">
+                              {attempt.wrong} Y
+                            </span>{" "}
+                            ·{" "}
+                            <span className="font-bold text-stone-500">
+                              {attempt.blank} B
+                            </span>
+                          </p>
+                        </div>
+                        <p className="shrink-0 text-xs font-bold text-indigo-700">
+                          Net {formatNet(netScore(attempt.correct, attempt.wrong))}
+                        </p>
+                        {windowOpen ? (
+                          <button
+                            type="button"
+                            aria-label={`${label} sil`}
+                            onClick={() => removeDenemeRow(index)}
+                            className="h-11 shrink-0 rounded-lg px-2 text-xs font-bold text-red-500 transition hover:bg-red-50 touch-manipulation"
+                          >
+                            Sil
+                          </button>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ) : null}
           </div>
         )}
       </section>
@@ -965,6 +1256,9 @@ export function DailyEntryForm({
               <div className="min-w-0">
                 <p className="text-[13px] font-semibold text-indigo-100">
                   {totals.topics} konu · {totals.questions} soru
+                  {attempts.length > 0
+                    ? ` · ${attempts.length} deneme`
+                    : ""}
                 </p>
                 <p className="text-sm font-bold text-white">
                   Net{" "}

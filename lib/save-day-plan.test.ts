@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
   findPassiveTopicViolation,
   planSaveDay,
@@ -24,17 +24,17 @@ function input(
 ): SaveDayInput {
   return {
     entries: [row()],
-    summary: "Bugün 3 test çözdüm.",
+    summary: "BugÃ¼n 3 test Ã§Ã¶zdÃ¼m.",
     ...overrides,
   };
 }
 
 describe("saveDaySchema", () => {
-  it("geçerli girdiyi onaylar", () => {
+  it("geÃ§erli girdiyi onaylar", () => {
     expect(saveDaySchema.safeParse(input()).success).toBe(true);
   });
 
-  it(`${MAX_DAY_ENTRIES + 1} satırı reddeder`, () => {
+  it(`${MAX_DAY_ENTRIES + 1} satÄ±rÄ± reddeder`, () => {
     const payload = input({
       entries: Array.from({ length: MAX_DAY_ENTRIES + 1 }, (_, i) =>
         row({ topicId: i + 1 }),
@@ -44,13 +44,13 @@ describe("saveDaySchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("aynı konunun iki kez gelmesini reddeder", () => {
+  it("aynÄ± konunun iki kez gelmesini reddeder", () => {
     const payload = input({ entries: [row(), row()] });
     const result = saveDaySchema.safeParse(payload);
     expect(result.success).toBe(false);
   });
 
-  it("0-300 dışındaki sayıları reddeder", () => {
+  it("0-300 dÄ±ÅŸÄ±ndaki sayÄ±larÄ± reddeder", () => {
     expect(
       saveDaySchema.safeParse(input({ entries: [row({ correct: 301 })] }))
         .success,
@@ -65,14 +65,14 @@ describe("saveDaySchema", () => {
     ).toBe(false);
   });
 
-  it("toplamı sıfır olan satırı reddeder", () => {
+  it("toplamÄ± sÄ±fÄ±r olan satÄ±rÄ± reddeder", () => {
     const payload = input({
       entries: [row({ correct: 0, wrong: 0, blank: 0 })],
     });
     expect(saveDaySchema.safeParse(payload).success).toBe(false);
   });
 
-  it("2000 karakterden uzun özeti reddeder", () => {
+  it("2000 karakterden uzun Ã¶zeti reddeder", () => {
     expect(
       saveDaySchema.safeParse(input({ summary: "x".repeat(2001) }))
         .success,
@@ -83,7 +83,7 @@ describe("saveDaySchema", () => {
     ).toBe(true);
   });
 
-  it("MAX_COUNT tam sınırını kabul eder", () => {
+  it("MAX_COUNT tam sÄ±nÄ±rÄ±nÄ± kabul eder", () => {
     expect(
       saveDaySchema.safeParse(
         input({
@@ -97,7 +97,7 @@ describe("saveDaySchema", () => {
 });
 
 describe("planSaveDay", () => {
-  it("aynı girdiyle tekrar aynı planı üretir (idempotent)", () => {
+  it("aynÄ± girdiyle tekrar aynÄ± planÄ± Ã¼retir (idempotent)", () => {
     const payload = input();
     const existing = [{ topicId: 101 }, { topicId: 999 }];
     const first = planSaveDay(existing, payload);
@@ -107,7 +107,7 @@ describe("planSaveDay", () => {
     expect(first.upserts[0].correct).toBe(8);
   });
 
-  it("payload'da olmayan bugünkü satırları silmek üzere işaretler", () => {
+  it("payload'da olmayan bugÃ¼nkÃ¼ satÄ±rlarÄ± silmek Ã¼zere iÅŸaretler", () => {
     const payload = input({ entries: [row({ topicId: 101 })] });
     const plan = planSaveDay(
       [{ topicId: 101 }, { topicId: 55 }, { topicId: 56 }],
@@ -116,7 +116,7 @@ describe("planSaveDay", () => {
     expect(plan.deleteTopicIds).toEqual([55, 56]);
   });
 
-  it("payload boşsa tüm mevcut satırları siler", () => {
+  it("payload boÅŸsa tÃ¼m mevcut satÄ±rlarÄ± siler", () => {
     const plan = planSaveDay([{ topicId: 1 }, { topicId: 2 }], {
       entries: [],
       summary: "",
@@ -124,7 +124,7 @@ describe("planSaveDay", () => {
     expect(plan.deleteTopicIds).toEqual([1, 2]);
   });
 
-  it("özet varsa upsert, boşsa delete planlar", () => {
+  it("Ã¶zet varsa upsert, boÅŸsa delete planlar", () => {
     const withSummary = planSaveDay([], input({ summary: "  Not  " }));
     expect(withSummary.note).toEqual({
       op: "upsert",
@@ -134,7 +134,7 @@ describe("planSaveDay", () => {
     expect(withoutSummary.note).toEqual({ op: "delete" });
   });
 
-  it("upsert değerleri ham girdiyi korur (sayılar katlanmaz)", () => {
+  it("upsert deÄŸerleri ham girdiyi korur (sayÄ±lar katlanmaz)", () => {
     const payload = input({
       entries: [row({ correct: 12, wrong: 3, blank: 5 })],
     });
@@ -150,7 +150,7 @@ describe("planSaveDay", () => {
 describe("findPassiveTopicViolation", () => {
   const inactive = new Set([101, 202]);
 
-  it("pasif konuya YENİ satır eklenemez (reddet)", () => {
+  it("pasif konuya YENÄ° satÄ±r eklenemez (reddet)", () => {
     const violation = findPassiveTopicViolation(
       [row({ topicId: 202 })],
       inactive,
@@ -159,7 +159,7 @@ describe("findPassiveTopicViolation", () => {
     expect(violation).toEqual({ kind: "new-row", topicId: 202 });
   });
 
-  it("bugün zaten kayıtlı pasif konu aynen kalıyorsa KABUL et", () => {
+  it("bugÃ¼n zaten kayÄ±tlÄ± pasif konu aynen kalÄ±yorsa KABUL et", () => {
     const violation = findPassiveTopicViolation(
       [row({ topicId: 101, correct: 8, wrong: 2, blank: 0 })],
       inactive,
@@ -168,7 +168,7 @@ describe("findPassiveTopicViolation", () => {
     expect(violation).toBeNull();
   });
 
-  it("bugün kayıtlı pasif konunun sayıları değişmişse REDDET", () => {
+  it("bugÃ¼n kayÄ±tlÄ± pasif konunun sayÄ±larÄ± deÄŸiÅŸmiÅŸse REDDET", () => {
     const violation = findPassiveTopicViolation(
       [row({ topicId: 101, correct: 9, wrong: 1, blank: 0 })],
       inactive,
@@ -177,7 +177,7 @@ describe("findPassiveTopicViolation", () => {
     expect(violation).toEqual({ kind: "modified-row", topicId: 101 });
   });
 
-  it("aktif konular için hiç bakmaz", () => {
+  it("aktif konular iÃ§in hiÃ§ bakmaz", () => {
     const violation = findPassiveTopicViolation(
       [row({ topicId: 999, correct: 5, wrong: 5, blank: 5 })],
       inactive,
@@ -186,7 +186,7 @@ describe("findPassiveTopicViolation", () => {
     expect(violation).toBeNull();
   });
 
-  it("karışıktaki ilk pasif ihlali döndürür", () => {
+  it("karÄ±ÅŸÄ±ktaki ilk pasif ihlali dÃ¶ndÃ¼rÃ¼r", () => {
     const violation = findPassiveTopicViolation(
       [
         row({ topicId: 999 }),
@@ -199,12 +199,99 @@ describe("findPassiveTopicViolation", () => {
     expect(violation).toEqual({ kind: "new-row", topicId: 303 });
   });
 
-  it("bugün kaydı olmayan ama pasif olmayan konu ihlal sayılmaz", () => {
+  it("bugÃ¼n kaydÄ± olmayan ama pasif olmayan konu ihlal sayÄ±lmaz", () => {
     const violation = findPassiveTopicViolation(
       [row({ topicId: 777 })],
       new Set([101]),
       [],
     );
     expect(violation).toBeNull();
+  });
+});
+
+describe("saveDaySchema attempts", () => {
+  it("attempts alanı olmadan da geçerdir (eski istemci)", () => {
+    expect(saveDaySchema.safeParse(input()).success).toBe(true);
+    const parsed = saveDaySchema.parse(input());
+    expect(parsed.attempts).toEqual([]);
+  });
+
+  it("geçerli deneme kayıtlarını onaylar", () => {
+    const parsed = saveDaySchema.safeParse(
+      input({
+        attempts: [
+          { denemeKey: "tyt", correct: 70, wrong: 30, blank: 20 },
+          { denemeKey: "brans:matematik", correct: 40, wrong: 10, blank: 70 },
+        ],
+      }),
+    );
+    expect(parsed.success).toBe(true);
+  });
+
+  it(`${11} denemeyi reddeder`, () => {
+    const parsed = saveDaySchema.safeParse(
+      input({
+        attempts: Array.from({ length: 11 }, () => ({
+          denemeKey: "tyt",
+          correct: 1,
+          wrong: 0,
+          blank: 119,
+        })),
+      }),
+    );
+    expect(parsed.success).toBe(false);
+  });
+
+  it("geçersiz deneme anahtarını reddeder", () => {
+    const parsed = saveDaySchema.safeParse(
+      input({
+        attempts: [{ denemeKey: "boyle-degil", correct: 1, wrong: 0, blank: 0 }],
+      }),
+    );
+    expect(parsed.success).toBe(false);
+  });
+
+  it("AYT kaydında boşu zorunlu tutar", () => {
+    const parsed = saveDaySchema.safeParse(
+      input({
+        attempts: [{ denemeKey: "ayt", correct: 40, wrong: 20 }],
+      }),
+    );
+    expect(parsed.success).toBe(false);
+  });
+});
+
+describe("planSaveDay attempts", () => {
+  it("attempts yoksa boş plan döner", () => {
+    const plan = planSaveDay([], input());
+    expect(plan.attempts).toEqual([]);
+  });
+
+  it("TYT kayıtlarında boş değerini sunucuda yeniden hesaplar", () => {
+    const plan = planSaveDay(
+      [],
+      input({
+        attempts: [
+          { denemeKey: "tyt", correct: 70, wrong: 30, blank: 1 },
+          {
+            denemeKey: "brans:matematik",
+            correct: 40,
+            wrong: 10,
+            blank: 70,
+          },
+        ],
+      }),
+    );
+    expect(plan.attempts).toEqual([
+      { denemeKey: "tyt", correct: 70, wrong: 30, blank: 20 },
+      { denemeKey: "brans:matematik", correct: 40, wrong: 10, blank: 70 },
+    ]);
+  });
+
+  it("aynı girdiyle tekrar aynı planı üretir (attempts dahil idempotent)", () => {
+    const payload = input({
+      attempts: [{ denemeKey: "ayt", correct: 50, wrong: 30, blank: 60 }],
+    });
+    expect(planSaveDay([], payload)).toEqual(planSaveDay([], payload));
   });
 });

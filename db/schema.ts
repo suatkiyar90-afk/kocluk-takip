@@ -394,6 +394,59 @@ export const weeklyTargets = pgTable(
   }),
 );
 
+export const weeklyDenemeTargets = pgTable(
+  "weekly_deneme_targets",
+  {
+    id: serial("id").primaryKey(),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    teacherId: uuid("teacher_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    weekStartDate: date("week_start_date").notNull(),
+    denemeKey: text("deneme_key").notNull(),
+    targetCount: integer("target_count").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    weeklyDenemeTargetsUnique: uniqueIndex("weekly_deneme_targets_unique").on(
+      t.studentId,
+      t.weekStartDate,
+      t.denemeKey,
+    ),
+    weeklyDenemeTargetsStudentWeekIdx: index(
+      "weekly_deneme_targets_student_week_idx",
+    ).on(t.studentId, t.weekStartDate),
+  }),
+);
+
+export const studentDenemeAttempts = pgTable(
+  "student_deneme_attempts",
+  {
+    id: serial("id").primaryKey(),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    denemeKey: text("deneme_key").notNull(),
+    correct: integer("correct").notNull().default(0),
+    wrong: integer("wrong").notNull().default(0),
+    blank: integer("blank").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    studentDateIdx: index("student_deneme_attempts_student_date_idx").on(
+      t.studentId,
+      t.date,
+    ),
+  }),
+);
+
 export const pushSubscriptions = pgTable(
   "push_subscriptions",
   {
@@ -577,5 +630,10 @@ export type QaThread = typeof qaThreads.$inferSelect;
 export type NewQaThread = typeof qaThreads.$inferInsert;
 export type WeeklyTarget = typeof weeklyTargets.$inferSelect;
 export type NewWeeklyTarget = typeof weeklyTargets.$inferInsert;
+export type WeeklyDenemeTarget = typeof weeklyDenemeTargets.$inferSelect;
+export type NewWeeklyDenemeTarget = typeof weeklyDenemeTargets.$inferInsert;
+export type StudentDenemeAttempt = typeof studentDenemeAttempts.$inferSelect;
+export type NewStudentDenemeAttempt =
+  typeof studentDenemeAttempts.$inferInsert;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type NewPushSubscription = typeof pushSubscriptions.$inferInsert;

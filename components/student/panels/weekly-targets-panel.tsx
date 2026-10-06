@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import {
   approveWeeklySchedule,
+  getMyWeeklyDenemeBundle,
   getMyWeeklyFeedback,
   getMyWeeklySchedule,
   getMyWeeklyTargets,
+  type WeeklyDenemeBundle,
 } from "@/app/actions/weekly-target-actions";
 import { parseMonday } from "@/lib/week-utils";
 import { isImageUrl, isPdfUrl } from "@/lib/schedule-file";
@@ -14,6 +16,9 @@ import { PanelError, PanelSkeleton } from "@/components/student/panel-ui";
 
 type TargetsResult = Awaited<ReturnType<typeof getMyWeeklyTargets>>;
 type FeedbackResult = Awaited<ReturnType<typeof getMyWeeklyFeedback>>;
+type DenemeBundleResult = Awaited<
+  ReturnType<typeof getMyWeeklyDenemeBundle>
+>;
 
 function formatRange(mondayIso: string): string {
   const [y, m, d] = mondayIso.split("-").map(Number);
@@ -39,6 +44,9 @@ export function WeeklyTargetsPanel() {
   const [weekStart, setWeekStart] = useState(() => parseMonday());
   const [targetsResult, setTargetsResult] = useState<TargetsResult | null>(null);
   const [feedbackResult, setFeedbackResult] = useState<FeedbackResult | null>(
+    null,
+  );
+  const [denemeResult, setDenemeResult] = useState<DenemeBundleResult | null>(
     null,
   );
   const [schedule, setSchedule] = useState<ScheduleState | null>(null);
@@ -68,14 +76,17 @@ export function WeeklyTargetsPanel() {
     let cancelled = false;
     setTargetsResult(null);
     setFeedbackResult(null);
+    setDenemeResult(null);
     void (async () => {
-      const [targets, feedback] = await Promise.all([
+      const [targets, feedback, deneme] = await Promise.all([
         getMyWeeklyTargets(weekStart),
         getMyWeeklyFeedback(weekStart),
+        getMyWeeklyDenemeBundle(weekStart),
       ]);
       if (cancelled) return;
       setTargetsResult(targets);
       setFeedbackResult(feedback);
+      setDenemeResult(deneme);
     })();
     return () => {
       cancelled = true;
@@ -106,6 +117,11 @@ export function WeeklyTargetsPanel() {
     targetsResult !== null && targetsResult.success === true
       ? targetsResult.data
       : null;
+  const denemeBundle: WeeklyDenemeBundle | null =
+    denemeResult !== null && denemeResult.success === true
+      ? denemeResult.data
+      : null;
+  const denemeTargets = denemeBundle?.targets ?? [];
   const totalTarget = targets
     ? targets.reduce((sum, t) => sum + t.targetQuestionCount, 0)
     : 0;
@@ -130,6 +146,59 @@ export function WeeklyTargetsPanel() {
 
       <div className="space-y-4">
         <WeekPicker monday={weekStart} onWeekChange={setWeekStart} />
+
+        {denemeTargets.length > 0 ? (
+          <section className="rounded-2xl border border-violet-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-2 text-xs font-semibold">
+              <span className="text-gray-500">Deneme Hedefleri</span>
+              <span className="shrink-0 text-gray-900">
+                {denemeBundle !== null ? denemeBundle.attempts.length : 0}{" "}
+                deneme çözüldü
+              </span>
+            </div>
+            <ul className="mt-3 space-y-3">
+              {denemeTargets.map((target) => {
+                const pct =
+                  target.targetCount > 0
+                    ? Math.min(
+                        Math.round(
+                          (target.solvedCount / target.targetCount) * 100,
+                        ),
+                        100,
+                      )
+                    : 0;
+                return (
+                  <li key={target.denemeKey}>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="min-w-0 truncate text-sm font-bold text-gray-900">
+                        {target.label}
+                      </p>
+                      <span className="shrink-0 text-xs font-semibold text-gray-500">
+                        {target.solvedCount} / {target.targetCount}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-3 w-full overflow-hidden rounded-full bg-gray-200">
+                      <div
+                        className={`h-full rounded-full transition-[width] ${
+                          target.reached ? "bg-green-500" : "bg-violet-500"
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <p className="mt-1 text-[11px] font-medium text-gray-500">
+                      {target.reached
+                        ? "Hedef tamamlandı!"
+                        : `${Math.max(
+                            target.targetCount - target.solvedCount,
+                            0,
+                          )} deneme kaldı.`}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : null}
 
         {schedule?.fileUrl ? (
           <section className="rounded-2xl border border-indigo-200 bg-white p-4 shadow-sm">

@@ -221,6 +221,51 @@ describe("draft serialize / restore", () => {
     };
     expect(parseDraft(JSON.stringify(long))).toBeNull();
   });
+
+  it("deneme kayıtlı taslağı serileştirip geri yükler", () => {
+    const withAttempts = {
+      ...draft,
+      attempts: [
+        { denemeKey: "tyt", correct: 70, wrong: 30, blank: 20 },
+        { denemeKey: "brans:matematik", correct: 40, wrong: 10, blank: 70 },
+      ],
+    };
+    const raw = serializeDraft(withAttempts);
+    expect(raw).not.toBeNull();
+    expect(parseDraft(raw)).toEqual(withAttempts);
+  });
+
+  it("attempts alanı olmadan eski taslakları bozmadan çözer", () => {
+    const parsed = parseDraft(JSON.stringify(draft));
+    expect(parsed).toEqual(draft);
+    expect(parsed!.attempts).toBeUndefined();
+  });
+
+  it("geçersiz deneme kaydını düşürür ama taslağı yaşatır", () => {
+    const bad = {
+      ...draft,
+      attempts: [{ denemeKey: "boyle-degil", correct: 1, wrong: 0 }],
+    };
+    const parsed = parseDraft(JSON.stringify(bad));
+    expect(parsed).not.toBeNull();
+    expect(parsed!.attempts).toBeUndefined();
+    expect(parsed!.entries).toEqual(draft.entries);
+  });
+
+  it("aşırı uzun deneme listesini düşürür", () => {
+    const long = {
+      ...draft,
+      attempts: Array.from({ length: 11 }, () => ({
+        denemeKey: "tyt",
+        correct: 1,
+        wrong: 0,
+        blank: 119,
+      })),
+    };
+    const parsed = parseDraft(JSON.stringify(long));
+    expect(parsed).not.toBeNull();
+    expect(parsed!.attempts).toBeUndefined();
+  });
 });
 
 describe("mergeDraftWithServer", () => {

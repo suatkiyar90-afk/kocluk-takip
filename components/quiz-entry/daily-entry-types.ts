@@ -24,3 +24,11 @@ export interface DayEntryRow {
   wrong: number;
   blank: number;
 }
+
+export interface DayAttemptRow {
+  id: number;
+  denemeKey: string;
+  correct: number;
+  wrong: number;
+  blank: number;
+}

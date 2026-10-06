@@ -100,6 +100,7 @@ export function QuizPanel({ studentId }: QuizPanelProps) {
           studentId={studentId}
           date={date}
           entries={result.data.entries}
+          attempts={result.data.attempts}
           initialPast={pastData}
           pastError={pastError}
           subjects={result.data.subjects}

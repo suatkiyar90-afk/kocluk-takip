@@ -171,9 +171,19 @@ export interface EntryDraft {
   v: 1;
   date: string;
   entries: ListEntry[];
+  attempts?: DraftAttempt[];
   summary: string;
   savedAt: string;
 }
+
+export interface DraftAttempt {
+  denemeKey: string;
+  correct: number;
+  wrong: number;
+  blank: number;
+}
+
+const MAX_DRAFT_ATTEMPTS = 10;
 
 export function draftKey(studentId: string, date: string): string {
   return `daily-entry-draft:${studentId}:${date}`;
@@ -210,6 +220,24 @@ function isEntryLike(value: unknown): value is ListEntry {
   );
 }
 
+function isDraftAttemptLike(value: unknown): value is DraftAttempt {
+  if (typeof value !== "object" || value === null) return false;
+  const attempt = value as Record<string, unknown>;
+  return (
+    typeof attempt.denemeKey === "string" &&
+    attempt.denemeKey.length > 0 &&
+    typeof attempt.correct === "number" &&
+    Number.isInteger(attempt.correct) &&
+    attempt.correct >= 0 &&
+    typeof attempt.wrong === "number" &&
+    Number.isInteger(attempt.wrong) &&
+    attempt.wrong >= 0 &&
+    typeof attempt.blank === "number" &&
+    Number.isInteger(attempt.blank) &&
+    attempt.blank >= 0
+  );
+}
+
 export function parseDraft(raw: string | null): EntryDraft | null {
   if (!raw) return null;
   try {
@@ -227,10 +255,17 @@ export function parseDraft(raw: string | null): EntryDraft | null {
     ) {
       return null;
     }
+    const attempts =
+      Array.isArray(parsed.attempts) &&
+      parsed.attempts.length <= MAX_DRAFT_ATTEMPTS &&
+      parsed.attempts.every(isDraftAttemptLike)
+        ? parsed.attempts
+        : undefined;
     return {
       v: 1,
       date: parsed.date,
       entries: parsed.entries,
+      attempts,
       summary: parsed.summary,
       savedAt:
         typeof parsed.savedAt === "string" ? parsed.savedAt : "",

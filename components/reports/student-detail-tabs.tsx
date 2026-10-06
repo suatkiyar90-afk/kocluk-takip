@@ -29,6 +29,7 @@ import type { MockExamsResult } from "@/app/actions/mock-exam-actions";
 import type {
   WeeklyTargetActionResult,
   WeeklyTargetView,
+  WeeklyDenemeBundleResult,
 } from "@/app/actions/weekly-target-actions";
 import type {
   CurriculumActionResult,
@@ -90,6 +91,7 @@ interface StudentDetailTabsProps {
   reportResult: WeeklyReportResult;
   examsResult: MockExamsResult;
   targetsResult: WeeklyTargetActionResult<WeeklyTargetView[]>;
+  denemeBundleResult: WeeklyDenemeBundleResult;
   curriculumResult: CurriculumActionResult<CurriculumSnapshot>;
   qaResult: QaActionResult<QaThreadSummary[]>;
   actorName?: string;
@@ -104,6 +106,7 @@ export function StudentDetailTabs({
   reportResult,
   examsResult,
   targetsResult,
+  denemeBundleResult,
   curriculumResult,
   qaResult,
   actorName,
@@ -167,6 +170,10 @@ export function StudentDetailTabs({
           actual: t.solvedCount,
         }))
       : [];
+  const denemeBundle =
+    denemeBundleResult.success === true ? denemeBundleResult.data : null;
+  const denemeTargets = denemeBundle?.targets ?? [];
+  const denemeAttempts = denemeBundle?.attempts ?? [];
 
   return (
     <div>
@@ -397,6 +404,94 @@ export function StudentDetailTabs({
                   </div>
                 </section>
               )}
+
+              {denemeTargets.length > 0 || denemeAttempts.length > 0 ? (
+                <section>
+                  <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
+                    Denemeler
+                  </h2>
+                  <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                    {denemeTargets.length > 0 ? (
+                      <ul className="space-y-2">
+                        {denemeTargets.map((target) => (
+                          <li
+                            key={target.denemeKey}
+                            className="flex flex-wrap items-center gap-2 rounded-xl bg-gray-50 p-3"
+                          >
+                            <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700">
+                              {target.label}
+                            </span>
+                            <span className="min-w-0 text-sm font-semibold text-gray-900">
+                              {target.solvedCount} / {target.targetCount} adet
+                            </span>
+                            {target.reached ? (
+                              <span className="shrink-0 text-[11px] font-bold text-green-600">
+                                ✓ Tamamlandı
+                              </span>
+                            ) : (
+                              <span className="shrink-0 text-[11px] font-medium text-gray-500">
+                                {Math.max(
+                                  target.targetCount - target.solvedCount,
+                                  0,
+                                )}{" "}
+                                kaldı
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+
+                    {denemeAttempts.length > 0 ? (
+                      <ul
+                        className={
+                          denemeTargets.length > 0 ? "mt-3 space-y-2" : "space-y-2"
+                        }
+                      >
+                        {denemeAttempts.map((attempt) => (
+                          <li
+                            key={attempt.id}
+                            className="rounded-xl border border-gray-100 bg-gray-50/60 p-3"
+                          >
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span
+                                className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700"
+                                suppressHydrationWarning
+                              >
+                                {formatEntryDate(attempt.date)}
+                              </span>
+                              <p className="min-w-0 text-sm font-semibold break-words text-gray-900">
+                                {attempt.label}
+                              </p>
+                              <p className="ml-auto shrink-0 text-xs font-medium text-gray-500">
+                                <span className="font-bold text-green-600">
+                                  {attempt.correct} Doğru
+                                </span>
+                                ,{" "}
+                                <span className="font-bold text-red-600">
+                                  {attempt.wrong} Yanlış
+                                </span>
+                                ,{" "}
+                                <span className="font-bold text-stone-500">
+                                  {attempt.blank} Boş
+                                </span>
+                                · Net{" "}
+                                <span className="font-bold text-indigo-700">
+                                  {formatNet(attempt.net)}
+                                </span>
+                              </p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="rounded-xl bg-gray-50 px-3 py-3 text-center text-xs font-medium text-gray-500">
+                        Bu hafta için deneme kaydı bulunamadı.
+                      </p>
+                    )}
+                  </div>
+                </section>
+              ) : null}
 
               <section>
                 <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">

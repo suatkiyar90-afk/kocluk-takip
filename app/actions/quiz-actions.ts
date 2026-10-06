@@ -8,6 +8,7 @@ import {
   curriculumTopics,
   dailyQuestionEntries,
   studentDailyNotes,
+  studentDenemeAttempts,
   teacherStudents,
 } from "@/db/schema";
 import {
@@ -24,6 +25,7 @@ import {
   type ExamType,
 } from "@/components/quiz-entry/weekly-quiz-schema";
 import type {
+  DayAttemptRow,
   DayEntryRow,
   SubjectOption,
   SubjectOptions,
@@ -42,7 +44,12 @@ import {
   getEntryWindow,
 } from "@/lib/entry-window";
 import { markUserSeen } from "@/lib/touch-last-seen";
-import { planSaveDay, saveDaySchema, findPassiveTopicViolation } from "@/lib/save-day-plan";
+import {
+  planSaveDay,
+  saveDaySchema,
+  findPassiveTopicViolation,
+  normalizeDenemeAttempts,
+} from "@/lib/save-day-plan";
 import { onlyActiveTopics } from "@/lib/topic-activity";
 
 async function getStudentId(): Promise<
@@ -670,6 +677,7 @@ export async function getStudentTrends(
 
 export interface DailyEntryData {
   entries: DayEntryRow[];
+  attempts: DayAttemptRow[];
   subjects: SubjectOptions;
   dailyNote: string | null;
 }
@@ -697,7 +705,7 @@ export async function getDailyEntryData(
   const safeDate = isValidPastDate(date) ? date : todayInIstanbul();
 
   try {
-    const [entryRows, topicRows, noteRows] = await Promise.all([
+    const [entryRows, topicRows, noteRows, attemptRows] = await Promise.all([
       db
         .select({
           id: dailyQuestionEntries.id,
@@ -752,6 +760,22 @@ export async function getDailyEntryData(
           ),
         )
         .limit(1),
+      db
+        .select({
+          id: studentDenemeAttempts.id,
+          denemeKey: studentDenemeAttempts.denemeKey,
+          correct: studentDenemeAttempts.correct,
+          wrong: studentDenemeAttempts.wrong,
+          blank: studentDenemeAttempts.blank,
+        })
+        .from(studentDenemeAttempts)
+        .where(
+          and(
+            eq(studentDenemeAttempts.studentId, guard.studentId),
+            eq(studentDenemeAttempts.date, safeDate),
+          ),
+        )
+        .orderBy(asc(studentDenemeAttempts.id)),
     ]);
 
     const subjects: SubjectOptions = { TYT: [], AYT: [], YDT: [] };
@@ -782,8 +806,9 @@ export async function getDailyEntryData(
     }
 
     const entries: DayEntryRow[] = entryRows;
+    const attempts: DayAttemptRow[] = attemptRows;
     const dailyNote = noteRows[0]?.note ?? null;
-    return { success: true, data: { entries, subjects, dailyNote } };
+    return { success: true, data: { entries, attempts, subjects, dailyNote } };
   } catch (err) {
     return {
       success: false,
@@ -966,7 +991,7 @@ export async function getPastEntryDays(
 export type SaveDayResult =
   | {
       success: true;
-      data: { entries: DayEntryRow[]; summary: string };
+      data: { entries: DayEntryRow[]; attempts: DayAttemptRow[]; summary: string };
     }
   | {
       success: false;
@@ -993,6 +1018,11 @@ export async function saveDay(payload: unknown): Promise<SaveDayResult> {
       message: parsed.error.issues.map((issue) => issue.message).join(", "),
     };
   }
+
+  const hadAttempts =
+    payload !== null &&
+    typeof payload === "object" &&
+    "attempts" in payload;
 
   const now = new Date();
   try {
@@ -1081,8 +1111,9 @@ export async function saveDay(payload: unknown): Promise<SaveDayResult> {
 
     const plan = planSaveDay(existing, parsed.data);
 
-    const entries = await db.transaction(async (tx) => {
-      if (plan.deleteTopicIds.length > 0) {
+    const { entries, attempts: dayAttempts } = await db.transaction(
+      async (tx) => {
+        if (plan.deleteTopicIds.length > 0) {
         await tx
           .delete(dailyQuestionEntries)
           .where(
@@ -1162,7 +1193,30 @@ export async function saveDay(payload: unknown): Promise<SaveDayResult> {
           );
       }
 
-      return await tx
+      if (hadAttempts) {
+        await tx
+          .delete(studentDenemeAttempts)
+          .where(
+            and(
+              eq(studentDenemeAttempts.studentId, studentId),
+              eq(studentDenemeAttempts.date, today),
+            ),
+          );
+        if (plan.attempts.length > 0) {
+          await tx.insert(studentDenemeAttempts).values(
+            plan.attempts.map((row) => ({
+              studentId,
+              date: today,
+              denemeKey: row.denemeKey,
+              correct: row.correct,
+              wrong: row.wrong,
+              blank: row.blank ?? 0,
+            })),
+          );
+        }
+      }
+
+      const dayEntries = await tx
         .select({
           id: dailyQuestionEntries.id,
           topicId: dailyQuestionEntries.topicId,
@@ -1190,6 +1244,25 @@ export async function saveDay(payload: unknown): Promise<SaveDayResult> {
           asc(curriculumTopics.subjectName),
           asc(curriculumTopics.sortOrder),
         );
+
+      const attemptRows = await tx
+        .select({
+          id: studentDenemeAttempts.id,
+          denemeKey: studentDenemeAttempts.denemeKey,
+          correct: studentDenemeAttempts.correct,
+          wrong: studentDenemeAttempts.wrong,
+          blank: studentDenemeAttempts.blank,
+        })
+        .from(studentDenemeAttempts)
+        .where(
+          and(
+            eq(studentDenemeAttempts.studentId, studentId),
+            eq(studentDenemeAttempts.date, today),
+          ),
+        )
+        .orderBy(asc(studentDenemeAttempts.id));
+
+      return { entries: dayEntries, attempts: attemptRows };
     });
 
     await markUserSeen(studentId);
@@ -1197,6 +1270,7 @@ export async function saveDay(payload: unknown): Promise<SaveDayResult> {
       success: true,
       data: {
         entries,
+        attempts: dayAttempts,
         summary: plan.note.op === "upsert" ? plan.note.value : "",
       },
     };

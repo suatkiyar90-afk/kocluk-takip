@@ -7,7 +7,10 @@ import { getWeeklyReportByStudent } from "@/app/actions/quiz-actions";
 import { listStudentThreads } from "@/app/actions/qa-actions";
 import { getStudentCurriculumProgress } from "@/app/actions/curriculum-actions";
 import { getStudentMockExams } from "@/app/actions/mock-exam-actions";
-import { listWeeklyTargets } from "@/app/actions/weekly-target-actions";
+import {
+  getWeeklyDenemeBundle,
+  listWeeklyTargets,
+} from "@/app/actions/weekly-target-actions";
 import { parseMonday } from "@/lib/week-utils";
 import { normalizeStudentDetailTab } from "@/lib/student-detail-tabs";
 import { StudentDetailTabs } from "@/components/reports/student-detail-tabs";
@@ -41,6 +44,7 @@ export default async function StudentDetailPage({
   const curriculumResult = await getStudentCurriculumProgress(id);
   const examsResult = await getStudentMockExams(id);
   const targetsResult = await listWeeklyTargets(id, weekStart);
+  const denemeBundleResult = await getWeeklyDenemeBundle(id, weekStart);
 
   if (result.success === false) {
     return (
@@ -89,6 +93,7 @@ export default async function StudentDetailPage({
           reportResult={reportResult}
           examsResult={examsResult}
           targetsResult={targetsResult}
+          denemeBundleResult={denemeBundleResult}
           curriculumResult={curriculumResult}
           qaResult={qaResult}
           actorName={session?.user?.name ?? ""}

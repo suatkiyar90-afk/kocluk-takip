@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { examTypes } from "@/components/quiz-entry/weekly-quiz-schema";
 import { MAX_DAY_ENTRIES, MAX_COUNT } from "@/lib/daily-entry-list";
+import {
+  denemeAttemptSchema,
+  MAX_DAY_ATTEMPTS,
+  parseDenemeKey,
+  resolveTytBlank,
+  type DenemeAttemptInput,
+} from "@/lib/deneme";
 
 export const saveDayRowSchema = z
   .object({
@@ -33,6 +40,14 @@ export const saveDaySchema = z
     entries: z
       .array(saveDayRowSchema)
       .max(MAX_DAY_ENTRIES, `En fazla ${MAX_DAY_ENTRIES} satır kaydedilebilir.`),
+    attempts: z
+      .array(denemeAttemptSchema)
+      .max(
+        MAX_DAY_ATTEMPTS,
+        `En fazla ${MAX_DAY_ATTEMPTS} deneme kaydedilebilir.`,
+      )
+      .optional()
+      .default([]),
     summary: z
       .string()
       .max(2000, "Günün özeti en fazla 2000 karakter olabilir."),
@@ -61,7 +76,20 @@ export interface ExistingRow {
 export interface SaveDayPlan {
   upserts: SaveDayRow[];
   deleteTopicIds: number[];
+  attempts: DenemeAttemptInput[];
   note: { op: "upsert"; value: string } | { op: "delete" };
+}
+
+export function normalizeDenemeAttempts(
+  rows: DenemeAttemptInput[],
+): DenemeAttemptInput[] {
+  return rows.map((row) => {
+    const parsed = parseDenemeKey(row.denemeKey);
+    if (parsed !== null && parsed.type === "tyt") {
+      return { ...row, blank: resolveTytBlank(row.correct, row.wrong) };
+    }
+    return row;
+  });
 }
 
 export function planSaveDay(
@@ -77,7 +105,12 @@ export function planSaveDay(
     summary.length > 0
       ? ({ op: "upsert", value: summary } as const)
       : ({ op: "delete" } as const);
-  return { upserts: input.entries, deleteTopicIds, note };
+  return {
+    upserts: input.entries,
+    deleteTopicIds,
+    attempts: normalizeDenemeAttempts(input.attempts ?? []),
+    note,
+  };
 }
 
 export interface ExistingCountsRow {
