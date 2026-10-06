@@ -59,7 +59,7 @@ export const TOPICS: TopicSeed[] = [
     "Permütasyon - Kombinasyon",
     "Olasılık",
   ]),
-  ...list(TURKCE, "geometri", "Geometri", [
+  ...list(TURKCE, "geometri", "Geometri TYT", [
     "Temel Kavramlar ve Doğruda Açılar",
     "Üçgende Açılar",
     "Dik Üçgen",
@@ -144,7 +144,7 @@ export const TOPICS: TopicSeed[] = [
     "Karmaşık Sayılar",
     "Permütasyon - Kombinasyon - Olasılık",
   ]),
-  ...list(AYT, "geometri-ayt", "Geometri", [
+  ...list(AYT, "geometri-ayt", "Geometri AYT", [
     "Üçgenler",
     "Çokgenler ve Dörtgenler",
     "Çember ve Daire",
