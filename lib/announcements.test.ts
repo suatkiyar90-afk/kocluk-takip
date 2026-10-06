@@ -218,6 +218,22 @@ describe("shouldShowAnnouncements", () => {
     expect(shouldShowAnnouncements({ path: "/offline/" })).toBe(false);
   });
 
+  it("KVKK onay ve aydınlatma sayfalarında göstermez", () => {
+    expect(shouldShowAnnouncements({ path: "/kvkk" })).toBe(false);
+    expect(shouldShowAnnouncements({ path: "/aydinlatma" })).toBe(false);
+    expect(shouldShowAnnouncements({ path: "/aydinlatma/" })).toBe(false);
+  });
+
+  it("aydınlatma onayı bekleniyorsa göstermez", () => {
+    expect(
+      shouldShowAnnouncements({ path: "/panel", policyAcknowledged: false }),
+    ).toBe(false);
+    expect(
+      shouldShowAnnouncements({ path: "/panel", policyAcknowledged: true }),
+    ).toBe(true);
+    expect(shouldShowAnnouncements({ path: "/panel" })).toBe(true);
+  });
+
   it("normal sayfalarda gösterir", () => {
     expect(shouldShowAnnouncements({ path: "/panel" })).toBe(true);
     expect(

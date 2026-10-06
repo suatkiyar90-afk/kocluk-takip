@@ -124,13 +124,17 @@ const HIDDEN_ANNOUNCEMENT_PATHS = new Set([
   "/change-password",
   "/force-change-password",
   "/offline",
+  "/kvkk",
+  "/aydinlatma",
 ]);
 
 export function shouldShowAnnouncements(args: {
   mustChangePassword?: boolean | null;
   path?: string | null;
+  policyAcknowledged?: boolean | null;
 }): boolean {
   if (args.mustChangePassword === true) return false;
+  if (args.policyAcknowledged === false) return false;
   if (args.path) {
     const normalized = args.path.replace(/\/+$/, "") || "/";
     if (HIDDEN_ANNOUNCEMENT_PATHS.has(normalized)) return false;

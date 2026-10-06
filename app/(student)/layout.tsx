@@ -12,7 +12,9 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AnnouncementDialog } from "@/components/announcements/announcement-dialog";
 import { getMyPendingAnnouncements } from "@/app/actions/announcement-actions";
+import { getMyPolicyStatus } from "@/app/actions/policy-actions";
 import { shouldShowAnnouncements } from "@/lib/announcements";
+import { redirect } from "next/navigation";
 
 export const metadata = {
   ...pwaMetadata,
@@ -32,11 +34,18 @@ export default async function StudentLayout({
     void touchLastSeen(session.user.id);
   }
 
+  const policyStatus = await getMyPolicyStatus();
+  const policyPending = policyStatus.status === "required";
+  if (policyPending) {
+    redirect("/kvkk");
+  }
+
   let announcements: Awaited<
     ReturnType<typeof getMyPendingAnnouncements>
   >["data"]["announcements"] = [];
   if (shouldShowAnnouncements({
     mustChangePassword: session?.user?.mustChangePassword === true,
+    policyAcknowledged: !policyPending,
   })) {
     try {
       const pending = await getMyPendingAnnouncements();

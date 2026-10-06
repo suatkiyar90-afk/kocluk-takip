@@ -84,6 +84,29 @@ export const loginAttempts = pgTable(
   }),
 );
 
+export const policyAcknowledgments = pgTable(
+  "policy_acknowledgments",
+  {
+    id: serial("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    documentKey: text("document_key").notNull(),
+    version: text("version").notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    ackUniqueIdx: uniqueIndex("policy_ack_unique_idx").on(
+      t.userId,
+      t.documentKey,
+      t.version,
+    ),
+    ackUserIdx: index("policy_ack_user_idx").on(t.userId),
+  }),
+);
+
 export const mockExams = pgTable(
   "mock_exams",
   {

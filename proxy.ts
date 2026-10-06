@@ -25,6 +25,12 @@ export const proxy = auth((request) => {
     return NextResponse.next();
   }
 
+  // Aydınlatma metni herkese açıktır; oturum ve şifre zorunluluğu
+  // kontrolünden önce serbest bırakılır.
+  if (pathname.startsWith("/aydinlatma")) {
+    return NextResponse.next();
+  }
+
   if (!session?.user) {
     const loginUrl = new URL("/login", request.url);
     if (pathname !== "/") {

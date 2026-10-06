@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import Link from "next/link";
 import { SchoolLogo } from "@/components/brand/school-logo";
 
 interface LoginFormProps {
@@ -126,6 +127,15 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
             {loading ? "Giriş yapılıyor…" : "Giriş Yap"}
           </button>
         </form>
+
+        <p className="mt-4 text-center text-xs text-gray-500">
+          <Link
+            href="/aydinlatma?rol=ogrenci"
+            className="underline underline-offset-2 hover:text-gray-700"
+          >
+            Aydınlatma Metni
+          </Link>
+        </p>
       </div>
     </main>
   );
