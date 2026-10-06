@@ -79,3 +79,37 @@ export function planSaveDay(
       : ({ op: "delete" } as const);
   return { upserts: input.entries, deleteTopicIds, note };
 }
+
+export interface ExistingCountsRow {
+  topicId: number;
+  correct: number;
+  wrong: number;
+  blank: number;
+}
+
+export type PassiveViolation =
+  | { kind: "new-row"; topicId: number }
+  | { kind: "modified-row"; topicId: number };
+
+export function findPassiveTopicViolation(
+  entries: SaveDayRow[],
+  inactiveTopicIds: ReadonlySet<number>,
+  existing: ExistingCountsRow[],
+): PassiveViolation | null {
+  const existingById = new Map(existing.map((row) => [row.topicId, row]));
+  for (const row of entries) {
+    if (!inactiveTopicIds.has(row.topicId)) continue;
+    const saved = existingById.get(row.topicId);
+    if (!saved) {
+      return { kind: "new-row", topicId: row.topicId };
+    }
+    if (
+      saved.correct !== row.correct ||
+      saved.wrong !== row.wrong ||
+      saved.blank !== row.blank
+    ) {
+      return { kind: "modified-row", topicId: row.topicId };
+    }
+  }
+  return null;
+}

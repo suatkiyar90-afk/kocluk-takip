@@ -42,7 +42,8 @@ import {
   getEntryWindow,
 } from "@/lib/entry-window";
 import { markUserSeen } from "@/lib/touch-last-seen";
-import { planSaveDay, saveDaySchema } from "@/lib/save-day-plan";
+import { planSaveDay, saveDaySchema, findPassiveTopicViolation } from "@/lib/save-day-plan";
+import { onlyActiveTopics } from "@/lib/topic-activity";
 
 async function getStudentId(): Promise<
   | { ok: true; studentId: string }
@@ -733,6 +734,7 @@ export async function getDailyEntryData(
           subjectName: curriculumTopics.subjectName,
           topicName: curriculumTopics.topicName,
           sortOrder: curriculumTopics.sortOrder,
+          isActive: curriculumTopics.isActive,
         })
         .from(curriculumTopics)
         .orderBy(
@@ -754,7 +756,7 @@ export async function getDailyEntryData(
 
     const subjects: SubjectOptions = { TYT: [], AYT: [], YDT: [] };
     const groupByKey = new Map<string, SubjectOption>();
-    for (const topic of topicRows) {
+    for (const topic of onlyActiveTopics(topicRows)) {
       const key = `${topic.examType}:${topic.subjectId}`;
       let group = groupByKey.get(key);
       if (!group) {
@@ -1014,6 +1016,8 @@ export async function saveDay(payload: unknown): Promise<SaveDayResult> {
               id: curriculumTopics.id,
               examType: curriculumTopics.examType,
               subjectId: curriculumTopics.subjectId,
+              topicName: curriculumTopics.topicName,
+              isActive: curriculumTopics.isActive,
             })
             .from(curriculumTopics)
             .where(inArray(curriculumTopics.id, topicIds))
@@ -1041,7 +1045,12 @@ export async function saveDay(payload: unknown): Promise<SaveDayResult> {
     }
 
     const existing = await db
-      .select({ topicId: dailyQuestionEntries.topicId })
+      .select({
+        topicId: dailyQuestionEntries.topicId,
+        correct: dailyQuestionEntries.correct,
+        wrong: dailyQuestionEntries.wrong,
+        blank: dailyQuestionEntries.blank,
+      })
       .from(dailyQuestionEntries)
       .where(
         and(
@@ -1049,6 +1058,26 @@ export async function saveDay(payload: unknown): Promise<SaveDayResult> {
           eq(dailyQuestionEntries.date, today),
         ),
       );
+
+    const inactiveTopicIds = new Set(
+      topicRows.filter((topic) => !topic.isActive).map((topic) => topic.id),
+    );
+    const violation = findPassiveTopicViolation(
+      rows,
+      inactiveTopicIds,
+      existing,
+    );
+    if (violation) {
+      const topicName = topicMap.get(violation.topicId)?.topicName ?? "Seçilen konu";
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message:
+          violation.kind === "new-row"
+            ? `"${topicName}" konusu artık aktif değil; yeni kayıt eklenemez.`
+            : `"${topicName}" konusunun bugünkü kaydı değiştirilemez.`,
+      };
+    }
 
     const plan = planSaveDay(existing, parsed.data);
 
@@ -1231,6 +1260,7 @@ export async function getRecentTopicsForSubject(
         and(
           eq(dailyQuestionEntries.studentId, guard.studentId),
           eq(dailyQuestionEntries.subjectId, subjectId),
+          eq(curriculumTopics.isActive, true),
         ),
       )
       .groupBy(

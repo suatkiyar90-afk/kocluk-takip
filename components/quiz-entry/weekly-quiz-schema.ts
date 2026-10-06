@@ -14,6 +14,7 @@ export const TYT_SUBJECTS: SubjectDef[] = [
   { id: "turkce", name: "Türkçe", maxQuestions: 40 },
   { id: "sosyal", name: "Sosyal Bilimler", maxQuestions: 20 },
   { id: "matematik", name: "Temel Matematik", maxQuestions: 40 },
+  { id: "geometri", name: "Geometri", maxQuestions: 10 },
   { id: "fen", name: "Fen Bilimleri", maxQuestions: 20 },
 ];
 
@@ -22,6 +23,7 @@ export const AYT_SUBJECTS: SubjectDef[] = [
   { id: "tarih1", name: "Tarih (S1)", maxQuestions: 10 },
   { id: "cografya1", name: "Coğrafya (S1)", maxQuestions: 6 },
   { id: "matematik-ayt", name: "Matematik", maxQuestions: 40 },
+  { id: "geometri-ayt", name: "Geometri", maxQuestions: 10 },
   { id: "fizik", name: "Fizik", maxQuestions: 14 },
   { id: "kimya", name: "Kimya", maxQuestions: 13 },
   { id: "biyoloji", name: "Biyoloji", maxQuestions: 13 },

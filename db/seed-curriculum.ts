@@ -1,7 +1,7 @@
 import { db } from "./index";
 import { curriculumTopics } from "./schema";
 
-interface TopicSeed {
+export interface TopicSeed {
   examType: "TYT" | "AYT" | "YDT";
   subjectId: string;
   subjectName: string;
@@ -13,7 +13,7 @@ const TURKCE = "TYT";
 const AYT = "AYT";
 const YDT = "YDT";
 
-const TOPICS: TopicSeed[] = [
+export const TOPICS: TopicSeed[] = [
   ...list(TURKCE, "turkce", "Türkçe", [
     "Sözcükte Anlam",
     "Söz Öbeklerinde Anlam",
@@ -58,6 +58,22 @@ const TOPICS: TopicSeed[] = [
     "Fonksiyonlar",
     "Permütasyon - Kombinasyon",
     "Olasılık",
+  ]),
+  ...list(TURKCE, "geometri", "Geometri", [
+    "Temel Kavramlar ve Doğruda Açılar",
+    "Üçgende Açılar",
+    "Dik Üçgen",
+    "Özel Üçgenler",
+    "İkizkenar ve Eşkenar Üçgen",
+    "Açıortay",
+    "Kenarortay",
+    "Üçgende Alan",
+    "Üçgende Benzerlik",
+    "Çokgenler",
+    "Dörtgenler",
+    "Çember ve Daire",
+    "Analitik Geometri",
+    "Katı Cisimler",
   ]),
   ...list(TURKCE, "fen", "Fen Bilimleri", [
     "Fizik Bilimine Giriş",
@@ -127,6 +143,15 @@ const TOPICS: TopicSeed[] = [
     "Logaritma",
     "Karmaşık Sayılar",
     "Permütasyon - Kombinasyon - Olasılık",
+  ]),
+  ...list(AYT, "geometri-ayt", "Geometri", [
+    "Üçgenler",
+    "Çokgenler ve Dörtgenler",
+    "Çember ve Daire",
+    "Doğrunun Analitik İncelenmesi",
+    "Çemberin Analitik İncelenmesi",
+    "Dönüşümler (Öteleme, Yansıma, Dönme)",
+    "Katı Cisimler",
   ]),
   ...list(AYT, "fizik", "Fizik", [
     "Vektörler",
@@ -228,14 +253,17 @@ const TOPICS: TopicSeed[] = [
     "Günümüz Dünya Sorunları ve Etik",
   ]),
   ...list(YDT, "ydt-ingilizce", "Yabancı Dil (İngilizce)", [
-    "Kelime Bilgisi (Vocabulary)",
-    "Gramer (Grammar)",
-    "Cümle Tamamlama",
-    "İngilizce - Türkçe Çeviri",
-    "Türkçe - İngilizce Çeviri",
-    "Okuma Parçaları (Reading)",
+    "Kelime Bilgisi",
+    "Dil Bilgisi",
+    "Cloze Test (Boşluk Doldurma)",
+    "Cümleyi Tamamlama",
+    "Çeviri (İngilizce - Türkçe / Türkçe - İngilizce)",
+    "Paragraf Anlama",
     "Diyalog Tamamlama",
-    "Anlamı Bozan Cümle",
+    "Anlamca Yakın Cümle (Restatement)",
+    "Verilen Durumda Söylenebilecek İfade (Situation)",
+    "Paragraf Tamamlama",
+    "Akışı Bozan Cümle (Irrelevant Sentence)",
   ]),
 ];
 
@@ -271,9 +299,11 @@ async function main() {
   console.log(`Müfredat çekirdeği: ${rows.length} konu hazır.`);
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((err) => {
-    console.error("Müfredat seed hatası:", err);
-    process.exit(1);
-  });
+if (process.argv[1]?.includes("seed-curriculum") ?? false) {
+  main()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error("Müfredat seed hatası:", err);
+      process.exit(1);
+    });
+}

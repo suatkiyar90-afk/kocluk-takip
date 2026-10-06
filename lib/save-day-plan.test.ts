@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  findPassiveTopicViolation,
   planSaveDay,
   saveDaySchema,
   type SaveDayInput,
@@ -143,5 +144,67 @@ describe("planSaveDay", () => {
       wrong: 3,
       blank: 5,
     });
+  });
+});
+
+describe("findPassiveTopicViolation", () => {
+  const inactive = new Set([101, 202]);
+
+  it("pasif konuya YENİ satır eklenemez (reddet)", () => {
+    const violation = findPassiveTopicViolation(
+      [row({ topicId: 202 })],
+      inactive,
+      [],
+    );
+    expect(violation).toEqual({ kind: "new-row", topicId: 202 });
+  });
+
+  it("bugün zaten kayıtlı pasif konu aynen kalıyorsa KABUL et", () => {
+    const violation = findPassiveTopicViolation(
+      [row({ topicId: 101, correct: 8, wrong: 2, blank: 0 })],
+      inactive,
+      [{ topicId: 101, correct: 8, wrong: 2, blank: 0 }],
+    );
+    expect(violation).toBeNull();
+  });
+
+  it("bugün kayıtlı pasif konunun sayıları değişmişse REDDET", () => {
+    const violation = findPassiveTopicViolation(
+      [row({ topicId: 101, correct: 9, wrong: 1, blank: 0 })],
+      inactive,
+      [{ topicId: 101, correct: 8, wrong: 2, blank: 0 }],
+    );
+    expect(violation).toEqual({ kind: "modified-row", topicId: 101 });
+  });
+
+  it("aktif konular için hiç bakmaz", () => {
+    const violation = findPassiveTopicViolation(
+      [row({ topicId: 999, correct: 5, wrong: 5, blank: 5 })],
+      inactive,
+      [],
+    );
+    expect(violation).toBeNull();
+  });
+
+  it("karışıktaki ilk pasif ihlali döndürür", () => {
+    const violation = findPassiveTopicViolation(
+      [
+        row({ topicId: 999 }),
+        row({ topicId: 303 }),
+        row({ topicId: 404 }),
+      ],
+      new Set([303, 404]),
+      [],
+    );
+    expect(violation).toEqual({ kind: "new-row", topicId: 303 });
+  });
+
+  it("bugün kaydı olmayan ama pasif olmayan konu ihlal sayılmaz", () => {
+    const violation = findPassiveTopicViolation(
+      [row({ topicId: 777 })],
+      new Set([101]),
+      [],
+    );
+    expect(violation).toBeNull();
   });
 });

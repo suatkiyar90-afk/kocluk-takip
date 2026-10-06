@@ -285,6 +285,7 @@ export const curriculumTopics = pgTable(
     subjectName: text("subject_name").notNull(),
     topicName: text("topic_name").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
   },
   (t) => ({
     curriculumTopicsUnique: uniqueIndex("curriculum_topics_unique").on(

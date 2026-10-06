@@ -8,6 +8,7 @@
     "start": "next start",
     "seed": "tsx --env-file=.env.local seed.ts",
     "seed:curriculum": "tsx --env-file=.env.local db/seed-curriculum.ts",
+    "db:sync-curriculum": "tsx --env-file=.env.local db/sync-curriculum.ts",
     "test": "vitest run"
   },
   "dependencies": {

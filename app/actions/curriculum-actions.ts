@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import { ALL_SUBJECTS, examTypes, type ExamType } from "@/components/quiz-entry/weekly-quiz-schema";
 import { actionErrorMessage } from "@/lib/action-error";
+import { onlyActiveTopics } from "@/lib/topic-activity";
 
 export type TopicStatus = "baslamadi" | "calisiliyor" | "bitti";
 
@@ -142,7 +143,7 @@ async function loadSnapshot(studentId: string): Promise<CurriculumSnapshot> {
   );
 
   const groups = new Map<string, CurriculumSubjectGroup>();
-  for (const t of topicRows) {
+  for (const t of onlyActiveTopics(topicRows)) {
     const subject = ALL_SUBJECTS[t.examType].find(
       (s) => s.id === t.subjectId,
     );
