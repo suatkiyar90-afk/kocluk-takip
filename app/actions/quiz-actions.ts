@@ -51,6 +51,10 @@ import {
   normalizeDenemeAttempts,
 } from "@/lib/save-day-plan";
 import { onlyActiveTopics } from "@/lib/topic-activity";
+import {
+  buildDenemeAttemptRows,
+  type DenemeAttemptRow,
+} from "@/lib/report-utils";
 
 async function getStudentId(): Promise<
   | { ok: true; studentId: string }
@@ -1355,6 +1359,81 @@ export async function getRecentTopicsForSubject(
         })),
       },
     };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export type DenemeAttemptsResult =
+  | { success: true; data: DenemeAttemptRow[] }
+  | {
+      success: false;
+      status: "UNAUTHORIZED" | "FORBIDDEN" | "DATABASE_ERROR";
+      message: string;
+    };
+
+const DENEME_ATTEMPT_LIMIT = 10;
+
+async function loadDenemeAttemptRows(
+  studentId: string,
+): Promise<DenemeAttemptRow[]> {
+  const rows = await db
+    .select({
+      id: studentDenemeAttempts.id,
+      date: studentDenemeAttempts.date,
+      denemeKey: studentDenemeAttempts.denemeKey,
+      correct: studentDenemeAttempts.correct,
+      wrong: studentDenemeAttempts.wrong,
+      blank: studentDenemeAttempts.blank,
+    })
+    .from(studentDenemeAttempts)
+    .where(eq(studentDenemeAttempts.studentId, studentId))
+    .orderBy(desc(studentDenemeAttempts.date), desc(studentDenemeAttempts.id))
+    .limit(DENEME_ATTEMPT_LIMIT);
+  return buildDenemeAttemptRows(rows);
+}
+
+export async function getMyDenemeAttempts(): Promise<DenemeAttemptsResult> {
+  const guard = await getStudentId();
+  if (guard.ok === false) {
+    return { success: false, status: guard.status, message: guard.message };
+  }
+
+  try {
+    const data = await loadDenemeAttemptRows(guard.studentId);
+    return { success: true, data };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export async function getStudentDenemeAttempts(
+  studentId: string,
+): Promise<DenemeAttemptsResult> {
+  const ctx = await getTeacherId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  if (!(await isAssigned(ctx.teacherId, studentId))) {
+    return {
+      success: false,
+      status: "FORBIDDEN",
+      message: "Bu öğrenci size atanmamış.",
+    };
+  }
+
+  try {
+    const data = await loadDenemeAttemptRows(studentId);
+    return { success: true, data };
   } catch (err) {
     return {
       success: false,

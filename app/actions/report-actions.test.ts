@@ -6,6 +6,7 @@ const dbState = vi.hoisted(() => ({
   dailyRows: [] as unknown[],
   noteRows: [] as unknown[],
   mockRows: [] as unknown[],
+  denemeRows: [] as unknown[],
   inserts: [] as { table: unknown; values: unknown }[],
   selectFrom: [] as unknown[],
 }));
@@ -20,6 +21,7 @@ vi.mock("@/db", async () => {
     if (table === schema.dailyQuestionEntries) return dbState.dailyRows;
     if (table === schema.studentDailyNotes) return dbState.noteRows;
     if (table === schema.mockExams) return dbState.mockRows;
+    if (table === schema.studentDenemeAttempts) return dbState.denemeRows;
     return [];
   };
   const chain = (table: unknown) => {
@@ -111,6 +113,7 @@ beforeEach(() => {
   dbState.dailyRows = [];
   dbState.noteRows = [];
   dbState.mockRows = [];
+  dbState.denemeRows = [];
   dbState.inserts = [];
   dbState.selectFrom = [];
   authState.session = null;
@@ -215,6 +218,65 @@ describe("getStudentRangeReport yetkisi", () => {
       expect(result.message).toBe(REPORT_UNAUTHORIZED_MESSAGE);
     }
     expect(dbState.selectFrom).toHaveLength(0);
+  });
+
+  it("rapor öğrenci deneme girişlerini ve özetini de döndürür", async () => {
+    authState.session = { user: { id: ADMIN_ID, role: "admin", name: "Admin" } };
+    dbState.usersRows = [studentRow()];
+    dbState.denemeRows = [
+      {
+        id: 7,
+        studentId: STUDENT_ID,
+        date: isoDaysAgo(5),
+        denemeKey: "tyt",
+        correct: 30,
+        wrong: 10,
+        blank: 5,
+        createdAt: new Date(),
+      },
+      {
+        id: 8,
+        studentId: STUDENT_ID,
+        date: isoDaysAgo(4),
+        denemeKey: "ayt",
+        correct: 20,
+        wrong: 6,
+        blank: 2,
+        createdAt: new Date(),
+      },
+    ];
+
+    const result = await getStudentRangeReport(reportInput());
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.report.denemeAttempts).toHaveLength(2);
+      expect(result.data.report.denemeAttempts[0]).toMatchObject({
+        id: 7,
+        correct: 30,
+        wrong: 10,
+        blank: 5,
+        solved: 45,
+        net: 27.5,
+      });
+      expect(result.data.report.denemeSummary.count).toBe(2);
+      expect(result.data.report.denemeSummary.avgNet).toBeGreaterThan(0);
+      expect(result.data.report.denemeSummary.byType).toHaveLength(2);
+    }
+  });
+
+  it("aralıkta deneme yoksa özet sıfır döner", async () => {
+    authState.session = { user: { id: ADMIN_ID, role: "admin", name: "Admin" } };
+    dbState.usersRows = [studentRow()];
+
+    const result = await getStudentRangeReport(reportInput());
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.report.denemeAttempts).toHaveLength(0);
+      expect(result.data.report.denemeSummary.count).toBe(0);
+      expect(result.data.report.denemeSummary.byType).toHaveLength(0);
+    }
   });
 
   it("öğretmen için bitiş tarihi bugünden ileri olamaz (kısaltılır)", async () => {

@@ -14,6 +14,7 @@ import { WeekPicker } from "@/components/ui/week-picker";
 import { TopicAnalysis } from "@/components/reports/topic-analysis";
 import { FeedbackForm } from "@/components/coaching/feedback-form";
 import { MockExamHistory } from "@/components/exams/mock-exam-history";
+import { MyDenemeAttempts } from "@/components/exams/my-deneme-attempts";
 import { CurriculumProgress } from "@/components/curriculum/curriculum-progress";
 import { TeacherQASection } from "@/components/qa/teacher-qa-section";
 import { TargetsPanel } from "@/components/reports/targets-panel";
@@ -24,7 +25,10 @@ import { netScore } from "@/components/quiz-entry/weekly-quiz-schema";
 import { weekdayOfISO } from "@/lib/week-utils";
 import { normalizeStudentDetailTab } from "@/lib/student-detail-tabs";
 import { getStudentPendingQuestionCount } from "@/app/actions/qa-actions";
-import type { WeeklyReportResult } from "@/app/actions/quiz-actions";
+import type {
+  WeeklyReportResult,
+  DenemeAttemptsResult,
+} from "@/app/actions/quiz-actions";
 import type { MockExamsResult } from "@/app/actions/mock-exam-actions";
 import type {
   WeeklyTargetActionResult,
@@ -90,6 +94,7 @@ interface StudentDetailTabsProps {
   initialTab?: string;
   reportResult: WeeklyReportResult;
   examsResult: MockExamsResult;
+  denemeAttemptsResult: DenemeAttemptsResult;
   targetsResult: WeeklyTargetActionResult<WeeklyTargetView[]>;
   denemeBundleResult: WeeklyDenemeBundleResult;
   curriculumResult: CurriculumActionResult<CurriculumSnapshot>;
@@ -105,6 +110,7 @@ export function StudentDetailTabs({
   initialTab,
   reportResult,
   examsResult,
+  denemeAttemptsResult,
   targetsResult,
   denemeBundleResult,
   curriculumResult,
@@ -540,6 +546,18 @@ export function StudentDetailTabs({
           </div>
         ) : (
           <MockExamHistory records={examsResult.data} />
+        )}
+
+        {denemeAttemptsResult.success === false ? (
+          <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+            {denemeAttemptsResult.message}
+          </div>
+        ) : (
+          <MyDenemeAttempts
+            rows={denemeAttemptsResult.data}
+            title="Öğrencinin Kendi Denemeleri"
+            subtitle="Öğrencinin kendisi girdiği denemeler (son 10)"
+          />
         )}
       </div>
 

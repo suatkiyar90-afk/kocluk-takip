@@ -1,5 +1,6 @@
 import type { ExamType } from "@/components/quiz-entry/weekly-quiz-schema";
 import { netScore } from "@/components/quiz-entry/weekly-quiz-schema";
+import { getDenemeLabel, parseDenemeKey } from "@/lib/deneme";
 import {
   addDaysISO,
   isValidISODate,
@@ -388,6 +389,95 @@ export interface MockExamRow {
   tytPuani: number;
 }
 
+export interface DenemeAttemptRow {
+  id: number;
+  date: string;
+  denemeKey: string;
+  label: string;
+  type: string;
+  correct: number;
+  wrong: number;
+  blank: number;
+  solved: number;
+  net: number;
+}
+
+export function buildDenemeAttemptRows(
+  rows: readonly {
+    id: number;
+    date: string;
+    denemeKey: string;
+    correct: number;
+    wrong: number;
+    blank: number;
+  }[],
+): DenemeAttemptRow[] {
+  return rows.map((row) => {
+    const parsed = parseDenemeKey(row.denemeKey);
+    return {
+      id: row.id,
+      date: row.date,
+      denemeKey: row.denemeKey,
+      label: getDenemeLabel(row.denemeKey) ?? row.denemeKey,
+      type: parsed?.type ?? "",
+      correct: row.correct,
+      wrong: row.wrong,
+      blank: row.blank,
+      solved: row.correct + row.wrong + row.blank,
+      net: roundNet(netScore(row.correct, row.wrong)),
+    };
+  });
+}
+
+export interface DenemeTypeSummary {
+  type: string;
+  label: string;
+  count: number;
+  avgNet: number;
+}
+
+export interface DenemeSummary {
+  count: number;
+  avgNet: number;
+  byType: DenemeTypeSummary[];
+}
+
+const DENEME_TYPE_LABELS: Record<string, string> = {
+  tyt: "TYT",
+  ayt: "AYT",
+  brans: "Branş",
+};
+
+export function buildDenemeSummary(
+  rows: readonly DenemeAttemptRow[],
+): DenemeSummary {
+  if (rows.length === 0) {
+    return { count: 0, avgNet: 0, byType: [] };
+  }
+
+  const byType = new Map<string, { count: number; netSum: number }>();
+  let netSum = 0;
+  for (const row of rows) {
+    netSum += row.net;
+    const key = row.type;
+    const current = byType.get(key) ?? { count: 0, netSum: 0 };
+    current.count += 1;
+    current.netSum += row.net;
+    byType.set(key, current);
+  }
+
+  return {
+    count: rows.length,
+    avgNet: roundNet(netSum / rows.length),
+    byType: Array.from(byType.entries()).map(([type, value]) => ({
+      type,
+      label: DENEME_TYPE_LABELS[type] ?? type,
+      count: value.count,
+      avgNet: roundNet(value.netSum / value.count),
+    })),
+  };
+}
+
 export function filterMocksInRange<T extends { examDate: string }>(
   exams: readonly T[],
   from: string,
@@ -467,6 +557,7 @@ export function buildReportSheets(report: {
   days: ReportDayRow[];
   notes: { date: string; note: string }[];
   mocks: (MockExamRow & { netDiff: number | null })[];
+  denemeAttempts?: DenemeAttemptRow[];
 }, options: SheetExportOptions): ReportSheet[] {
   const sheets: ReportSheet[] = [];
 
@@ -551,6 +642,25 @@ export function buildReportSheets(report: {
       noteRows.push([formatLocalDate(note.date), note.note]);
     }
     sheets.push({ name: "Günün Özeti", rows: noteRows.map(safeRow) });
+  }
+
+  const denemeRows = report.denemeAttempts ?? [];
+  if (denemeRows.length > 0) {
+    const rows: unknown[][] = [
+      ["Tarih", "Deneme", "Doğru", "Yanlış", "Boş", "Çözülen", "Net"],
+    ];
+    for (const attempt of denemeRows) {
+      rows.push([
+        formatLocalDate(attempt.date),
+        attempt.label,
+        attempt.correct,
+        attempt.wrong,
+        attempt.blank,
+        attempt.solved,
+        attempt.net,
+      ]);
+    }
+    sheets.push({ name: "Öğrenci Denemeleri", rows: rows.map(safeRow) });
   }
 
   if (report.mocks.length > 0) {

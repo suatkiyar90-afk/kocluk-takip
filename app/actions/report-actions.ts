@@ -9,6 +9,7 @@ import {
   dailyQuestionEntries,
   mockExams,
   studentDailyNotes,
+  studentDenemeAttempts,
   users,
 } from "@/db/schema";
 import { actionErrorMessage } from "@/lib/action-error";
@@ -16,12 +17,16 @@ import { logActivity } from "@/lib/activity-log";
 import { assertCanViewStudentReport } from "@/lib/report-access";
 import {
   buildDayRows,
+  buildDenemeAttemptRows,
+  buildDenemeSummary,
   buildSubjectBreakdown,
   buildSummary,
   dayCountInclusive,
   filterMocksInRange,
   validateReportRange,
   withMockDiffs,
+  type DenemeAttemptRow,
+  type DenemeSummary,
   type ReportDayRow,
   type ReportEntryRow,
   type ReportSubject,
@@ -157,6 +162,8 @@ export interface StudentRangeReportData {
   days: ReportDayRow[];
   notes: { date: string; note: string }[];
   mocks: MockExamReportRow[];
+  denemeAttempts: DenemeAttemptRow[];
+  denemeSummary: DenemeSummary;
 }
 
 export async function getStudentRangeReport(
@@ -214,7 +221,7 @@ export async function getStudentRangeReport(
       lte(dailyQuestionEntries.date, range.to),
     );
 
-    const [dailyRows, noteRows, mockRows] = await Promise.all([
+    const [dailyRows, noteRows, mockRows, denemeRows] = await Promise.all([
       db
         .select({
           topicId: dailyQuestionEntries.topicId,
@@ -283,6 +290,24 @@ export async function getStudentRangeReport(
           ),
         )
         .orderBy(asc(mockExams.examDate), asc(mockExams.id)),
+      db
+        .select({
+          id: studentDenemeAttempts.id,
+          date: studentDenemeAttempts.date,
+          denemeKey: studentDenemeAttempts.denemeKey,
+          correct: studentDenemeAttempts.correct,
+          wrong: studentDenemeAttempts.wrong,
+          blank: studentDenemeAttempts.blank,
+        })
+        .from(studentDenemeAttempts)
+        .where(
+          and(
+            eq(studentDenemeAttempts.studentId, parsed.data.studentId),
+            gte(studentDenemeAttempts.date, range.from),
+            lte(studentDenemeAttempts.date, range.to),
+          ),
+        )
+        .orderBy(asc(studentDenemeAttempts.date), asc(studentDenemeAttempts.id)),
     ]);
 
     const entryRows: ReportEntryRow[] = dailyRows.map((row) => ({
@@ -331,6 +356,9 @@ export async function getStudentRangeReport(
       },
     }));
 
+    const denemeAttempts = buildDenemeAttemptRows(denemeRows);
+    const denemeSummary = buildDenemeSummary(denemeAttempts);
+
     const report: StudentRangeReportData = {
       student: {
         id: studentRows[0].id,
@@ -344,6 +372,8 @@ export async function getStudentRangeReport(
       days,
       notes: noteRows.map((row) => ({ date: row.date, note: row.note })),
       mocks,
+      denemeAttempts,
+      denemeSummary,
     };
 
     await logActivity({

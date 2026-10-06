@@ -26,10 +26,13 @@ import {
   curriculumTopics,
   dailyQuestionEntries,
   policyAcknowledgments,
+  studentDenemeAttempts,
   teacherStudents,
   users,
 } from "@/db/schema";
 import { actionErrorMessage } from "@/lib/action-error";
+import { buildEnteredTodaySet } from "@/lib/data-entry-activity";
+import { getDenemeLabel } from "@/lib/deneme";
 import { getLegalDocument } from "@/lib/legal";
 import {
   buildPolicyAcknowledgmentOverview,
@@ -800,32 +803,64 @@ export async function getRecentDataEntries(): Promise<
   }
 
   try {
-    const rows = await db
-      .select({
-        id: dailyQuestionEntries.id,
-        studentName: users.name,
-        examType: dailyQuestionEntries.examType,
-        subjectName: curriculumTopics.subjectName,
-        totalSolved: sql<number>`${dailyQuestionEntries.correct} + ${dailyQuestionEntries.wrong} + ${dailyQuestionEntries.blank}`,
-        createdAt: dailyQuestionEntries.createdAt,
-      })
-      .from(dailyQuestionEntries)
-      .innerJoin(users, eq(dailyQuestionEntries.studentId, users.id))
-      .innerJoin(
-        curriculumTopics,
-        eq(curriculumTopics.id, dailyQuestionEntries.topicId),
-      )
-      .orderBy(desc(dailyQuestionEntries.createdAt))
-      .limit(20);
+    const [topicRows, denemeRows] = await Promise.all([
+      db
+        .select({
+          id: dailyQuestionEntries.id,
+          studentName: users.name,
+          examType: dailyQuestionEntries.examType,
+          subjectName: curriculumTopics.subjectName,
+          totalSolved: sql<number>`${dailyQuestionEntries.correct} + ${dailyQuestionEntries.wrong} + ${dailyQuestionEntries.blank}`,
+          createdAt: dailyQuestionEntries.createdAt,
+        })
+        .from(dailyQuestionEntries)
+        .innerJoin(users, eq(dailyQuestionEntries.studentId, users.id))
+        .innerJoin(
+          curriculumTopics,
+          eq(curriculumTopics.id, dailyQuestionEntries.topicId),
+        )
+        .orderBy(desc(dailyQuestionEntries.createdAt))
+        .limit(20),
+      db
+        .select({
+          id: studentDenemeAttempts.id,
+          studentName: users.name,
+          denemeKey: studentDenemeAttempts.denemeKey,
+          totalSolved: sql<number>`${studentDenemeAttempts.correct} + ${studentDenemeAttempts.wrong} + ${studentDenemeAttempts.blank}`,
+          createdAt: studentDenemeAttempts.createdAt,
+        })
+        .from(studentDenemeAttempts)
+        .innerJoin(users, eq(studentDenemeAttempts.studentId, users.id))
+        .orderBy(desc(studentDenemeAttempts.createdAt))
+        .limit(20),
+    ]);
 
-    const entries: RecentDataEntry[] = rows.map((row) => ({
-      id: row.id,
-      studentName: row.studentName || "İsimsiz öğrenci",
-      examType: row.examType,
-      subjectName: row.subjectName,
-      totalSolved: Number(row.totalSolved),
-      createdAt: row.createdAt.toISOString(),
-    }));
+    const merged: RecentDataEntry[] = [
+      ...topicRows.map((row) => ({
+        id: row.id,
+        studentName: row.studentName || "İsimsiz öğrenci",
+        examType: row.examType,
+        subjectName: row.subjectName,
+        totalSolved: Number(row.totalSolved),
+        createdAt: row.createdAt.toISOString(),
+      })),
+      ...denemeRows.map((row) => ({
+        id: -row.id,
+        studentName: row.studentName || "İsimsiz öğrenci",
+        examType: "",
+        subjectName: getDenemeLabel(row.denemeKey) ?? row.denemeKey,
+        totalSolved: Number(row.totalSolved),
+        createdAt: row.createdAt.toISOString(),
+      })),
+    ];
+    merged.sort((a, b) =>
+      a.createdAt === b.createdAt
+        ? b.id - a.id
+        : a.createdAt < b.createdAt
+          ? 1
+          : -1,
+    );
+    const entries = merged.slice(0, 20);
 
     return {
       success: true,
@@ -953,7 +988,7 @@ export async function getTodayInactivity(): Promise<
   try {
     const range = istanbulDayRange();
 
-    const [people, dataTodayRows, actorRows, assignmentRows] =
+    const [people, dataTodayRows, denemeTodayRows, actorRows, assignmentRows] =
       await Promise.all([
         db
           .select({
@@ -981,6 +1016,15 @@ export async function getTodayInactivity(): Promise<
             and(
               gte(dailyQuestionEntries.createdAt, range.start),
               lt(dailyQuestionEntries.createdAt, range.end),
+            ),
+          ),
+        db
+          .selectDistinct({ studentId: studentDenemeAttempts.studentId })
+          .from(studentDenemeAttempts)
+          .where(
+            and(
+              gte(studentDenemeAttempts.createdAt, range.start),
+              lt(studentDenemeAttempts.createdAt, range.end),
             ),
           ),
         db
@@ -1049,7 +1093,10 @@ export async function getTodayInactivity(): Promise<
     studentRows.sort(byName);
     teacherRows.sort(byName);
 
-    const dataSet = new Set(dataTodayRows.map((r) => r.studentId));
+    const dataSet = buildEnteredTodaySet(
+      dataTodayRows.map((r) => r.studentId),
+      denemeTodayRows.map((r) => r.studentId),
+    );
     const actorSet = new Set(actorRows.map((r) => r.actorId));
 
     const summary: TodayInactivitySummary = {

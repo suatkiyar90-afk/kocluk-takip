@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { dailyQuestionEntries, users } from "@/db/schema";
+import { dailyQuestionEntries, studentDenemeAttempts, users } from "@/db/schema";
+import { buildEnteredTodaySet } from "@/lib/data-entry-activity";
 import { sendPushNotification } from "@/lib/web-push-helper";
 import { todayInIstanbul } from "@/lib/week-utils";
 
@@ -28,7 +29,7 @@ async function runDailyReminder(): Promise<NextResponse> {
   try {
     const today = todayInIstanbul();
 
-    const [students, activeToday] = await Promise.all([
+    const [students, activeToday, denemeToday] = await Promise.all([
       db
         .select({ id: users.id })
         .from(users)
@@ -37,9 +38,16 @@ async function runDailyReminder(): Promise<NextResponse> {
         .selectDistinct({ studentId: dailyQuestionEntries.studentId })
         .from(dailyQuestionEntries)
         .where(eq(dailyQuestionEntries.date, today)),
+      db
+        .selectDistinct({ studentId: studentDenemeAttempts.studentId })
+        .from(studentDenemeAttempts)
+        .where(eq(studentDenemeAttempts.date, today)),
     ]);
 
-    const activeSet = new Set(activeToday.map((r) => r.studentId));
+    const activeSet = buildEnteredTodaySet(
+      activeToday.map((r) => r.studentId),
+      denemeToday.map((r) => r.studentId),
+    );
     const inactiveIds = students
       .map((s) => s.id)
       .filter((id) => !activeSet.has(id));

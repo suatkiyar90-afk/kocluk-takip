@@ -3,7 +3,10 @@ import { ArrowLeft } from "lucide-react";
 import { Toaster } from "sonner";
 import { auth } from "@/auth";
 import { getStudentWeeklySummary } from "@/app/actions/teacher-actions";
-import { getWeeklyReportByStudent } from "@/app/actions/quiz-actions";
+import {
+  getWeeklyReportByStudent,
+  getStudentDenemeAttempts,
+} from "@/app/actions/quiz-actions";
 import { listStudentThreads } from "@/app/actions/qa-actions";
 import { getStudentCurriculumProgress } from "@/app/actions/curriculum-actions";
 import { getStudentMockExams } from "@/app/actions/mock-exam-actions";
@@ -43,6 +46,7 @@ export default async function StudentDetailPage({
   const qaResult = await listStudentThreads(id);
   const curriculumResult = await getStudentCurriculumProgress(id);
   const examsResult = await getStudentMockExams(id);
+  const denemeAttemptsResult = await getStudentDenemeAttempts(id);
   const targetsResult = await listWeeklyTargets(id, weekStart);
   const denemeBundleResult = await getWeeklyDenemeBundle(id, weekStart);
 
@@ -92,6 +96,7 @@ export default async function StudentDetailPage({
           initialTab={initialTab}
           reportResult={reportResult}
           examsResult={examsResult}
+          denemeAttemptsResult={denemeAttemptsResult}
           targetsResult={targetsResult}
           denemeBundleResult={denemeBundleResult}
           curriculumResult={curriculumResult}

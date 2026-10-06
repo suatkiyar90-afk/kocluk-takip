@@ -8,6 +8,7 @@ import {
   coachingFeedbacks,
   dailyQuestionEntries,
   qaThreads,
+  studentDenemeAttempts,
   teacherStudents,
   users,
 } from "@/db/schema";
@@ -281,9 +282,10 @@ export async function getAttentionList(): Promise<
 
     let weekRows: WeekRow[] = [];
     let lastEntryRows: { studentId: string; lastDate: string | null }[] = [];
+    let lastDenemeRows: { studentId: string; lastDate: string | null }[] = [];
 
     if (studentIds.length > 0) {
-      [weekRows, lastEntryRows] = await Promise.all([
+      [weekRows, lastEntryRows, lastDenemeRows] = await Promise.all([
         db
           .select({
             studentId: dailyQuestionEntries.studentId,
@@ -308,6 +310,14 @@ export async function getAttentionList(): Promise<
           .from(dailyQuestionEntries)
           .where(inArray(dailyQuestionEntries.studentId, studentIds))
           .groupBy(dailyQuestionEntries.studentId),
+        db
+          .select({
+            studentId: studentDenemeAttempts.studentId,
+            lastDate: sql<string | null>`to_char(max(${studentDenemeAttempts.date}), 'YYYY-MM-DD')`,
+          })
+          .from(studentDenemeAttempts)
+          .where(inArray(studentDenemeAttempts.studentId, studentIds))
+          .groupBy(studentDenemeAttempts.studentId),
       ]);
     }
 
@@ -321,6 +331,12 @@ export async function getAttentionList(): Promise<
     const lastByStudent = new Map(
       lastEntryRows.map((row) => [row.studentId, row.lastDate]),
     );
+    for (const row of lastDenemeRows) {
+      const current = lastByStudent.get(row.studentId) ?? null;
+      if (row.lastDate !== null && (current === null || row.lastDate > current)) {
+        lastByStudent.set(row.studentId, row.lastDate);
+      }
+    }
 
     const students: AttentionStudent[] = rows.map((row) => {
       const totals = aggregateWeekEntries(

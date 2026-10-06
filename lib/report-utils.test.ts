@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_REPORT_DAYS,
   buildDayRows,
+  buildDenemeAttemptRows,
+  buildDenemeSummary,
+  buildReportSheets,
   buildSubjectBreakdown,
   buildSummary,
   dayCountInclusive,
@@ -14,6 +17,7 @@ import {
   withMockDiffs,
   type ReportEntryRow,
 } from "./report-utils";
+import { getDenemeLabel } from "./deneme";
 
 function row(overrides: Partial<ReportEntryRow> = {}): ReportEntryRow {
   return {
@@ -341,5 +345,185 @@ describe("excelFileName", () => {
     expect(excelFileName(null, "2026-01-01", "2026-01-31")).toBe(
       "rapor_ogrenci_2026-01-01_2026-01-31.xlsx",
     );
+  });
+});
+
+describe("buildDenemeAttemptRows", () => {
+  it("deneme satırlarını etiket, çözülen ve net ile zenginleştirir", () => {
+    const rows = buildDenemeAttemptRows([
+      {
+        id: 1,
+        date: "2026-10-01",
+        denemeKey: "tyt",
+        correct: 30,
+        wrong: 10,
+        blank: 5,
+      },
+      {
+        id: 2,
+        date: "2026-10-02",
+        denemeKey: "ayt",
+        correct: 20,
+        wrong: 6,
+        blank: 2,
+      },
+    ]);
+
+    expect(rows[0]).toMatchObject({
+      id: 1,
+      label: getDenemeLabel("tyt"),
+      type: "tyt",
+      solved: 45,
+      net: 27.5,
+    });
+    expect(rows[1]).toMatchObject({
+      id: 2,
+      label: getDenemeLabel("ayt"),
+      type: "ayt",
+      solved: 28,
+      net: 18.5,
+    });
+  });
+
+  it("bilinmeyen deneme anahtarı için anahtarın kendisi etiket olur", () => {
+    const rows = buildDenemeAttemptRows([
+      {
+        id: 3,
+        date: "2026-10-03",
+        denemeKey: "garip_anahatar",
+        correct: 5,
+        wrong: 5,
+        blank: 0,
+      },
+    ]);
+    expect(rows[0].label).toBe("garip_anahatar");
+    expect(rows[0].type).toBe("");
+  });
+});
+
+describe("buildDenemeSummary", () => {
+  it("boş liste için sıfır özet döndürür", () => {
+    const summary = buildDenemeSummary([]);
+    expect(summary).toEqual({ count: 0, avgNet: 0, byType: [] });
+  });
+
+  it("türe göre sayım ve ortalama net hesaplar", () => {
+    const rows = buildDenemeAttemptRows([
+      {
+        id: 1,
+        date: "2026-10-01",
+        denemeKey: "tyt",
+        correct: 30,
+        wrong: 10,
+        blank: 5,
+      },
+      {
+        id: 2,
+        date: "2026-10-02",
+        denemeKey: "tyt",
+        correct: 30,
+        wrong: 10,
+        blank: 5,
+      },
+      {
+        id: 3,
+        date: "2026-10-03",
+        denemeKey: "ayt",
+        correct: 20,
+        wrong: 6,
+        blank: 2,
+      },
+    ]);
+
+    const summary = buildDenemeSummary(rows);
+    expect(summary.count).toBe(3);
+    expect(summary.avgNet).toBeGreaterThan(0);
+
+    const tyt = summary.byType.find((item) => item.type === "tyt");
+    const ayt = summary.byType.find((item) => item.type === "ayt");
+    expect(tyt).toMatchObject({ label: "TYT", count: 2, avgNet: 27.5 });
+    expect(ayt).toMatchObject({ label: "AYT", count: 1, avgNet: 18.5 });
+  });
+});
+
+describe("buildReportSheets deneme sayfası", () => {
+  function baseReport() {
+    return {
+      student: { name: "Ayşe Yılmaz", studentNumber: "1042" },
+      range: { from: "2026-10-01", to: "2026-10-05" },
+      generatedAt: "2026-10-05T12:00:00.000Z",
+      summary: {
+        totalSolved: 100,
+        correct: 70,
+        wrong: 20,
+        blank: 10,
+        net: 65,
+        rate: 70,
+        daysWithData: 3,
+        totalDays: 5,
+        avgPerActiveDay: 33.3,
+        bestDay: null,
+      },
+      subjects: [],
+      days: [],
+      notes: [],
+      mocks: [],
+    };
+  }
+
+  const sheetOptions = { includeDailyDetail: false, includeNotes: false };
+
+  it("deneme girişleri varsa Öğrenci Denemeleri sayfası ekler", () => {
+    const denemeAttempts = buildDenemeAttemptRows([
+      {
+        id: 1,
+        date: "2026-10-02",
+        denemeKey: "tyt",
+        correct: 30,
+        wrong: 10,
+        blank: 5,
+      },
+    ]);
+
+    const sheets = buildReportSheets(
+      { ...baseReport(), denemeAttempts },
+      sheetOptions,
+    );
+
+    const names = sheets.map((sheet) => sheet.name);
+    expect(names).toContain("Öğrenci Denemeleri");
+
+    const sheet = sheets.find((item) => item.name === "Öğrenci Denemeleri");
+    expect(sheet?.rows[0]).toEqual([
+      "Tarih",
+      "Deneme",
+      "Doğru",
+      "Yanlış",
+      "Boş",
+      "Çözülen",
+      "Net",
+    ]);
+    expect(sheet?.rows[1]).toEqual([
+      "2.10.2026",
+      getDenemeLabel("tyt"),
+      30,
+      10,
+      5,
+      45,
+      27.5,
+    ]);
+  });
+
+  it("deneme yoksa veya alan hiç verilmiyorsa sayfa eklenmez", () => {
+    expect(
+      buildReportSheets(baseReport(), sheetOptions).map((s) => s.name),
+    ).not.toContain("Öğrenci Denemeleri");
+
+    expect(
+      buildReportSheets(
+        { ...baseReport(), denemeAttempts: [] },
+        sheetOptions,
+      ).map((s) => s.name),
+    ).not.toContain("Öğrenci Denemeleri");
   });
 });

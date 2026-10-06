@@ -668,6 +668,15 @@ export function StudentRangeReport({
               />
             </div>
 
+            {report.denemeSummary.count > 0 ? (
+              <p className="mt-2 text-center text-[11px] font-semibold text-gray-500 print:text-gray-600">
+                {report.denemeSummary.count} deneme girişi
+                {report.denemeSummary.count > 0
+                  ? ` · Ort. net ${formatNumber(report.denemeSummary.avgNet, 2)}`
+                  : ""}
+              </p>
+            ) : null}
+
             {hasEntries ? (
               <section className="mt-5">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 print:text-gray-900">
@@ -794,10 +803,99 @@ export function StudentRangeReport({
               </div>
             ) : null}
 
+            {report.denemeAttempts.length > 0 ? (
+              <section className="report-block mt-5">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 print:text-gray-900">
+                  Çözülen Denemeler (Öğrenci Girişi)
+                </h3>
+
+                {report.denemeSummary.byType.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {report.denemeSummary.byType.map((item) => (
+                      <span
+                        key={item.type}
+                        className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700"
+                      >
+                        {item.label} × {item.count} · Ort. net{" "}
+                        {formatNumber(item.avgNet, 2)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="mt-2 hidden overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm md:block">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-gray-200 bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                      <tr>
+                        <th className="px-3 py-2 font-bold">Tarih</th>
+                        <th className="px-3 py-2 font-bold">Deneme</th>
+                        <th className="px-3 py-2 font-bold">D / Y / B</th>
+                        <th className="px-3 py-2 font-bold">Çözülen</th>
+                        <th className="px-3 py-2 font-bold">Net</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {report.denemeAttempts.map((attempt) => (
+                        <tr key={attempt.id} className="align-top">
+                          <td className="px-3 py-2.5 text-xs font-semibold text-gray-700">
+                            {formatDayLabel(attempt.date)}
+                          </td>
+                          <td className="px-3 py-2.5 text-sm font-bold text-gray-900">
+                            {attempt.label}
+                          </td>
+                          <td className="px-3 py-2.5 text-xs font-semibold text-gray-700">
+                            {attempt.correct} / {attempt.wrong} / {attempt.blank}
+                          </td>
+                          <td className="px-3 py-2.5 text-sm font-semibold text-gray-900">
+                            {attempt.solved}
+                          </td>
+                          <td className="px-3 py-2.5 text-sm font-extrabold text-indigo-700">
+                            {formatNumber(attempt.net, 2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <ul className="mt-2 space-y-2 md:hidden">
+                  {report.denemeAttempts.map((attempt) => (
+                    <li
+                      key={attempt.id}
+                      className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-gray-900">
+                            {attempt.label}
+                          </p>
+                          <p className="mt-0.5 text-xs font-semibold text-gray-500">
+                            {formatDayLabel(attempt.date)}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-base font-extrabold text-indigo-700">
+                          {formatNumber(attempt.net, 2)}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between gap-3 text-xs font-semibold text-gray-600">
+                        <span>
+                          Doğru {attempt.correct} · Yanlış {attempt.wrong} ·
+                          Boş {attempt.blank}
+                        </span>
+                        <span className="text-gray-900">
+                          {attempt.solved} soru
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+
             {report.mocks.length > 0 ? (
               <section className="report-block mt-5">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 print:text-gray-900">
-                  Deneme Sınavları
+                  Okul Denemeleri
                 </h3>
 
                 <div className="mt-2 hidden overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm md:block">
