@@ -3,6 +3,12 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { ForceChangePasswordForm } from "./force-change-password-form";
 
+const HOME_BY_ROLE: Record<string, string> = {
+  admin: "/admin",
+  teacher: "/dashboard",
+  student: "/quiz-entry",
+};
+
 export const metadata = {
   title: "Şifre Değiştir | Akademik Takip",
 };
@@ -14,7 +20,7 @@ export default async function ForceChangePasswordPage() {
     redirect("/login");
   }
   if (session.user.mustChangePassword !== true) {
-    redirect("/panel");
+    redirect(HOME_BY_ROLE[session.user.role ?? ""] ?? "/login");
   }
 
   return (

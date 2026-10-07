@@ -34,7 +34,7 @@ export function ForceChangePasswordForm() {
       const result = await changeMyPassword({ newPassword, confirmPassword });
       if (result.success === true) {
         toast.success("Şifreniz güncellendi. Yönlendiriliyorsunuz…");
-        router.push("/panel");
+        router.push("/");
         router.refresh();
       } else {
         setError(result.message);
