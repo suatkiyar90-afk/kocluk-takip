@@ -2,13 +2,16 @@
 
 import { z } from "zod";
 import { auth } from "@/auth";
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { logActivity } from "@/lib/activity-log";
 import { mockExams, teacherStudents, users } from "@/db/schema";
 import { sendPushNotification } from "@/lib/web-push-helper";
 import { isValidISODate } from "@/lib/week-utils";
 import { actionErrorMessage } from "@/lib/action-error";
+import { normalizeSearchText } from "@/lib/search-text";
+import { validateImportedRows } from "@/lib/exam-import/parse-tyt-results";
+import type { ImportedExamValues } from "@/lib/exam-import/parse-tyt-results";
 
 export interface MockExamRecord {
   id: number;
@@ -180,6 +183,7 @@ const importMockExamsInputSchema = z.object({
           .trim()
           .min(1, "Öğrenci numarası boş olamaz.")
           .max(50, "Öğrenci numarası çok uzun."),
+        studentName: z.string().trim().max(200).optional(),
         turkceNet: scoreField,
         tarihNet: scoreField,
         cografyaNet: scoreField,
@@ -221,6 +225,22 @@ export async function importMockExams(
       success: false,
       status: "VALIDATION_FAILED",
       message: "Sınav tarihi gerçek bir tarih olmalı (YYYY-MM-DD).",
+    };
+  }
+
+  const rowIssues = validateImportedRows(rows as readonly ImportedExamValues[]);
+  if (rowIssues.length > 0) {
+    const shown = rowIssues
+      .slice(0, 5)
+      .map((i) => `Satır ${i.row} (${i.studentNumber}): ${i.message}`);
+    const more =
+      rowIssues.length > shown.length
+        ? ` (+${rowIssues.length - shown.length} hata daha)`
+        : "";
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: `Dosyada ${rowIssues.length} satır doğrulama hatası var: ${shown.join(" | ")}${more}. Tüm satırlar düzeltilmeden kaydetme yapılmaz.`,
     };
   }
 
@@ -296,63 +316,65 @@ export async function importMockExams(
     let saved: ImportedExamRow[] = [];
     let notifiedStudentIds: string[] = [];
     if (toInsert.length > 0) {
-      const inserted = await db
-        .insert(mockExams)
-        .values(
-          toInsert.map((r) => ({
-            studentId: r.studentId,
-            examName,
-            examDate,
-            turkceNet: r.turkceNet,
-            tarihNet: r.tarihNet,
-            cografyaNet: r.cografyaNet,
-            felsefeNet: r.felsefeNet,
-            dinNet: r.dinNet,
-            matematikNet: r.matematikNet,
-            geometriNet: r.geometriNet,
-            fizikNet: r.fizikNet,
-            kimyaNet: r.kimyaNet,
-            biyolojiNet: r.biyolojiNet,
-            toplamNet: r.toplamNet,
-            tytPuani: r.tytPuani,
-          })),
-        )
-        .onConflictDoUpdate({
-          target: [mockExams.studentId, mockExams.examName, mockExams.examDate],
-          set: {
-            turkceNet: sql`excluded.turkce_net`,
-            tarihNet: sql`excluded.tarih_net`,
-            cografyaNet: sql`excluded.cografya_net`,
-            felsefeNet: sql`excluded.felsefe_net`,
-            dinNet: sql`excluded.din_net`,
-            matematikNet: sql`excluded.matematik_net`,
-            geometriNet: sql`excluded.geometri_net`,
-            fizikNet: sql`excluded.fizik_net`,
-            kimyaNet: sql`excluded.kimya_net`,
-            biyolojiNet: sql`excluded.biyoloji_net`,
-            toplamNet: sql`excluded.toplam_net`,
-            tytPuani: sql`excluded.tyt_puani`,
-          } as {
-            id?: number;
-            studentId?: string;
-            examName?: string;
-            examDate?: string;
-            turkceNet?: unknown;
-            tarihNet?: unknown;
-            cografyaNet?: unknown;
-            felsefeNet?: unknown;
-            dinNet?: unknown;
-            matematikNet?: unknown;
-            geometriNet?: unknown;
-            fizikNet?: unknown;
-            kimyaNet?: unknown;
-            biyolojiNet?: unknown;
-            toplamNet?: unknown;
-            tytPuani?: unknown;
-            createdAt?: Date;
-          },
-        })
-        .returning({ studentId: mockExams.studentId });
+      const inserted = await db.transaction(async (tx) =>
+        tx
+          .insert(mockExams)
+          .values(
+            toInsert.map((r) => ({
+              studentId: r.studentId,
+              examName,
+              examDate,
+              turkceNet: r.turkceNet,
+              tarihNet: r.tarihNet,
+              cografyaNet: r.cografyaNet,
+              felsefeNet: r.felsefeNet,
+              dinNet: r.dinNet,
+              matematikNet: r.matematikNet,
+              geometriNet: r.geometriNet,
+              fizikNet: r.fizikNet,
+              kimyaNet: r.kimyaNet,
+              biyolojiNet: r.biyolojiNet,
+              toplamNet: r.toplamNet,
+              tytPuani: r.tytPuani,
+            })),
+          )
+          .onConflictDoUpdate({
+            target: [mockExams.studentId, mockExams.examName, mockExams.examDate],
+            set: {
+              turkceNet: sql`excluded.turkce_net`,
+              tarihNet: sql`excluded.tarih_net`,
+              cografyaNet: sql`excluded.cografya_net`,
+              felsefeNet: sql`excluded.felsefe_net`,
+              dinNet: sql`excluded.din_net`,
+              matematikNet: sql`excluded.matematik_net`,
+              geometriNet: sql`excluded.geometri_net`,
+              fizikNet: sql`excluded.fizik_net`,
+              kimyaNet: sql`excluded.kimya_net`,
+              biyolojiNet: sql`excluded.biyoloji_net`,
+              toplamNet: sql`excluded.toplam_net`,
+              tytPuani: sql`excluded.tyt_puani`,
+            } as {
+              id?: number;
+              studentId?: string;
+              examName?: string;
+              examDate?: string;
+              turkceNet?: unknown;
+              tarihNet?: unknown;
+              cografyaNet?: unknown;
+              felsefeNet?: unknown;
+              dinNet?: unknown;
+              matematikNet?: unknown;
+              geometriNet?: unknown;
+              fizikNet?: unknown;
+              kimyaNet?: unknown;
+              biyolojiNet?: unknown;
+              toplamNet?: unknown;
+              tytPuani?: unknown;
+              createdAt?: Date;
+            },
+          })
+          .returning({ studentId: mockExams.studentId }),
+      );
 
       const savedStudentIds = new Set(inserted.map((i) => i.studentId));
       saved = toInsert.filter((r) => savedStudentIds.has(r.studentId));
@@ -498,6 +520,235 @@ export async function getStudentMockExams(
       status: "DATABASE_ERROR",
       message:
         actionErrorMessage(err),
+    };
+  }
+}
+
+export interface PreviewMockExamSummary {
+  total: number;
+  matched: number;
+  unmatched: number;
+  unmatchedNumbers: string[];
+  existing: number;
+  fresh: number;
+  nameMismatches: string[];
+}
+
+export type PreviewMockExamResult =
+  | { success: true; data: PreviewMockExamSummary }
+  | {
+      success: false;
+      status: "UNAUTHORIZED" | "FORBIDDEN" | "VALIDATION_FAILED" | "DATABASE_ERROR";
+      message: string;
+    };
+
+export async function previewMockExamImport(
+  input: unknown,
+): Promise<PreviewMockExamResult> {
+  const ctx = await getAdminId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  const parsed = importMockExamsInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((i) => i.message).join(", "),
+    };
+  }
+
+  const { examName, examDate, rows } = parsed.data;
+
+  if (!isValidISODate(examDate)) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: "Sınav tarihi gerçek bir tarih olmalı (YYYY-MM-DD).",
+    };
+  }
+
+  try {
+    const studentRows = await db
+      .select({ id: users.id, studentNumber: users.studentNumber })
+      .from(users)
+      .where(and(eq(users.role, "student"), isNotNull(users.studentNumber)));
+
+    const byNormalized = new Map<string, string>();
+    const byNumeric = new Map<string, string>();
+    for (const s of studentRows) {
+      const num = s.studentNumber ?? "";
+      const normalized = normalizeNumber(num);
+      if (normalized) {
+        byNormalized.set(normalized, s.id);
+        const key = numericKey(num);
+        if (key !== null) byNumeric.set(key, s.id);
+      }
+    }
+
+    const existingRows = await db
+      .select({
+        studentId: mockExams.studentId,
+        examName: mockExams.examName,
+      })
+      .from(mockExams)
+      .where(eq(mockExams.examDate, examDate));
+    const existingStudentIds = new Set(existingRows.map((r) => r.studentId));
+    const namesOnDate = [...new Set(existingRows.map((r) => r.examName))];
+    const nameMismatches = namesOnDate.filter(
+      (n) => normalizeSearchText(n) !== normalizeSearchText(examName),
+    );
+
+    let matched = 0;
+    let unmatched = 0;
+    let existing = 0;
+    let fresh = 0;
+    const unmatchedNumbers: string[] = [];
+
+    for (const row of rows) {
+      const normalized = normalizeNumber(row.studentNumber);
+      let studentId = byNormalized.get(normalized);
+      if (!studentId) {
+        const key = numericKey(normalized);
+        if (key !== null) studentId = byNumeric.get(key);
+      }
+
+      if (!studentId) {
+        unmatched += 1;
+        unmatchedNumbers.push(normalized);
+        continue;
+      }
+
+      matched += 1;
+      if (existingStudentIds.has(studentId)) existing += 1;
+      else fresh += 1;
+    }
+
+    return {
+      success: true,
+      data: {
+        total: rows.length,
+        matched,
+        unmatched,
+        unmatchedNumbers,
+        existing,
+        fresh,
+        nameMismatches,
+      },
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export interface MockExamGroup {
+  examName: string;
+  examDate: string;
+  studentCount: number;
+  lastUploaded: Date | null;
+}
+
+export type MockExamGroupsResult =
+  | { success: true; data: MockExamGroup[] }
+  | {
+      success: false;
+      status: "UNAUTHORIZED" | "FORBIDDEN" | "DATABASE_ERROR";
+      message: string;
+    };
+
+export async function listMockExamGroups(): Promise<MockExamGroupsResult> {
+  const ctx = await getAdminId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  try {
+    const rows = await db
+      .select({
+        examName: mockExams.examName,
+        examDate: mockExams.examDate,
+        studentCount: sql<number>`count(*)::int`,
+        lastUploaded: sql<Date | null>`max(${mockExams.createdAt})`,
+      })
+      .from(mockExams)
+      .groupBy(mockExams.examName, mockExams.examDate)
+      .orderBy(desc(mockExams.examDate), asc(mockExams.examName));
+
+    return { success: true, data: rows };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export type DeleteMockExamGroupResult =
+  | { success: true; deleted: number; message: string }
+  | {
+      success: false;
+      status: "UNAUTHORIZED" | "FORBIDDEN" | "VALIDATION_FAILED" | "DATABASE_ERROR";
+      message: string;
+    };
+
+const deleteMockExamGroupInputSchema = z.object({
+  examName: z.string().trim().min(1).max(200),
+  examDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Sınav tarihi geçersiz."),
+});
+
+export async function deleteMockExamGroup(
+  input: unknown,
+): Promise<DeleteMockExamGroupResult> {
+  const ctx = await getAdminId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  const parsed = deleteMockExamGroupInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((i) => i.message).join(", "),
+    };
+  }
+
+  const { examName, examDate } = parsed.data;
+
+  try {
+    const deleted = await db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(mockExams)
+        .where(
+          and(eq(mockExams.examName, examName), eq(mockExams.examDate, examDate)),
+        )
+        .returning({ id: mockExams.id });
+      return rows.length;
+    });
+
+    if (deleted > 0) {
+      await logActivity({
+        actorId: ctx.userId,
+        action: "mock_exam_deleted",
+      });
+    }
+
+    return {
+      success: true,
+      deleted,
+      message: `"${examName}" denemesinin ${deleted} kaydı silindi.`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
     };
   }
 }

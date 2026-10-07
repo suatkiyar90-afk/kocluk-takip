@@ -7,6 +7,7 @@ export const ACTIVITY_ACTIONS = [
   "target_saved",
   "qa_replied",
   "mock_exam_uploaded",
+  "mock_exam_deleted",
   "announcement_sent",
   "report_viewed",
 ] as const;

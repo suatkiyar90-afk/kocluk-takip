@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Toaster } from "sonner";
 import { ImportExamsForm } from "@/components/admin/import-exams-form";
+import { UploadedExamsList } from "@/components/admin/uploaded-exams-list";
 
 export const metadata = {
   title: "Deneme Sınavı Yükle | Akademik Takip",
@@ -27,6 +28,10 @@ export default function AdminImportExamsPage() {
         </header>
 
         <ImportExamsForm />
+
+        <div className="mt-6">
+          <UploadedExamsList />
+        </div>
       </div>
 
       <Toaster position="top-center" richColors />

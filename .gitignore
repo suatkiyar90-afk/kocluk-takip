@@ -30,6 +30,11 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# uploaded exam result files must never be committed
+*.xlsx
+*.xls
+*.csv
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
