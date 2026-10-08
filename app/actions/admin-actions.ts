@@ -14,6 +14,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  lte,
   ne,
   not,
   or,
@@ -38,7 +39,11 @@ import {
   buildPolicyAcknowledgmentOverview,
   type PolicyAcknowledgmentOverview,
 } from "@/lib/policy-overview";
-import { isUserActiveToday, istanbulDayRange } from "@/lib/week-utils";
+import {
+  isUserActiveToday,
+  istanbulDayRange,
+  todayInIstanbul,
+} from "@/lib/week-utils";
 
 export interface AdminTeacher {
   id: string;
@@ -881,6 +886,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   target_saved: "Hedef belirledi",
   qa_replied: "Soruyu cevapladı",
   mock_exam_uploaded: "Deneme sonucu yükledi",
+  mock_exam_deleted: "Deneme sonucu sildi",
   announcement_sent: "Duyuru gönderdi",
   report_viewed: "Öğrenci raporu oluşturdu",
 };
@@ -1223,6 +1229,264 @@ export async function getPolicyAcknowledgmentOverview(): Promise<
       success: true,
       data: overview,
       message: "KVKK onay durumu yüklendi.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export interface UserActivityListRow {
+  id: string;
+  name: string;
+  role: "student" | "teacher" | "admin";
+  lastSeenAt: string | null;
+}
+
+export async function getUsersActivityList(): Promise<
+  AdminActionResult<{ users: UserActivityListRow[] }>
+> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  try {
+    const lastActive = sql<Date | null>`greatest(${users.lastSeenAt}, ${users.lastLoginAt})`;
+
+    const rows = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        role: users.role,
+        lastSeenAt: users.lastSeenAt,
+        lastLoginAt: users.lastLoginAt,
+      })
+      .from(users)
+      .where(inArray(users.role, ["student", "teacher"]))
+      .orderBy(sql`${lastActive} desc nulls last`)
+      .limit(1000);
+
+    const list: UserActivityListRow[] = rows.map((row) => {
+      const latest =
+        row.lastSeenAt && row.lastLoginAt
+          ? row.lastSeenAt.getTime() >= row.lastLoginAt.getTime()
+            ? row.lastSeenAt
+            : row.lastLoginAt
+          : (row.lastSeenAt ?? row.lastLoginAt);
+      return {
+        id: row.id,
+        name: row.name || "İsimsiz kullanıcı",
+        role: row.role,
+        lastSeenAt: latest ? latest.toISOString() : null,
+      };
+    });
+
+    return {
+      success: true,
+      data: { users: list },
+      message: "Kullanıcı listesi yüklendi.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export interface StudentActivityDetail {
+  lastEntryDate: string | null;
+  inactivitySummary: string;
+  last7Days: Array<{ date: string; entered: boolean; totalSolved: number }>;
+}
+
+export interface TeacherActivityItem {
+  id: number;
+  actionLabel: string;
+  studentName: string | null;
+  createdAt: string;
+}
+
+export interface UserActivityDetail {
+  user: {
+    id: string;
+    name: string;
+    role: "student" | "teacher" | "admin";
+    lastSeenAt: string | null;
+  };
+  student: StudentActivityDetail | null;
+  teacher: { recentActivities: TeacherActivityItem[] } | null;
+}
+
+const activityUserIdSchema = z.string().uuid();
+
+export async function getUserActivityDetail(
+  userId: string,
+): Promise<AdminActionResult<{ detail: UserActivityDetail }>> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  const parsedId = activityUserIdSchema.safeParse(userId);
+  if (!parsedId.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: "Geçersiz kullanıcı kimliği.",
+    };
+  }
+
+  try {
+    const userRows = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        role: users.role,
+        lastSeenAt: users.lastSeenAt,
+        lastLoginAt: users.lastLoginAt,
+      })
+      .from(users)
+      .where(eq(users.id, parsedId.data))
+      .limit(1);
+
+    const row = userRows[0];
+    if (!row) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message: "Kullanıcı bulunamadı.",
+      };
+    }
+
+    const latest =
+      row.lastSeenAt && row.lastLoginAt
+        ? row.lastSeenAt.getTime() >= row.lastLoginAt.getTime()
+          ? row.lastSeenAt
+          : row.lastLoginAt
+        : (row.lastSeenAt ?? row.lastLoginAt);
+
+    const baseUser: UserActivityDetail["user"] = {
+      id: row.id,
+      name: row.name || "İsimsiz kullanıcı",
+      role: row.role,
+      lastSeenAt: latest ? latest.toISOString() : null,
+    };
+
+    if (row.role === "student") {
+      const today = todayInIstanbul();
+      const dayMs = 86_400_000;
+      const startMs = Date.parse(`${today}T00:00:00Z`);
+      const dayKeys: string[] = [];
+      for (let i = 6; i >= 0; i--) {
+        dayKeys.push(new Date(startMs - i * dayMs).toISOString().slice(0, 10));
+      }
+
+      const [entryRows, lastRows] = await Promise.all([
+        db
+          .select({
+            date: dailyQuestionEntries.date,
+            totalSolved: sql<number>`coalesce(sum(${dailyQuestionEntries.correct} + ${dailyQuestionEntries.wrong} + ${dailyQuestionEntries.blank}), 0)`,
+          })
+          .from(dailyQuestionEntries)
+          .where(
+            and(
+              eq(dailyQuestionEntries.studentId, row.id),
+              gte(dailyQuestionEntries.date, dayKeys[0]),
+              lte(dailyQuestionEntries.date, today),
+            ),
+          )
+          .groupBy(dailyQuestionEntries.date),
+        db
+          .select({
+            lastDate: sql<string | null>`max(${dailyQuestionEntries.date})`,
+          })
+          .from(dailyQuestionEntries)
+          .where(eq(dailyQuestionEntries.studentId, row.id))
+          .limit(1),
+      ]);
+
+      const solvedByDate = new Map<string, number>();
+      for (const entry of entryRows) {
+        solvedByDate.set(entry.date, Number(entry.totalSolved));
+      }
+
+      const last7Days = dayKeys.map((date) => ({
+        date,
+        entered: solvedByDate.has(date),
+        totalSolved: solvedByDate.get(date) ?? 0,
+      }));
+
+      const lastEntryDate = lastRows[0]?.lastDate ?? null;
+      let inactivitySummary: string;
+      if (!lastEntryDate) {
+        inactivitySummary = "Hiç veri girmemiş.";
+      } else {
+        const gap = Math.round(
+          (startMs - Date.parse(`${lastEntryDate}T00:00:00Z`)) / dayMs,
+        );
+        inactivitySummary =
+          gap <= 0 ? "Aktif (Bugün girdi)" : `${gap} gündür veri girmiyor`;
+      }
+
+      return {
+        success: true,
+        data: {
+          detail: {
+            user: baseUser,
+            student: { lastEntryDate, inactivitySummary, last7Days },
+            teacher: null,
+          },
+        },
+        message: "Öğrenci detayı yüklendi.",
+      };
+    }
+
+    if (row.role === "teacher") {
+      const student = alias(users, "detail_activity_student");
+
+      const activityRows = await db
+        .select({
+          id: activityLogs.id,
+          action: activityLogs.action,
+          createdAt: activityLogs.createdAt,
+          studentName: student.name,
+        })
+        .from(activityLogs)
+        .leftJoin(student, eq(activityLogs.studentId, student.id))
+        .where(eq(activityLogs.actorId, row.id))
+        .orderBy(desc(activityLogs.createdAt))
+        .limit(30);
+
+      return {
+        success: true,
+        data: {
+          detail: {
+            user: baseUser,
+            student: null,
+            teacher: {
+              recentActivities: activityRows.map((log) => ({
+                id: log.id,
+                actionLabel: ACTIVITY_LABELS[log.action] ?? log.action,
+                studentName: log.studentName,
+                createdAt: log.createdAt.toISOString(),
+              })),
+            },
+          },
+        },
+        message: "Öğretmen detayı yüklendi.",
+      };
+    }
+
+    return {
+      success: true,
+      data: { detail: { user: baseUser, student: null, teacher: null } },
+      message: "Kullanıcı detayı yüklendi.",
     };
   } catch (err) {
     return {
