@@ -20,6 +20,7 @@ import { ExamsPanel } from "@/components/student/panels/exams-panel";
 import { CurriculumPanel } from "@/components/student/panels/curriculum-panel";
 import { QAPanel } from "@/components/student/panels/qa-panel";
 import { StudentStatisticsTab } from "@/components/student/student-statistics";
+import { WeeklySummaryDialog } from "@/components/student/weekly-summary-dialog";
 
 const TABS = [
   { id: "quiz", label: "Günlük Giriş", shortLabel: "Giriş", icon: PencilLine },
@@ -278,6 +279,8 @@ export function StudentPanel({ studentId }: StudentPanelProps) {
           badgeSrText: "okunmamış yeni içerik var",
         }))}
       />
+
+      <WeeklySummaryDialog studentId={studentId} />
 
       <Toaster position="top-center" richColors />
     </main>
