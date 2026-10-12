@@ -233,11 +233,11 @@ export async function listAnnouncements(): Promise<
         )`,
         targetCount: sql<number>`(
           SELECT count(*)::int FROM announcement_targets t
-          WHERE t.announcement_id = ${announcements.id}
+          WHERE t.announcement_id = announcements.id
         )`,
         dismissCount: sql<number>`(
           SELECT count(*)::int FROM announcement_dismissals d
-          WHERE d.announcement_id = ${announcements.id}
+          WHERE d.announcement_id = announcements.id
         )`,
       })
       .from(announcements)
@@ -389,7 +389,7 @@ async function loadVisibilitySnapshot(userId: string): Promise<VisibilitySnapsho
         targetIds: sql<string[] | null>`(
           SELECT array_agg(t.user_id::text)
           FROM announcement_targets t
-          WHERE t.announcement_id = ${announcements.id}
+          WHERE t.announcement_id = announcements.id
         )`,
       })
       .from(announcements)
