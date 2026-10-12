@@ -50,6 +50,14 @@ function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }
 
+export function getIstanbulHour(now: Date = new Date()): number {
+  const parts = istanbulFormatter.formatToParts(now);
+  for (const part of parts) {
+    if (part.type === "hour") return Number(part.value);
+  }
+  return 0;
+}
+
 export function getEntryWindow(now: Date = new Date()): EntryWindow {
   const parts = istanbulFormatter.formatToParts(now);
   let year = 0;

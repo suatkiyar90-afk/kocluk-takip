@@ -10,6 +10,7 @@ import {
   studentDailyNotes,
   studentDenemeAttempts,
   teacherStudents,
+  users,
 } from "@/db/schema";
 import {
   addDaysISO,
@@ -51,6 +52,7 @@ import {
   normalizeDenemeAttempts,
 } from "@/lib/save-day-plan";
 import { onlyActiveTopics } from "@/lib/topic-activity";
+import { computeStreakState } from "@/lib/streak";
 import {
   buildDenemeAttemptRows,
   type DenemeAttemptRow,
@@ -1265,6 +1267,35 @@ export async function saveDay(payload: unknown): Promise<SaveDayResult> {
           ),
         )
         .orderBy(asc(studentDenemeAttempts.id));
+
+      if (dayEntries.length > 0) {
+        const streakRows = await tx
+          .select({
+            currentStreak: users.currentStreak,
+            longestStreak: users.longestStreak,
+            lastEntryDate: users.lastEntryDate,
+            weeklyJokersAvailable: users.weeklyJokersAvailable,
+          })
+          .from(users)
+          .where(eq(users.id, studentId))
+          .limit(1);
+        const streakRow = streakRows[0];
+        if (streakRow) {
+          const nextStreak = computeStreakState({
+            ...streakRow,
+            entryDate: today,
+          });
+          await tx
+            .update(users)
+            .set({
+              currentStreak: nextStreak.currentStreak,
+              longestStreak: nextStreak.longestStreak,
+              lastEntryDate: nextStreak.lastEntryDate,
+              weeklyJokersAvailable: nextStreak.weeklyJokersAvailable,
+            })
+            .where(eq(users.id, studentId));
+        }
+      }
 
       return { entries: dayEntries, attempts: attemptRows };
     });

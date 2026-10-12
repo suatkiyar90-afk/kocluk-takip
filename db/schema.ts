@@ -62,6 +62,12 @@ export const users = pgTable("users", {
   mustChangePassword: boolean("must_change_password").notNull().default(true),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  currentStreak: integer("current_streak").notNull().default(0),
+  longestStreak: integer("longest_streak").notNull().default(0),
+  lastEntryDate: date("last_entry_date"),
+  weeklyJokersAvailable: integer("weekly_jokers_available")
+    .notNull()
+    .default(1),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

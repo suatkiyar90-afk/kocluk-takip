@@ -49,6 +49,11 @@ import {
   resolveTytBlank,
   validateDenemeCounts,
 } from "@/lib/deneme";
+import {
+  ENTRY_CLOSE_HOUR,
+  ENTRY_OPEN_HOUR,
+  getIstanbulHour,
+} from "@/lib/entry-window";
 
 function formatNet(value: number): string {
   return value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
@@ -608,7 +613,14 @@ export function DailyEntryForm({
         setSavedFlash(true);
         if (savedTimer.current) clearTimeout(savedTimer.current);
         savedTimer.current = setTimeout(() => setSavedFlash(false), 2000);
-        toast.success("Gün kaydedildi.");
+        const istanbulHour = getIstanbulHour();
+        const isNightBand =
+          istanbulHour >= ENTRY_OPEN_HOUR && istanbulHour < ENTRY_CLOSE_HOUR;
+        toast.success(
+          isNightBand
+            ? "Serin devam ediyor! Yarın 22.00 civarında görüşmek üzere 👋"
+            : "Gün kaydedildi.",
+        );
         setAnnounce("Kaydedildi.");
         onSaved();
       } else {
