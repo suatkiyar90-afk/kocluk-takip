@@ -13,6 +13,7 @@ import { NotificationBanner } from "@/components/notifications/notification-bann
 import { PanelError, PanelSkeleton } from "@/components/student/panel-ui";
 import { EntryWindowBanner } from "@/components/quiz-entry/entry-window-banner";
 import { useEntryWindow } from "@/components/quiz-entry/use-entry-window";
+import { MotivationSection } from "@/components/student/motivation-section";
 
 interface QuizPanelProps {
   studentId: string;
@@ -90,6 +91,8 @@ export function QuizPanel({ studentId }: QuizPanelProps) {
         entryWindow={entryWindow}
         alert={alert}
       />
+
+      <MotivationSection refreshKey={reloadKey} />
 
       {result === null ? (
         <PanelSkeleton rows={6} />
