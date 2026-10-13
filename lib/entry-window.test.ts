@@ -36,7 +36,7 @@ describe("yerel test kipi: NEXT_PUBLIC_ENTRY_WINDOW_FORCE_OPEN", () => {
     );
   });
 
-  it("tanımlı değilse normal 22-23 davranışı sürer", () => {
+  it("tanımlı değilse normal 22.00-23.59 davranışı sürer", () => {
     expect(process.env.NEXT_PUBLIC_ENTRY_WINDOW_FORCE_OPEN).toBeUndefined();
     expect(getEntryWindow(at("2026-10-03T12:00:00+03:00")).state).toBe(
       "before",
@@ -69,18 +69,30 @@ describe("getEntryWindow", () => {
     expect(w.today).toBe("2026-10-02");
   });
 
-  it("23:00:00 tam sınırda after (tolerans yok)", () => {
+  it("23:00:00 hala open, closesAt gece yarısı", () => {
     const now = at("2026-10-02T23:00:00+03:00");
     const w = getEntryWindow(now);
-    expect(w.state).toBe("after");
-    expect(w.closesAt.getTime()).toBe(now.getTime());
-    expect(w.msUntilClose).toBe(0);
+    expect(w.state).toBe("open");
+    expect(w.closesAt.getTime()).toBe(
+      at("2026-10-03T00:00:00+03:00").getTime(),
+    );
+    expect(w.msUntilClose).toBe(60 * 60 * 1000);
+  });
+
+  it("23:59:59.999 son saniyede hala open", () => {
+    const w = getEntryWindow(at("2026-10-02T23:59:59.999+03:00"));
+    expect(w.state).toBe("open");
+    expect(w.today).toBe("2026-10-02");
+    expect(w.msUntilClose).toBeGreaterThanOrEqual(0);
   });
 
   it("gece yarısı geçişinde today yeni güne döner", () => {
-    const beforeMidnight = getEntryWindow(at("2026-10-02T23:59:00+03:00"));
-    expect(beforeMidnight.state).toBe("after");
+    const beforeMidnight = getEntryWindow(at("2026-10-02T23:59:59.999+03:00"));
+    expect(beforeMidnight.state).toBe("open");
     expect(beforeMidnight.today).toBe("2026-10-02");
+    expect(beforeMidnight.closesAt.getTime()).toBe(
+      at("2026-10-03T00:00:00+03:00").getTime(),
+    );
 
     const afterMidnight = getEntryWindow(at("2026-10-03T00:00:00+03:00"));
     expect(afterMidnight.state).toBe("before");
@@ -127,7 +139,7 @@ describe("getEntryWindow", () => {
     const now = at("2026-10-02T21:00:00+03:00");
     const w = getEntryWindow(now);
     expect(w.msUntilOpen).toBe(60 * 60 * 1000);
-    expect(w.msUntilClose).toBe(2 * 60 * 60 * 1000);
+    expect(w.msUntilClose).toBe(3 * 60 * 60 * 1000);
   });
 });
 
@@ -141,7 +153,7 @@ describe("assertEntryWindowOpen", () => {
   it("pencere kapalıyken Türkçe mesajla fırlatır", () => {
     for (const iso of [
       "2026-10-02T21:59:59+03:00",
-      "2026-10-02T23:00:00+03:00",
+      "2026-10-03T00:00:00+03:00",
     ]) {
       let caught: unknown = null;
       try {

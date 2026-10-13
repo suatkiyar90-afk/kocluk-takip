@@ -57,7 +57,7 @@ async function runDailyReminder(): Promise<NextResponse> {
         sendPushNotification(
           studentId,
           "Günlük Giriş Hatırlatması",
-          "Bugünkü veri girişi 22.00–23.00 arasında açık. Kaçırma!",
+          "Bugünkü veri girişi 22.00–23.59 arasında açık. Kaçırma!",
           "/quiz-entry",
         ),
       ),

@@ -618,7 +618,7 @@ export function DailyEntryForm({
           istanbulHour >= ENTRY_OPEN_HOUR && istanbulHour < ENTRY_CLOSE_HOUR;
         toast.success(
           isNightBand
-            ? "Serin devam ediyor! Yarın 22.00 civarında görüşmek üzere 👋"
+            ? "Serin devam ediyor! Yarın 22.00–23.59 arası görüşmek üzere 👋"
             : "Gün kaydedildi.",
         );
         setAnnounce("Kaydedildi.");

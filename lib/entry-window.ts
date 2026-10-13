@@ -1,10 +1,10 @@
 import { ISTANBUL_TIME_ZONE } from "@/lib/week-utils";
 
 export const ENTRY_OPEN_HOUR = 22;
-export const ENTRY_CLOSE_HOUR = 23;
+export const ENTRY_CLOSE_HOUR = 24;
 
 export const ENTRY_WINDOW_MESSAGE =
-  "Günlük veri girişi yalnızca her gün 22.00–23.00 (Türkiye saati) arasında yapılabilir.";
+  "Günlük veri girişi yalnızca her gün 22.00–23.59 (Türkiye saati) arasında yapılabilir.";
 
 export const ENTRY_DATE_MESSAGE =
   "Yalnızca bugünün tarihi için giriş yapılabilir.";

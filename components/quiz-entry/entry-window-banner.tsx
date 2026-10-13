@@ -15,7 +15,7 @@ import type { EntryWindow } from "@/lib/entry-window";
 const WARN_THRESHOLD_MS = 10 * 60 * 1000;
 
 const INFO_TEXT =
-  "Günlük veri girişi her gün yalnızca 22.00–23.00 arasında (Türkiye saati) yapılabilir. Geçmiş güne ait giriş yapılamaz. Günün Özeti için de aynı saat geçerlidir.";
+  "Günlük veri girişi her gün yalnızca 22.00–23.59 arasında (Türkiye saati) yapılabilir. Geçmiş güne ait giriş yapılamaz. Günün Özeti için de aynı saat geçerlidir.";
 
 function formatRemaining(ms: number): string {
   const totalMinutes = Math.max(1, Math.ceil(ms / 60_000));
