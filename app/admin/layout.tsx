@@ -44,7 +44,7 @@ export default async function AdminLayout({
                   href="/admin/reports"
                   className="rounded-lg px-2 py-1.5 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 touch-manipulation"
                 >
-                  Raporlar
+                  Genel Raporlar
                 </Link>
                 <Link
                   href="/admin/announcements"

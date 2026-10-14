@@ -26,6 +26,7 @@ import {
   activityLogs,
   curriculumTopics,
   dailyQuestionEntries,
+  mockExams,
   policyAcknowledgments,
   studentDenemeAttempts,
   teacherStudents,
@@ -1487,6 +1488,246 @@ export async function getUserActivityDetail(
       success: true,
       data: { detail: { user: baseUser, student: null, teacher: null } },
       message: "Kullanıcı detayı yüklendi.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export interface BulkStudentReportRow {
+  id: string;
+  studentNumber: string | null;
+  name: string;
+  advisorName: string | null;
+  activeDays: number;
+  totalSolved: number;
+  correct: number;
+  wrong: number;
+  net: number;
+  tytSolved: number;
+  aytSolved: number;
+  ydtSolved: number;
+  denemeCount: number;
+  denemeAvgNet: number | null;
+  statusLabel: string;
+  statusTone: "red" | "orange" | "amber" | "green";
+}
+
+export interface BulkStudentReportSummary {
+  totalStudents: number;
+  activeStudents: number;
+  totalSolved: number;
+  avgSolvedPerStudent: number;
+}
+
+export interface BulkStudentReportData {
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  summary: BulkStudentReportSummary;
+  students: BulkStudentReportRow[];
+}
+
+const BULK_STATUS_LABELS = {
+  inactive: "Pasif (Veri Yok)",
+  great: "Çok İyi / Düzenli",
+  medium: "Orta / Takip Edilmeli",
+  low: "Düşük / Riskli",
+} as const;
+
+type BulkStatusKey = keyof typeof BULK_STATUS_LABELS;
+
+const BULK_STATUS_TONES: Record<BulkStatusKey, BulkStudentReportRow["statusTone"]> =
+  {
+    inactive: "red",
+    great: "green",
+    medium: "amber",
+    low: "orange",
+  };
+
+function computeBulkStatusKey(
+  activeDays: number,
+  totalDays: number,
+  totalSolved: number,
+): BulkStatusKey {
+  if (activeDays <= 0) return "inactive";
+  const ratio = activeDays / Math.max(1, totalDays);
+  const perActiveDay = totalSolved / activeDays;
+  if (ratio >= 0.6 && perActiveDay >= 50) return "great";
+  if (ratio >= 0.3) return "medium";
+  return "low";
+}
+
+const bulkReportDatesSchema = z.object({
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+export async function getAdminBulkStudentReport(
+  startDate: string,
+  endDate: string,
+): Promise<AdminActionResult<BulkStudentReportData>> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  const parsed = bulkReportDatesSchema.safeParse({ startDate, endDate });
+  if (
+    parsed.success === false ||
+    parsed.data.startDate > parsed.data.endDate
+  ) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: "Geçersiz tarih aralığı.",
+    };
+  }
+
+  const from = parsed.data.startDate;
+  const to = parsed.data.endDate;
+  const totalDays =
+    Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
+
+  try {
+    const [students, assignmentRows, statRows, denemeRows] =
+      await Promise.all([
+        db
+          .select({
+            id: users.id,
+            name: users.name,
+            studentNumber: users.studentNumber,
+          })
+          .from(users)
+          .where(
+            and(
+              eq(users.role, "student"),
+              or(
+                isNull(users.email),
+                not(inArray(users.email, SEED_TEST_EMAILS)),
+              ),
+            ),
+          )
+          .orderBy(asc(users.studentNumber), asc(users.name)),
+        db
+          .select({
+            studentId: teacherStudents.studentId,
+            teacherName: users.name,
+          })
+          .from(teacherStudents)
+          .innerJoin(users, eq(teacherStudents.teacherId, users.id))
+          .orderBy(teacherStudents.createdAt),
+        db
+          .select({
+            studentId: dailyQuestionEntries.studentId,
+            activeDays: sql<number>`COUNT(DISTINCT ${dailyQuestionEntries.date})`,
+            totalSolved: sql<number>`COALESCE(SUM(${dailyQuestionEntries.correct} + ${dailyQuestionEntries.wrong} + ${dailyQuestionEntries.blank}), 0)`,
+            correct: sql<number>`COALESCE(SUM(${dailyQuestionEntries.correct}), 0)`,
+            wrong: sql<number>`COALESCE(SUM(${dailyQuestionEntries.wrong}), 0)`,
+            tytSolved: sql<number>`COALESCE(SUM(CASE WHEN ${dailyQuestionEntries.examType} = 'TYT' THEN ${dailyQuestionEntries.correct} + ${dailyQuestionEntries.wrong} + ${dailyQuestionEntries.blank} END), 0)`,
+            aytSolved: sql<number>`COALESCE(SUM(CASE WHEN ${dailyQuestionEntries.examType} = 'AYT' THEN ${dailyQuestionEntries.correct} + ${dailyQuestionEntries.wrong} + ${dailyQuestionEntries.blank} END), 0)`,
+            ydtSolved: sql<number>`COALESCE(SUM(CASE WHEN ${dailyQuestionEntries.examType} = 'YDT' THEN ${dailyQuestionEntries.correct} + ${dailyQuestionEntries.wrong} + ${dailyQuestionEntries.blank} END), 0)`,
+          })
+          .from(dailyQuestionEntries)
+          .where(
+            and(
+              gte(dailyQuestionEntries.date, from),
+              lte(dailyQuestionEntries.date, to),
+            ),
+          )
+          .groupBy(dailyQuestionEntries.studentId),
+        db
+          .select({
+            studentId: mockExams.studentId,
+            denemeCount: sql<number>`COUNT(*)`,
+            denemeAvgNet: sql<number | null>`AVG(${mockExams.toplamNet})`,
+          })
+          .from(mockExams)
+          .where(
+            and(gte(mockExams.examDate, from), lte(mockExams.examDate, to)),
+          )
+          .groupBy(mockExams.studentId),
+      ]);
+
+    const advisorByStudent = new Map<string, string>();
+    for (const row of assignmentRows) {
+      if (!advisorByStudent.has(row.studentId)) {
+        advisorByStudent.set(row.studentId, row.teacherName);
+      }
+    }
+    const statByStudent = new Map(statRows.map((row) => [row.studentId, row]));
+    const denemeByStudent = new Map(
+      denemeRows.map((row) => [row.studentId, row]),
+    );
+
+    const reportRows: BulkStudentReportRow[] = students.map((student) => {
+      const stat = statByStudent.get(student.id);
+      const deneme = denemeByStudent.get(student.id);
+      const activeDays = Number(stat?.activeDays ?? 0);
+      const totalSolved = Number(stat?.totalSolved ?? 0);
+      const correct = Number(stat?.correct ?? 0);
+      const wrong = Number(stat?.wrong ?? 0);
+      const denemeCount = Number(deneme?.denemeCount ?? 0);
+      const avgNetRaw = deneme?.denemeAvgNet;
+      const statusKey = computeBulkStatusKey(
+        activeDays,
+        totalDays,
+        totalSolved,
+      );
+
+      return {
+        id: student.id,
+        studentNumber: student.studentNumber,
+        name: student.name,
+        advisorName: advisorByStudent.get(student.id) ?? null,
+        activeDays,
+        totalSolved,
+        correct,
+        wrong,
+        net: Math.round((correct - wrong / 4) * 100) / 100,
+        tytSolved: Number(stat?.tytSolved ?? 0),
+        aytSolved: Number(stat?.aytSolved ?? 0),
+        ydtSolved: Number(stat?.ydtSolved ?? 0),
+        denemeCount,
+        denemeAvgNet:
+          avgNetRaw === null || avgNetRaw === undefined
+            ? null
+            : Math.round(Number(avgNetRaw) * 100) / 100,
+        statusLabel: BULK_STATUS_LABELS[statusKey],
+        statusTone: BULK_STATUS_TONES[statusKey],
+      };
+    });
+
+    const totalSolvedAll = reportRows.reduce(
+      (sum, row) => sum + row.totalSolved,
+      0,
+    );
+    const activeStudents = reportRows.filter(
+      (row) => row.activeDays > 0,
+    ).length;
+
+    return {
+      success: true,
+      data: {
+        startDate: from,
+        endDate: to,
+        totalDays,
+        summary: {
+          totalStudents: reportRows.length,
+          activeStudents,
+          totalSolved: totalSolvedAll,
+          avgSolvedPerStudent:
+            reportRows.length > 0
+              ? Math.round(totalSolvedAll / reportRows.length)
+              : 0,
+        },
+        students: reportRows,
+      },
+      message: "Genel öğrenci değerlendirme raporu yüklendi.",
     };
   } catch (err) {
     return {

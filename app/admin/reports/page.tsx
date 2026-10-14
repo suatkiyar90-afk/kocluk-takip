@@ -1,5 +1,7 @@
 import { auth } from "@/auth";
+import { BulkStudentReport } from "@/components/reports/bulk-student-report";
 import { StudentRangeReport } from "@/components/reports/student-range-report";
+import { ReportsTabs } from "./reports-tabs";
 
 interface ReportsSearchParams {
   student?: string;
@@ -26,14 +28,20 @@ export default async function ReportsPage({
 
   return (
     <main>
-      <StudentRangeReport
-        initialStudentId={initialStudentId}
-        initialFrom={initialFrom}
-        initialTo={initialTo}
-        initialDetail={initialDetail}
-        initialNotes={initialNotes}
-        adminName={session?.user?.name ?? ""}
-        schoolName={process.env.SCHOOL_NAME ?? "Koçluk Takip Sistemi"}
+      <ReportsTabs
+        defaultTab={initialStudentId ? "ogrenci" : "genel"}
+        genel={<BulkStudentReport adminName={session?.user?.name ?? ""} />}
+        ogrenci={
+          <StudentRangeReport
+            initialStudentId={initialStudentId}
+            initialFrom={initialFrom}
+            initialTo={initialTo}
+            initialDetail={initialDetail}
+            initialNotes={initialNotes}
+            adminName={session?.user?.name ?? ""}
+            schoolName={process.env.SCHOOL_NAME ?? "Koçluk Takip Sistemi"}
+          />
+        }
       />
     </main>
   );

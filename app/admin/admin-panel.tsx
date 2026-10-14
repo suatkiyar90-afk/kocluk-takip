@@ -104,7 +104,7 @@ export function AdminPanel({
             href="/admin/reports"
             className="inline-flex h-11 items-center justify-center rounded-xl border border-amber-200 bg-white px-4 text-sm font-bold text-amber-700 transition active:scale-[0.98] touch-manipulation"
           >
-            Raporlar
+            Genel Raporlar
           </Link>
           <Link
             href="/admin/settings"
