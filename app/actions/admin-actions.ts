@@ -3,6 +3,7 @@
 import bcrypt from "bcryptjs";
 import { randomInt } from "crypto";
 import { z } from "zod";
+import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import {
   and,
@@ -23,14 +24,21 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import {
+  accounts,
   activityLogs,
+  coachingFeedbacks,
   curriculumTopics,
   dailyQuestionEntries,
   mockExams,
   policyAcknowledgments,
+  qaThreads,
+  questionImages,
+  sessions,
   studentDenemeAttempts,
+  studentTopicProgress,
   teacherStudents,
   users,
+  weeklyQuestionEntries,
 } from "@/db/schema";
 import { actionErrorMessage } from "@/lib/action-error";
 import { buildEnteredTodaySet } from "@/lib/data-entry-activity";
@@ -59,6 +67,8 @@ export interface AdminStudent {
   email: string | null;
   studentNumber: string | null;
   policyAcknowledged: boolean;
+  teacherId: string | null;
+  teacherName: string | null;
 }
 
 export interface RecentLogin {
@@ -428,6 +438,7 @@ export async function adminListUsers(): Promise<
     const teacherDoc = getLegalDocument("kvkk_teacher");
     const ackStudent = alias(policyAcknowledgments, "list_ack_student");
     const ackTeacher = alias(policyAcknowledgments, "list_ack_teacher");
+    const teacherUsers = alias(users, "list_teacher_users");
 
     const rows = await db
       .select({
@@ -438,6 +449,8 @@ export async function adminListUsers(): Promise<
         studentNumber: users.studentNumber,
         studentAckAt: ackStudent.acceptedAt,
         teacherAckAt: ackTeacher.acceptedAt,
+        teacherId: teacherUsers.id,
+        teacherName: teacherUsers.name,
       })
       .from(users)
       .leftJoin(
@@ -456,6 +469,14 @@ export async function adminListUsers(): Promise<
           eq(ackTeacher.version, teacherDoc.version),
         ),
       )
+      .leftJoin(teacherStudents, eq(teacherStudents.studentId, users.id))
+      .leftJoin(
+        teacherUsers,
+        and(
+          eq(teacherUsers.id, teacherStudents.teacherId),
+          eq(teacherUsers.role, "teacher"),
+        ),
+      )
       .where(
         or(eq(users.role, "teacher"), eq(users.role, "student")),
       );
@@ -469,16 +490,24 @@ export async function adminListUsers(): Promise<
         email: r.email,
         policyAcknowledged: r.teacherAckAt !== null,
       }));
-    const students = rows
-      .filter((r) => r.role === "student")
-      .sort((a, b) => a.name.localeCompare(b.name, "tr"))
-      .map((r) => ({
+    const studentsBy = new Map<string, AdminStudent>();
+    for (const r of rows) {
+      if (r.role !== "student" || studentsBy.has(r.id)) {
+        continue;
+      }
+      studentsBy.set(r.id, {
         id: r.id,
         name: r.name,
         email: r.email,
         studentNumber: r.studentNumber,
         policyAcknowledged: r.studentAckAt !== null,
-      }));
+        teacherId: r.teacherId ?? null,
+        teacherName: r.teacherName ?? null,
+      });
+    }
+    const students = [...studentsBy.values()].sort((a, b) =>
+      a.name.localeCompare(b.name, "tr"),
+    );
 
     return {
       success: true,
@@ -1728,6 +1757,169 @@ export async function getAdminBulkStudentReport(
         students: reportRows,
       },
       message: "Genel öğrenci değerlendirme raporu yüklendi.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+const changeStudentTeacherSchema = z.object({
+  studentId: z.string().uuid("Geçerli bir öğrenci seçin."),
+  teacherId: z.string().uuid("Geçerli bir öğretmen seçin.").nullable(),
+});
+
+export async function adminChangeStudentTeacher(
+  input: unknown,
+): Promise<AdminActionResult<{ teacherId: string | null }>> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  const parsed = changeStudentTeacherSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((i) => i.message).join(", "),
+    };
+  }
+  const { studentId, teacherId } = parsed.data;
+
+  try {
+    const studentRows = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.id, studentId), eq(users.role, "student")))
+      .limit(1);
+    if (studentRows.length === 0) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message: "Seçilen öğrenci bulunamadı.",
+      };
+    }
+
+    if (teacherId !== null) {
+      const teacherRows = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.id, teacherId), eq(users.role, "teacher")))
+        .limit(1);
+      if (teacherRows.length === 0) {
+        return {
+          success: false,
+          status: "VALIDATION_FAILED",
+          message: "Seçilen öğretmen bulunamadı.",
+        };
+      }
+    }
+
+    await db
+      .delete(teacherStudents)
+      .where(eq(teacherStudents.studentId, studentId));
+
+    if (teacherId !== null) {
+      await db
+        .insert(teacherStudents)
+        .values({ teacherId, studentId })
+        .onConflictDoNothing();
+    }
+
+    revalidatePath("/admin", "layout");
+
+    return {
+      success: true,
+      data: { teacherId },
+      message:
+        teacherId === null
+          ? "Danışman öğretmen ataması kaldırıldı."
+          : "Danışman öğretmen güncellendi.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+const deleteStudentSchema = z.object({
+  studentId: z.string().uuid("Geçerli bir öğrenci seçin."),
+});
+
+export async function adminDeleteStudent(
+  input: unknown,
+): Promise<AdminActionResult<{ studentId: string }>> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  const parsed = deleteStudentSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((i) => i.message).join(", "),
+    };
+  }
+  const { studentId } = parsed.data;
+
+  try {
+    const studentRows = await db
+      .select({ id: users.id, name: users.name })
+      .from(users)
+      .where(and(eq(users.id, studentId), eq(users.role, "student")))
+      .limit(1);
+    if (studentRows.length === 0) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message:
+          "Silme işlemi yalnızca öğrenci hesapları için yapılabilir. Seçilen öğrenci bulunamadı.",
+      };
+    }
+    const student = studentRows[0];
+
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(teacherStudents)
+        .where(eq(teacherStudents.studentId, studentId));
+      await tx
+        .delete(weeklyQuestionEntries)
+        .where(eq(weeklyQuestionEntries.studentId, studentId));
+      await tx
+        .delete(coachingFeedbacks)
+        .where(eq(coachingFeedbacks.studentId, studentId));
+      await tx
+        .delete(questionImages)
+        .where(eq(questionImages.studentId, studentId));
+      await tx
+        .delete(studentTopicProgress)
+        .where(eq(studentTopicProgress.studentId, studentId));
+      await tx
+        .delete(qaThreads)
+        .where(eq(qaThreads.studentId, studentId));
+      await tx
+        .delete(sessions)
+        .where(eq(sessions.userId, studentId));
+      await tx
+        .delete(accounts)
+        .where(eq(accounts.userId, studentId));
+      await tx.delete(users).where(eq(users.id, studentId));
+    });
+
+    revalidatePath("/admin", "layout");
+
+    return {
+      success: true,
+      data: { studentId },
+      message: `${student.name} adlı öğrenci ve tüm verileri silindi.`,
     };
   } catch (err) {
     return {

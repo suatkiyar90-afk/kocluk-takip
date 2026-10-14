@@ -14,13 +14,15 @@ import {
   type AdminTeacher,
 } from "@/app/actions/admin-actions";
 import type { PolicyAcknowledgmentOverview } from "@/lib/policy-overview";
+import { StudentManageList } from "@/components/admin/student-manage-list";
 import { PolicyOverviewSection } from "./policy-overview-section";
 
-type Tab = "teacher" | "student" | "assign" | "reset";
+type Tab = "teacher" | "student" | "manage" | "assign" | "reset";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "teacher", label: "Öğretmen Ekle" },
   { id: "student", label: "Öğrenci Ekle" },
+  { id: "manage", label: "Öğrenci İşlemleri" },
   { id: "assign", label: "Danışman Öğretmen Atama" },
   { id: "reset", label: "Şifre Sıfırla" },
 ];
@@ -120,7 +122,7 @@ export function AdminPanel({
         errorMessage={policyError}
       />
 
-      <nav className="mb-6 grid grid-cols-2 gap-1 rounded-2xl border border-gray-200 bg-white p-1 shadow-sm sm:grid-cols-4">
+      <nav className="mb-6 grid grid-cols-2 gap-1 rounded-2xl border border-gray-200 bg-white p-1 shadow-sm sm:grid-cols-5">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -137,7 +139,13 @@ export function AdminPanel({
         ))}
       </nav>
 
-      {tab === "reset" ? (
+      {tab === "manage" ? (
+        <StudentManageList
+          teachers={teachers}
+          students={students}
+          onChanged={refreshLists}
+        />
+      ) : tab === "reset" ? (
         <ResetPasswordList teachers={teachers} students={students} />
       ) : tab === "assign" ? (
         <AssignForm teachers={teachers} students={students} />
