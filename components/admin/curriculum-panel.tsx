@@ -6,9 +6,11 @@ import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   adminAddTopic,
+  adminCreateSubjectWithFirstTopic,
   adminListCurriculumTopics,
   adminMergeAndDeleteTopic,
   adminUpdateTopic,
+  type AdminCurriculumSubjectOption,
   type AdminCurriculumTopicList,
   type AdminCurriculumTopicRow,
   type MergeTopicSummary,
@@ -82,6 +84,7 @@ export function CurriculumPanel({ initialList }: CurriculumPanelProps) {
   const [list, setList] = useState<AdminCurriculumTopicList>(initialList);
   const [loading, setLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [newSubjectOpen, setNewSubjectOpen] = useState(false);
   const [editing, setEditing] = useState<AdminCurriculumTopicRow | null>(null);
   const [deleting, setDeleting] = useState<AdminCurriculumTopicRow | null>(null);
 
@@ -113,7 +116,7 @@ export function CurriculumPanel({ initialList }: CurriculumPanelProps) {
     [],
   );
 
-  const subjects = ALL_SUBJECTS[examType];
+  const subjects = list.subjects;
 
   function handleExamTypeChange(next: ExamType) {
     const firstSubjectId = ALL_SUBJECTS[next][0]?.id ?? "";
@@ -164,15 +167,29 @@ export function CurriculumPanel({ initialList }: CurriculumPanelProps) {
         </div>
 
         <div className="mt-4">
-          <label htmlFor="curriculum-subject" className={labelClass}>
-            Ders
-          </label>
+          <div className="flex items-center justify-between gap-2">
+            <label
+              htmlFor="curriculum-subject"
+              className="block text-xs font-bold uppercase tracking-wide text-gray-500"
+            >
+              Ders
+            </label>
+            <button
+              type="button"
+              onClick={() => setNewSubjectOpen(true)}
+              disabled={loading}
+              className="inline-flex h-8 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-bold text-indigo-600 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation"
+            >
+              <Plus aria-hidden="true" className="h-3.5 w-3.5" />
+              Yeni Ders Ekle
+            </button>
+          </div>
           <select
             id="curriculum-subject"
             value={subjectId}
             onChange={(event) => handleSubjectChange(event.target.value)}
             disabled={loading}
-            className={inputClass}
+            className={`mt-1.5 ${inputClass}`}
           >
             {subjects.map((subject) => (
               <option key={subject.id} value={subject.id}>
@@ -182,6 +199,18 @@ export function CurriculumPanel({ initialList }: CurriculumPanelProps) {
           </select>
         </div>
       </section>
+
+      {newSubjectOpen ? (
+        <NewSubjectDialog
+          examType={examType}
+          onClose={() => setNewSubjectOpen(false)}
+          onDone={(createdSubjectId) => {
+            setNewSubjectOpen(false);
+            setSubjectId(createdSubjectId);
+            void load(examType, createdSubjectId);
+          }}
+        />
+      ) : null}
 
       <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -290,6 +319,8 @@ export function CurriculumPanel({ initialList }: CurriculumPanelProps) {
       {editing ? (
         <EditTopicDialog
           topic={editing}
+          subjects={subjects}
+          currentSubjectId={subjectId}
           onClose={() => setEditing(null)}
           onDone={() => {
             setEditing(null);
@@ -311,6 +342,147 @@ export function CurriculumPanel({ initialList }: CurriculumPanelProps) {
         />
       ) : null}
     </div>
+  );
+}
+
+function NewSubjectDialog({
+  examType,
+  onClose,
+  onDone,
+}: {
+  examType: ExamType;
+  onClose: () => void;
+  onDone: (subjectId: string) => void;
+}) {
+  const [subjectName, setSubjectName] = useState("");
+  const [topicName, setTopicName] = useState("");
+  const [sortOrder, setSortOrder] = useState("10");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canSave =
+    subjectName.trim().length >= 2 &&
+    topicName.trim().length >= 2 &&
+    sortOrder.trim().length > 0 &&
+    !saving;
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      const result = await adminCreateSubjectWithFirstTopic({
+        examType,
+        subjectName: subjectName.trim(),
+        topicName: topicName.trim(),
+        sortOrder: Number(sortOrder),
+      });
+      if (result.success === true) {
+        toast.success(`"${result.data.subjectName}" dersi eklendi.`);
+        onDone(result.data.subjectId);
+      } else {
+        setError(result.message);
+      }
+    } catch {
+      setError("Bilinmeyen bir hata oluştu.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog.Root open onOpenChange={(open) => (open ? null : onClose())}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+        <Dialog.Content className={dialogContentClass}>
+          <Dialog.Title className="text-base font-bold text-gray-900">
+            Yeni Ders Ekle
+          </Dialog.Title>
+          <Dialog.Description className="mt-1 text-sm text-gray-500">
+            {examType} sınav türüne yeni bir ders (branş) ve ilk konusunu ekler.
+            Ders kimliği, adına göre otomatik oluşturulur.
+          </Dialog.Description>
+
+          <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-4">
+            <div>
+              <label htmlFor="new-subject-name" className={labelClass}>
+                Ders Adı
+              </label>
+              <input
+                id="new-subject-name"
+                type="text"
+                value={subjectName}
+                onChange={(event) => setSubjectName(event.target.value)}
+                placeholder="Örn. Tarih"
+                autoComplete="off"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="new-subject-topic" className={labelClass}>
+                İlk Konu Adı
+              </label>
+              <input
+                id="new-subject-topic"
+                type="text"
+                value={topicName}
+                onChange={(event) => setTopicName(event.target.value)}
+                placeholder="Örn. Tarih ve Zaman"
+                autoComplete="off"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="new-subject-order" className={labelClass}>
+                İlk Konu Sırası
+              </label>
+              <input
+                id="new-subject-order"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={sortOrder}
+                onChange={(event) => setSortOrder(event.target.value)}
+                className={inputClass}
+              />
+            </div>
+
+            {error ? (
+              <p className="rounded-xl bg-red-50 px-3 py-2.5 text-sm font-medium text-red-600">
+                {error}
+              </p>
+            ) : null}
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={saving}
+                className={secondaryButton}
+              >
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                disabled={!canSave}
+                className="flex h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-bold text-white transition active:scale-[0.98] disabled:opacity-50 touch-manipulation"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+                    Ekleniyor…
+                  </>
+                ) : (
+                  "Dersi Ekle"
+                )}
+              </button>
+            </div>
+          </form>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -446,17 +618,27 @@ function AddTopicDialog({
 
 function EditTopicDialog({
   topic,
+  subjects,
+  currentSubjectId,
   onClose,
   onDone,
 }: {
   topic: AdminCurriculumTopicRow;
+  subjects: AdminCurriculumSubjectOption[];
+  currentSubjectId: string;
   onClose: () => void;
   onDone: () => void;
 }) {
   const [topicName, setTopicName] = useState(topic.topicName);
   const [sortOrder, setSortOrder] = useState(String(topic.sortOrder));
+  const [nextSubjectId, setNextSubjectId] = useState(currentSubjectId);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const subjectChanged = nextSubjectId !== currentSubjectId;
+  const targetSubjectName =
+    subjects.find((subject) => subject.id === nextSubjectId)?.name ??
+    nextSubjectId;
 
   const canSave =
     topicName.trim().length >= 2 && sortOrder.trim().length > 0 && !saving;
@@ -470,9 +652,14 @@ function EditTopicDialog({
         topicId: topic.id,
         topicName: topicName.trim(),
         sortOrder: Number(sortOrder),
+        subjectId: nextSubjectId,
       });
       if (result.success === true) {
-        toast.success("Konu güncellendi.");
+        toast.success(
+          subjectChanged
+            ? `Konu "${result.data.subjectName}" dersine taşındı.`
+            : "Konu güncellendi.",
+        );
         onDone();
       } else {
         setError(result.message);
@@ -493,11 +680,36 @@ function EditTopicDialog({
             Konuyu Düzenle
           </Dialog.Title>
           <Dialog.Description className="mt-1 text-sm text-gray-500">
-            Konu adı ve sıra numarası güncellenir; konuya bağlı soru kayıtları
-            korunur.
+            Konu adı, sırası ve bağlı olduğu ders güncellenir; konuya bağlı soru
+            kayıtları korunur.
           </Dialog.Description>
 
           <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-4">
+            <div>
+              <label htmlFor="edit-topic-subject" className={labelClass}>
+                Ders (Branş)
+              </label>
+              <select
+                id="edit-topic-subject"
+                value={nextSubjectId}
+                onChange={(event) => setNextSubjectId(event.target.value)}
+                className={inputClass}
+              >
+                {subjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}
+                  </option>
+                ))}
+              </select>
+              {subjectChanged ? (
+                <p className="mt-1.5 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+                  Bu konu &quot;{targetSubjectName}&quot; dersine taşınacak. Konuya
+                  bağlı {topicStats(topic)} yeni dersin altında görünecek; geçmiş
+                  kayıtlar silinmez.
+                </p>
+              ) : null}
+            </div>
+
             <div>
               <label htmlFor="edit-topic-name" className={labelClass}>
                 Konu Adı

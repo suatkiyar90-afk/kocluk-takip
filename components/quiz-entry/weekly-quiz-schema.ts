@@ -12,10 +12,15 @@ export interface SubjectDef {
 
 export const TYT_SUBJECTS: SubjectDef[] = [
   { id: "turkce", name: "Türkçe", maxQuestions: 40 },
-  { id: "sosyal", name: "Sosyal Bilimler", maxQuestions: 20 },
+  { id: "tyt-tarih", name: "Tarih", maxQuestions: 5 },
+  { id: "tyt-cografya", name: "Coğrafya", maxQuestions: 5 },
+  { id: "tyt-felsefe", name: "Felsefe", maxQuestions: 5 },
+  { id: "tyt-din", name: "Din Kültürü ve Ahlak Bilgisi", maxQuestions: 5 },
   { id: "matematik", name: "Temel Matematik", maxQuestions: 40 },
   { id: "geometri", name: "Geometri TYT", maxQuestions: 10 },
-  { id: "fen", name: "Fen Bilimleri", maxQuestions: 20 },
+  { id: "tyt-fizik", name: "Fizik", maxQuestions: 7 },
+  { id: "tyt-kimya", name: "Kimya", maxQuestions: 7 },
+  { id: "tyt-biyoloji", name: "Biyoloji", maxQuestions: 6 },
 ];
 
 export const AYT_SUBJECTS: SubjectDef[] = [

@@ -147,10 +147,6 @@ async function loadSnapshot(studentId: string): Promise<CurriculumSnapshot> {
 
   const groups = new Map<string, CurriculumSubjectGroup>();
   for (const t of onlyActiveTopics(topicRows)) {
-    const subject = ALL_SUBJECTS[t.examType].find(
-      (s) => s.id === t.subjectId,
-    );
-    if (!subject) continue;
     const key = `${t.examType}:${t.subjectId}`;
     let group = groups.get(key);
     if (!group) {
@@ -385,6 +381,48 @@ function subjectNameOf(
   return ALL_SUBJECTS[examType].find((s) => s.id === subjectId)?.name ?? null;
 }
 
+async function subjectOptions(
+  examType: ExamType,
+): Promise<AdminCurriculumSubjectOption[]> {
+  const storedRows = await db
+    .selectDistinct({
+      subjectId: curriculumTopics.subjectId,
+      subjectName: curriculumTopics.subjectName,
+    })
+    .from(curriculumTopics)
+    .where(eq(curriculumTopics.examType, examType))
+    .orderBy(asc(curriculumTopics.subjectId));
+
+  const staticIds = new Set(ALL_SUBJECTS[examType].map((s) => s.id));
+  return [
+    ...ALL_SUBJECTS[examType].map((s) => ({ id: s.id, name: s.name })),
+    ...storedRows
+      .filter((row) => !staticIds.has(row.subjectId))
+      .map((row) => ({ id: row.subjectId, name: row.subjectName })),
+  ];
+}
+
+async function resolveSubject(
+  examType: ExamType,
+  subjectId: string,
+): Promise<string | null> {
+  const staticName = subjectNameOf(examType, subjectId);
+  if (staticName !== null) {
+    return staticName;
+  }
+  const rows = await db
+    .select({ subjectName: curriculumTopics.subjectName })
+    .from(curriculumTopics)
+    .where(
+      and(
+        eq(curriculumTopics.examType, examType),
+        eq(curriculumTopics.subjectId, subjectId),
+      ),
+    )
+    .limit(1);
+  return rows[0]?.subjectName ?? null;
+}
+
 function executeRows(result: unknown): Record<string, unknown>[] {
   if (Array.isArray(result)) {
     return result as Record<string, unknown>[];
@@ -399,6 +437,11 @@ function executeRows(result: unknown): Record<string, unknown>[] {
 function numberOf(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export interface AdminCurriculumSubjectOption {
+  id: string;
+  name: string;
 }
 
 export interface AdminCurriculumTopicRow {
@@ -416,6 +459,7 @@ export interface AdminCurriculumTopicList {
   examType: ExamType;
   subjectId: string;
   subjectName: string;
+  subjects: AdminCurriculumSubjectOption[];
   topics: AdminCurriculumTopicRow[];
 }
 
@@ -441,7 +485,7 @@ export async function adminListCurriculumTopics(
     };
   }
   const { examType, subjectId } = parsed.data;
-  const subjectName = subjectNameOf(examType, subjectId);
+  const subjectName = await resolveSubject(examType, subjectId);
   if (subjectName === null) {
     return {
       success: false,
@@ -451,6 +495,8 @@ export async function adminListCurriculumTopics(
   }
 
   try {
+    const subjects = await subjectOptions(examType);
+
     const topicRows = await db
       .select({
         id: curriculumTopics.id,
@@ -541,6 +587,7 @@ export async function adminListCurriculumTopics(
         examType,
         subjectId,
         subjectName,
+        subjects,
         topics: topicRows.map((topic) => ({
           ...topic,
           entryCount: entryCounts.get(topic.id)?.entries ?? 0,
@@ -582,6 +629,8 @@ export interface AdminTopicData {
   topicId: number;
   topicName: string;
   sortOrder: number;
+  subjectId: string;
+  subjectName: string;
 }
 
 export async function adminAddTopic(
@@ -601,7 +650,7 @@ export async function adminAddTopic(
     };
   }
   const { examType, subjectId, topicName, sortOrder } = parsed.data;
-  const subjectName = subjectNameOf(examType, subjectId);
+  const subjectName = await resolveSubject(examType, subjectId);
   if (subjectName === null) {
     return {
       success: false,
@@ -656,7 +705,7 @@ export async function adminAddTopic(
     revalidatePath("/admin/curriculum");
     revalidatePath("/mufredat");
 
-    return { success: true, data: { topicId, topicName, sortOrder } };
+    return { success: true, data: { topicId, topicName, sortOrder, subjectId, subjectName } };
   } catch (err) {
     return {
       success: false,
@@ -670,6 +719,7 @@ const updateTopicSchema = z.object({
   topicId: z.coerce.number().int().positive("Geçerli bir konu seçin."),
   topicName: topicNameSchema,
   sortOrder: sortOrderSchema,
+  subjectId: z.string().min(1, "Ders seçilmedi.").optional(),
 });
 
 export async function adminUpdateTopic(
@@ -688,7 +738,8 @@ export async function adminUpdateTopic(
       message: parsed.error.issues.map((issue) => issue.message).join(", "),
     };
   }
-  const { topicId, topicName, sortOrder } = parsed.data;
+  const { topicId, topicName, sortOrder, subjectId: requestedSubjectId } =
+    parsed.data;
 
   try {
     const topicRows = await db
@@ -696,6 +747,7 @@ export async function adminUpdateTopic(
         id: curriculumTopics.id,
         examType: curriculumTopics.examType,
         subjectId: curriculumTopics.subjectId,
+        subjectName: curriculumTopics.subjectName,
       })
       .from(curriculumTopics)
       .where(eq(curriculumTopics.id, topicId))
@@ -709,13 +761,27 @@ export async function adminUpdateTopic(
       };
     }
 
+    const nextSubjectId = requestedSubjectId ?? topic.subjectId;
+    let nextSubjectName = topic.subjectName;
+    if (nextSubjectId !== topic.subjectId) {
+      const resolved = await resolveSubject(topic.examType, nextSubjectId);
+      if (resolved === null) {
+        return {
+          success: false,
+          status: "VALIDATION_FAILED",
+          message: "Seçilen ders bu sınav türüne ait değil.",
+        };
+      }
+      nextSubjectName = resolved;
+    }
+
     const sameName = await db
       .select({ id: curriculumTopics.id })
       .from(curriculumTopics)
       .where(
         and(
           eq(curriculumTopics.examType, topic.examType),
-          eq(curriculumTopics.subjectId, topic.subjectId),
+          eq(curriculumTopics.subjectId, nextSubjectId),
           eq(curriculumTopics.topicName, topicName),
         ),
       );
@@ -727,17 +793,42 @@ export async function adminUpdateTopic(
       };
     }
 
-    const updateValues = { topicName, sortOrder };
+    const updateValues = {
+      topicName,
+      sortOrder,
+      subjectId: nextSubjectId,
+      subjectName: nextSubjectName,
+    };
 
-    await db
-      .update(curriculumTopics)
-      .set(updateValues)
-      .where(eq(curriculumTopics.id, topicId));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(curriculumTopics)
+        .set(updateValues)
+        .where(eq(curriculumTopics.id, topicId));
+
+      if (nextSubjectId !== topic.subjectId) {
+        await tx.execute(sql`
+          update daily_question_entries
+             set subject_id = ${nextSubjectId}
+           where topic_id = ${topicId}
+             and subject_id <> ${nextSubjectId}
+        `);
+      }
+    });
 
     revalidatePath("/admin/curriculum");
     revalidatePath("/mufredat");
 
-    return { success: true, data: { topicId, topicName, sortOrder } };
+    return {
+      success: true,
+      data: {
+        topicId,
+        topicName,
+        sortOrder,
+        subjectId: nextSubjectId,
+        subjectName: nextSubjectName,
+      },
+    };
   } catch (err) {
     return {
       success: false,
@@ -1013,6 +1104,134 @@ export async function adminMergeAndDeleteTopic(
     revalidatePath("/mufredat");
 
     return { success: true, data: summary };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+const createSubjectSchema = z.object({
+  examType: examTypeSchema,
+  subjectName: z
+    .string()
+    .trim()
+    .min(2, "Ders adı en az 2 karakter olmalı.")
+    .max(60, "Ders adı en fazla 60 karakter olabilir."),
+  topicName: topicNameSchema,
+  sortOrder: sortOrderSchema,
+});
+
+export interface AdminSubjectData {
+  examType: ExamType;
+  subjectId: string;
+  subjectName: string;
+  topicId: number;
+  topicName: string;
+  sortOrder: number;
+}
+
+const SUBJECT_SLUG_MAP: Record<string, string> = {
+  ç: "c",
+  Ç: "c",
+  ğ: "g",
+  Ğ: "g",
+  ı: "i",
+  İ: "i",
+  ö: "o",
+  Ö: "o",
+  ş: "s",
+  Ş: "s",
+  ü: "u",
+  Ü: "u",
+};
+
+function slugifySubjectName(name: string): string {
+  const normalized = name
+    .split("")
+    .map((ch) => SUBJECT_SLUG_MAP[ch] ?? ch)
+    .join("")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .replace(/-+$/g, "");
+  return normalized.length > 0 ? normalized : "ders";
+}
+
+export async function adminCreateSubjectWithFirstTopic(
+  input: unknown,
+): Promise<CurriculumActionResult<AdminSubjectData>> {
+  const ctx = await getAdminId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  const parsed = createSubjectSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((issue) => issue.message).join(", "),
+    };
+  }
+  const { examType, subjectName, topicName, sortOrder } = parsed.data;
+
+  try {
+    const storedRows = await db
+      .selectDistinct({ subjectId: curriculumTopics.subjectId })
+      .from(curriculumTopics)
+      .where(eq(curriculumTopics.examType, examType));
+    const takenIds = new Set([
+      ...ALL_SUBJECTS[examType].map((s) => s.id),
+      ...storedRows.map((row) => row.subjectId),
+    ]);
+
+    const baseId = `${examType.toLowerCase()}-${slugifySubjectName(subjectName)}`;
+    let subjectId = baseId;
+    let suffix = 2;
+    while (takenIds.has(subjectId)) {
+      subjectId = `${baseId}-${suffix}`;
+      suffix += 1;
+    }
+
+    const insertValues = {
+      examType,
+      subjectId,
+      subjectName,
+      topicName,
+      sortOrder,
+    };
+
+    const inserted = await db
+      .insert(curriculumTopics)
+      .values(insertValues)
+      .returning({ id: curriculumTopics.id });
+    const topicId = inserted[0]?.id;
+    if (topicId === undefined) {
+      return {
+        success: false,
+        status: "DATABASE_ERROR",
+        message: "Ders oluşturulamadı.",
+      };
+    }
+
+    revalidatePath("/admin/curriculum");
+    revalidatePath("/mufredat");
+
+    return {
+      success: true,
+      data: {
+        examType,
+        subjectId,
+        subjectName,
+        topicId,
+        topicName,
+        sortOrder,
+      },
+    };
   } catch (err) {
     return {
       success: false,

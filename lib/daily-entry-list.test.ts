@@ -126,13 +126,13 @@ describe("groupEntriesBySubject", () => {
 
   it("ders sırasını müfredat sırasına göre verir", () => {
     const list = [
-      entry({ topicId: 1, subjectId: "fen", subjectName: "Fen Bilimleri" }),
+      entry({ topicId: 1, subjectId: "tyt-fizik", subjectName: "Fizik" }),
       entry({ topicId: 2, subjectId: "turkce", subjectName: "Türkçe" }),
     ];
     const groups = groupEntriesBySubject(list);
     expect(groups.map((group) => group.subjectId)).toEqual([
       "turkce",
-      "fen",
+      "tyt-fizik",
     ]);
   });
 });
