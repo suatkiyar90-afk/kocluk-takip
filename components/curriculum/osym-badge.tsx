@@ -11,6 +11,12 @@ const TIER_STYLES: Record<OsymFrequencyTier, string> = {
   yok: "",
 };
 
+const TIER_LABELS: Record<Exclude<OsymFrequencyTier, "yok">, string> = {
+  garanti: "Garanti",
+  duzenli: "Düzenli",
+  seyrek: "Seyrek",
+};
+
 export interface OsymBadgeProps {
   avgRecentQuestions: number;
   yearlyQuestionCounts?: Record<string, number> | null;
@@ -40,13 +46,13 @@ export function OsymBadge({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [open]);
 
-  if (info.tier === "yok") return null;
+  if (info.tier === "yok" || info.totalQuestions === 0) return null;
 
   const hasHistory = info.years.length > 0;
   const summary = `Son 5 yıl ortalaması: ${info.recentAverage} soru/yıl · toplam ${info.totalQuestions} soru`;
 
   return (
-    <span ref={wrapperRef} className={cn("relative inline-flex", className)}>
+    <span ref={wrapperRef} className={cn("relative inline-flex shrink-0", className)}>
       <button
         type="button"
         onClick={(event) => {
@@ -57,18 +63,20 @@ export function OsymBadge({
         aria-expanded={hasHistory ? open : undefined}
         title={hasHistory ? `${summary} (yıllara göre görmek için tıkla)` : summary}
         className={cn(
-          "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap",
+          "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold",
           TIER_STYLES[info.tier],
         )}
       >
         <span aria-hidden>{info.icon}</span>
-        <span>{info.label}</span>
-        <span className="text-[10px] opacity-70">
-          ~{info.recentAverage}/yıl
-        </span>
+        <span>{TIER_LABELS[info.tier]}</span>
+        {info.recentAverage > 0 ? (
+          <span className="text-[10px] font-medium opacity-75">
+            · ~{info.recentAverage}/yıl
+          </span>
+        ) : null}
       </button>
       {open && hasHistory ? (
-        <span className="absolute top-full left-0 z-30 mt-1 block w-44 rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+        <span className="absolute top-full right-0 z-30 mt-1 block w-40 rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
           <span className="mb-1 block text-[10px] font-semibold tracking-wide text-gray-500 uppercase">
             Yıllara göre soru
           </span>

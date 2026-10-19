@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { WeekPicker } from "@/components/ui/week-picker";
 import { UploadDropzone } from "@/lib/uploadthing";
@@ -94,7 +95,6 @@ function formatRange(mondayIso: string): string {
 
 export function TargetsPanel({
   studentId,
-  studentName,
   weekStart,
   snapshot,
 }: TargetsPanelProps) {
@@ -119,6 +119,7 @@ export function TargetsPanel({
     new Map(),
   );
   const [savingField, setSavingField] = useState(false);
+  const [recommendationsOpen, setRecommendationsOpen] = useState(false);
   const [applyingTopicId, setApplyingTopicId] = useState<number | null>(null);
   const [showAllSubjects, setShowAllSubjects] = useState(false);
   const denemeUidRef = useRef(1);
@@ -438,28 +439,30 @@ export function TargetsPanel({
           Hedef Belirle · {formatRange(weekStart)}
         </h2>
 
-        <div className="mb-4 rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400">
-                Öğrenci
-              </p>
-              <p className="truncate text-sm font-bold text-gray-900">
-                {studentName}
-              </p>
-            </div>
-            <div className="w-full sm:w-56">
-              <label htmlFor="study-field" className={labelClass}>
-                Alan
-              </label>
+        <div className="mb-4 overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-sm">
+          <div className="flex items-center gap-2 px-3 py-2.5 sm:px-4">
+            <button
+              type="button"
+              onClick={() => setRecommendationsOpen((prev) => !prev)}
+              aria-expanded={recommendationsOpen}
+              className="flex min-w-0 flex-1 items-center gap-2 text-left touch-manipulation"
+            >
+              <span className="truncate text-sm font-bold text-gray-900">
+                ✨ Akıllı Hedef Önerileri
+              </span>
+              <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                {recommendations.length} öneri
+              </span>
+            </button>
+            <div className="flex shrink-0 items-center gap-1.5">
               <select
-                id="study-field"
+                aria-label="Alan"
                 value={studyField}
                 disabled={savingField}
                 onChange={(e) =>
                   void handleStudyFieldChange(e.target.value as StudyField)
                 }
-                className={inputClass}
+                className="h-8 max-w-[9rem] rounded-lg border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
               >
                 {studyFields.map((field) => (
                   <option key={field} value={field}>
@@ -467,80 +470,84 @@ export function TargetsPanel({
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={() => setRecommendationsOpen((prev) => !prev)}
+                aria-label="Akıllı hedef önerilerini aç veya kapat"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-500 transition touch-manipulation"
+              >
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    recommendationsOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
             </div>
           </div>
           {studyFieldSelected === false ? (
-            <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
-              Alan seçilmedi. Öneriler varsayılan olarak Sayısal alanına göre
-              hazırlanıyor.
+            <p className="border-t border-amber-100 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-700 sm:px-4">
+              Alan seçilmedi. Öneriler şimdilik Sayısal alanına göre hazırlanıyor.
             </p>
           ) : null}
-        </div>
-
-        <div className="mb-4">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
-            <h3 className="text-sm font-bold text-gray-900">
-              ✨ Akıllı Hedef Önerileri
-            </h3>
-            <span className="text-[11px] font-semibold text-gray-400">
-              {STUDY_FIELD_LABELS[studyField]} alanı
-            </span>
-          </div>
-          {loadingList ? (
-            <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm font-medium text-gray-500 shadow-sm">
-              Öneriler hazırlanıyor…
-            </div>
-          ) : recommendations.length === 0 ? (
-            <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm font-medium text-gray-500 shadow-sm">
-              Bu hafta için uygun öneri bulunamadı. Konu durumlarını ve hedef
-              seçimlerini kontrol edebilirsin.
-            </div>
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {recommendations.map((rec) => {
-                const meta = SCENARIO_META[rec.scenario];
-                const busy = applyingTopicId === rec.topicId;
-                return (
-                  <div
-                    key={`${rec.subjectId}-${rec.topicId}`}
-                    className="flex flex-col rounded-2xl border border-gray-200 bg-white p-3.5 shadow-sm"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <span
-                          className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold ${meta.className}`}
+          {recommendationsOpen ? (
+            <div className="border-t border-gray-100 p-2.5 sm:p-3">
+              {loadingList ? (
+                <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm font-medium text-gray-500">
+                  Öneriler hazırlanıyor…
+                </div>
+              ) : recommendations.length === 0 ? (
+                <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm font-medium text-gray-500">
+                  Bu hafta için uygun öneri bulunamadı. Konu durumlarını ve hedef
+                  seçimlerini kontrol edebilirsin.
+                </div>
+              ) : (
+                <div className="max-h-96 space-y-2 overflow-y-auto">
+                  {recommendations.map((rec) => {
+                    const meta = SCENARIO_META[rec.scenario];
+                    const busy = applyingTopicId === rec.topicId;
+                    return (
+                      <div
+                        key={`${rec.subjectId}-${rec.topicId}`}
+                        className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <span
+                              className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold ${meta.className}`}
+                            >
+                              {meta.label}
+                            </span>
+                            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                              {rec.examType} · {rec.subjectName}
+                            </p>
+                            <p className="text-sm font-semibold leading-snug text-gray-900">
+                              {rec.topicName}
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-lg bg-gray-50 px-2 py-1 text-[10px] font-bold text-gray-500 ring-1 ring-gray-200">
+                            Öncelik {Math.round(rec.priorityScore)}
+                          </span>
+                        </div>
+                        <p className="mt-1.5 text-[11px] font-medium leading-snug text-gray-600">
+                          {rec.reason}
+                        </p>
+                        <button
+                          type="button"
+                          disabled={applyingTopicId !== null}
+                          onClick={() => void applyRecommendation(rec)}
+                          className="mt-2 h-9 w-full rounded-lg bg-indigo-600 px-3 text-[11px] font-bold text-white shadow-sm shadow-indigo-600/20 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation"
                         >
-                          {meta.label}
-                        </span>
-                        <p className="mt-1.5 truncate text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                          {rec.examType} · {rec.subjectName}
-                        </p>
-                        <p className="truncate text-sm font-bold text-gray-900">
-                          {rec.topicName}
-                        </p>
+                          {busy
+                            ? "Ekleniyor…"
+                            : `+ Hedefe Uygula · ${rec.suggestedQuestions} soru`}
+                        </button>
                       </div>
-                      <span className="shrink-0 rounded-lg bg-gray-50 px-2 py-1 text-[10px] font-bold text-gray-500 ring-1 ring-gray-200">
-                        Öncelik {Math.round(rec.priorityScore)}
-                      </span>
-                    </div>
-                    <p className="mt-1.5 text-xs font-medium text-gray-600">
-                      {rec.reason}
-                    </p>
-                    <button
-                      type="button"
-                      disabled={applyingTopicId !== null}
-                      onClick={() => void applyRecommendation(rec)}
-                      className="mt-2.5 h-10 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white shadow-sm shadow-indigo-600/20 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation"
-                    >
-                      {busy
-                        ? "Ekleniyor…"
-                        : `+ Hedefe Uygula · ${rec.suggestedQuestions} soru`}
-                    </button>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
+          ) : null}
         </div>
 
         <form
@@ -675,44 +682,40 @@ export function TargetsPanel({
                       return (
                         <div
                           key={topic.topicId}
-                          className={`flex items-center gap-2 rounded-lg px-2.5 py-2 transition ${
+                          className={`rounded-lg px-2.5 py-2 transition ${
                             checked
                               ? "bg-indigo-50 ring-1 ring-indigo-200"
-                              : "bg-white ring-1 ring-gray-200 hover:bg-gray-50"
+                              : "bg-white ring-1 ring-gray-200"
                           }`}
                         >
-                          <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5">
+                          <label className="flex cursor-pointer items-start gap-2.5 touch-manipulation">
                             <input
                               type="checkbox"
                               checked={checked}
                               onChange={() => toggleTopic(topic.topicId)}
-                              className="h-4 w-4 shrink-0 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                              className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                             />
-                            <span className="min-w-0 truncate text-xs font-medium text-gray-700">
+                            <span className="min-w-0 flex-1 text-sm font-semibold leading-snug text-gray-900 dark:text-gray-100">
                               {topic.topicName}
                             </span>
                           </label>
-                          <div className="flex shrink-0 flex-col items-end gap-0.5">
+                          <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 pl-7">
                             <span
-                              className={`text-[10px] font-bold ${statusMeta.className}`}
+                              className={`text-[11px] font-semibold ${statusMeta.className}`}
                             >
                               {statusMeta.label}
-                            </span>
-                            <span className="text-[10px] font-medium text-gray-400">
                               {stat && stat.totalSolved > 0
-                                ? `${stat.totalSolved} soru${
-                                    stat.accuracy !== null
-                                      ? ` · %${Math.round(stat.accuracy * 100)}`
-                                      : ""
-                                  }`
-                                : "—"}
+                                ? ` · ${stat.totalSolved} soru`
+                                : ""}
+                              {stat && stat.accuracy !== null
+                                ? ` · %${Math.round(stat.accuracy * 100)}`
+                                : ""}
                             </span>
+                            <OsymBadge
+                              avgRecentQuestions={topic.avgRecentQuestions}
+                              yearlyQuestionCounts={topic.yearlyQuestionCounts}
+                            />
                           </div>
-                          <OsymBadge
-                            avgRecentQuestions={topic.avgRecentQuestions}
-                            yearlyQuestionCounts={topic.yearlyQuestionCounts}
-                            className="shrink-0"
-                          />
                         </div>
                       );
                     })}

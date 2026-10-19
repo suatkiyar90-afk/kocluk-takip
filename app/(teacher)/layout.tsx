@@ -73,7 +73,7 @@ export default async function TeacherLayout({
             <div className="mx-auto flex h-14 w-full max-w-md items-center justify-between gap-3 px-4 md:max-w-3xl xl:max-w-5xl">
               <div className="min-w-0 flex-1">
                 <span className="block truncate text-base font-extrabold tracking-tight text-gray-900">
-                  Koç Paneli
+                  Danışman Öğretmen
                 </span>
                 <p className="truncate text-xs font-medium text-gray-500">
                   {userName}
