@@ -8,9 +8,11 @@ import {
   adminChangeStudentTeacher,
   adminDeleteStudent,
   adminUpdateStudentField,
+  adminUpdateStudentGrade,
   type AdminStudent,
   type AdminTeacher,
 } from "@/app/actions/admin-actions";
+import { GRADE_LABELS, GRADE_LEVELS, type GradeLevel } from "@/lib/grade-config";
 import {
   STUDY_FIELD_LABELS,
   studyFields,
@@ -41,6 +43,12 @@ export function StudentManageList({
 }: StudentManageListProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<AdminStudent | null>(null);
+  const [gradeFilter, setGradeFilter] = useState<"all" | GradeLevel>("all");
+
+  const visibleStudents =
+    gradeFilter === "all"
+      ? students
+      : students.filter((s) => s.gradeLevel === gradeFilter);
 
   async function handleTeacherChange(studentId: string, teacherId: string) {
     setBusyId(studentId);
@@ -68,6 +76,26 @@ export function StudentManageList({
       const result = await adminUpdateStudentField({
         studentId,
         studyField: value === "" ? null : (value as StudyField),
+      });
+      if (result.success === true) {
+        toast.success(result.message);
+        onChanged();
+      } else {
+        toast.error(result.message);
+      }
+    } catch {
+      toast.error("Bilinmeyen bir hata oluştu.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleGradeChange(studentId: string, value: string) {
+    setBusyId(studentId);
+    try {
+      const result = await adminUpdateStudentGrade({
+        studentId,
+        gradeLevel: Number(value) as GradeLevel,
       });
       if (result.success === true) {
         toast.success(result.message);
@@ -114,9 +142,48 @@ export function StudentManageList({
         olarak silin.
       </p>
 
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {(
+          [
+            { id: "all" as const, label: "Tümü" },
+            ...GRADE_LEVELS.map((level) => ({
+              id: level,
+              label: GRADE_LABELS[level],
+            })),
+          ]
+        ).map((option) => {
+          const count =
+            option.id === "all"
+              ? students.length
+              : students.filter((s) => s.gradeLevel === option.id).length;
+          const active = gradeFilter === option.id;
+          return (
+            <button
+              key={String(option.id)}
+              type="button"
+              onClick={() => setGradeFilter(option.id)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition touch-manipulation ${
+                active
+                  ? "border-indigo-600 bg-indigo-600 text-white shadow"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-indigo-300 hover:text-indigo-600"
+              }`}
+            >
+              {option.label}
+              <span
+                className={`rounded-full px-1.5 text-[10px] font-bold ${
+                  active ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {students.length > 0 ? (
         <ul className="mt-4 space-y-2">
-          {students.map((s) => (
+          {visibleStudents.map((s) => (
             <li
               key={s.id}
               className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5"
@@ -143,6 +210,9 @@ export function StudentManageList({
                         ? STUDY_FIELD_LABELS[s.studyField]
                         : "Alan seçilmedi"}
                     </span>
+                    <span className="whitespace-nowrap rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-bold text-sky-700">
+                      {GRADE_LABELS[s.gradeLevel]}
+                    </span>
                   </div>
                   <p className="truncate text-xs text-gray-500">
                     Kullanıcı adı: {s.studentNumber ?? "—"}
@@ -160,7 +230,31 @@ export function StudentManageList({
                 </button>
               </div>
 
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <div>
+                  <label
+                    htmlFor={`manage-grade-${s.id}`}
+                    className="mb-1 block text-[11px] font-bold text-gray-500"
+                  >
+                    Sınıf Grubu
+                  </label>
+                  <select
+                    id={`manage-grade-${s.id}`}
+                    value={s.gradeLevel}
+                    disabled={busyId !== null}
+                    onChange={(e) => handleGradeChange(s.id, e.target.value)}
+                    className="h-10 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-sm text-gray-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 disabled:opacity-50"
+                  >
+                    {GRADE_LEVELS.map((level) => (
+                      <option key={level} value={level}>
+                        {GRADE_LABELS[level]}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[11px] text-gray-400">
+                    Giriş saati grubun ayarından gelir
+                  </p>
+                </div>
                 <div>
                   <label
                     htmlFor={`manage-advisor-${s.id}`}
@@ -224,6 +318,12 @@ export function StudentManageList({
           Önce bir öğrenci ekleyin.
         </p>
       )}
+
+      {students.length > 0 && visibleStudents.length === 0 ? (
+        <p className="mt-4 rounded-xl bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-600">
+          Bu sınıf grubunda öğrenci yok.
+        </p>
+      ) : null}
 
       <Dialog.Root
         open={pendingDelete !== null}

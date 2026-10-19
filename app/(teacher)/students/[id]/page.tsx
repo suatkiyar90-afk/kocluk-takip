@@ -104,6 +104,13 @@ export default async function StudentDetailPage({
           qaResult={qaResult}
           actorName={session?.user?.name ?? ""}
           schoolName={process.env.SCHOOL_NAME ?? "Koçluk Takip Sistemi"}
+          studentProfile={{
+            name: student.name,
+            studentNumber: student.studentNumber,
+            studyField: student.studyField,
+            gradeLevel: student.gradeLevel,
+            advisorName: student.advisorName,
+          }}
         />
       </div>
 

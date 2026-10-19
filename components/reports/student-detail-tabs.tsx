@@ -16,6 +16,10 @@ import { FeedbackForm } from "@/components/coaching/feedback-form";
 import { MockExamHistory } from "@/components/exams/mock-exam-history";
 import { MyDenemeAttempts } from "@/components/exams/my-deneme-attempts";
 import { CurriculumProgress } from "@/components/curriculum/curriculum-progress";
+import {
+  CurriculumReport,
+  type CurriculumReportProfile,
+} from "@/components/reports/curriculum-report";
 import { TeacherQASection } from "@/components/qa/teacher-qa-section";
 import { TargetsPanel } from "@/components/reports/targets-panel";
 import { TeacherReportsTab } from "@/components/reports/teacher-reports-tab";
@@ -102,6 +106,7 @@ interface StudentDetailTabsProps {
   qaResult: QaActionResult<QaThreadSummary[]>;
   actorName?: string;
   schoolName?: string;
+  studentProfile?: CurriculumReportProfile | null;
 }
 
 export function StudentDetailTabs({
@@ -119,6 +124,7 @@ export function StudentDetailTabs({
   qaResult,
   actorName,
   schoolName,
+  studentProfile,
 }: StudentDetailTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>(
     normalizeStudentDetailTab(initialTab) as TabId,
@@ -570,7 +576,13 @@ export function StudentDetailTabs({
             {curriculumResult.message}
           </div>
         ) : (
-          <CurriculumProgress snapshot={curriculumResult.data} />
+          <div className="space-y-4">
+            <CurriculumReport
+              snapshot={curriculumResult.data}
+              profile={studentProfile ?? null}
+            />
+            <CurriculumProgress snapshot={curriculumResult.data} />
+          </div>
         )}
       </div>
 

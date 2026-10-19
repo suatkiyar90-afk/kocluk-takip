@@ -62,6 +62,7 @@ export const users = pgTable("users", {
   image: text("image"),
   role: userRoleEnum("role").notNull().default("student"),
   studyField: studyFieldEnum("study_field"),
+  gradeLevel: integer("grade_level").notNull().default(12),
   passwordHash: text("password_hash"),
   mustChangePassword: boolean("must_change_password").notNull().default(true),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
@@ -73,6 +74,16 @@ export const users = pgTable("users", {
     .notNull()
     .default(1),
   createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const gradeSettings = pgTable("grade_settings", {
+  gradeLevel: integer("grade_level").primaryKey(),
+  entryStartHour: integer("entry_start_hour").notNull().default(22),
+  entryEndHour: integer("entry_end_hour").notNull().default(24),
+  enforceTimeWindow: boolean("enforce_time_window").notNull().default(false),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
 });

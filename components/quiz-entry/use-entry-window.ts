@@ -5,11 +5,24 @@ import {
   getEntryWindowStatus,
   type EntryWindowStatusData,
 } from "@/app/actions/quiz-actions";
-import { getEntryWindow, type EntryWindow } from "@/lib/entry-window";
+import { getEntryWindowForRange, type EntryWindow } from "@/lib/entry-window";
 
 const NORMAL_INTERVAL_MS = 60_000;
 const URGENT_INTERVAL_MS = 30_000;
 const ALERT_THRESHOLD_MS = 5 * 60 * 1000;
+
+function computeWindow(
+  status: EntryWindowStatusData,
+  now: Date,
+): EntryWindow {
+  const window = getEntryWindowForRange(
+    now,
+    status.entryStartHour,
+    status.entryEndHour,
+  );
+  if (status.enforceTimeWindow) return window;
+  return { ...window, state: "open" };
+}
 
 export interface UseEntryWindowResult {
   status: EntryWindowStatusData | null;
@@ -32,7 +45,12 @@ export function useEntryWindow(): UseEntryWindowResult {
         offsetMsRef.current = Date.parse(result.data.serverNow) - Date.now();
         serverStateRef.current = result.data.state;
         setStatus(result.data);
-        setEntryWindow(getEntryWindow(new Date(Date.now() + offsetMsRef.current)));
+        setEntryWindow(
+          computeWindow(
+            result.data,
+            new Date(Date.now() + offsetMsRef.current),
+          ),
+        );
       }
     })();
   }, []);
@@ -56,10 +74,11 @@ export function useEntryWindow(): UseEntryWindowResult {
     }
 
     const tick = () => {
-      const w = getEntryWindow(new Date(Date.now() + offsetMsRef.current));
+      const w = computeWindow(status, new Date(Date.now() + offsetMsRef.current));
       setEntryWindow(w);
       setAlert(
-        w.state === "open" &&
+        status.enforceTimeWindow &&
+          w.state === "open" &&
           w.msUntilClose > 0 &&
           w.msUntilClose <= ALERT_THRESHOLD_MS,
       );

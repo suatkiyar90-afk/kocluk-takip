@@ -15,6 +15,12 @@ import {
 } from "@/app/actions/admin-actions";
 import type { PolicyAcknowledgmentOverview } from "@/lib/policy-overview";
 import {
+  DEFAULT_GRADE_LEVEL,
+  GRADE_LABELS,
+  GRADE_LEVELS,
+  type GradeLevel,
+} from "@/lib/grade-config";
+import {
   STUDY_FIELD_LABELS,
   studyFields,
   type StudyField,
@@ -187,6 +193,7 @@ function CreateUserForm({
   const [password, setPassword] = useState("");
   const [studentNumber, setStudentNumber] = useState("");
   const [studyField, setStudyField] = useState<StudyField | "">("");
+  const [gradeLevel, setGradeLevel] = useState<GradeLevel>(DEFAULT_GRADE_LEVEL);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -203,6 +210,7 @@ function CreateUserForm({
         role,
         studentNumber,
         studyField: role === "student" ? studyField || null : null,
+        gradeLevel,
       });
       if (result.success === true) {
         toast.success(result.message);
@@ -211,6 +219,7 @@ function CreateUserForm({
         setPassword("");
         setStudentNumber("");
         setStudyField("");
+        setGradeLevel(DEFAULT_GRADE_LEVEL);
         onCreated();
       } else {
         setError(result.message);
@@ -323,6 +332,28 @@ function CreateUserForm({
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label htmlFor="student-grade" className={labelClass}>
+                Sınıf Grubu
+              </label>
+              <select
+                id="student-grade"
+                value={gradeLevel}
+                onChange={(e) =>
+                  setGradeLevel(Number(e.target.value) as GradeLevel)
+                }
+                className={inputClass}
+              >
+                {GRADE_LEVELS.map((level) => (
+                  <option key={level} value={level}>
+                    {GRADE_LABELS[level]}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Veri giriş saati seçilen grubun ayarından uygulanır.
+              </p>
             </div>
           </>
         ) : null}

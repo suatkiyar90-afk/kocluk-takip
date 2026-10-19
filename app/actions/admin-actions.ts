@@ -29,6 +29,7 @@ import {
   coachingFeedbacks,
   curriculumTopics,
   dailyQuestionEntries,
+  gradeSettings,
   mockExams,
   policyAcknowledgments,
   qaThreads,
@@ -48,6 +49,14 @@ import {
 import { actionErrorMessage } from "@/lib/action-error";
 import { buildEnteredTodaySet } from "@/lib/data-entry-activity";
 import { getDenemeLabel } from "@/lib/deneme";
+import {
+  GRADE_LABELS,
+  GRADE_LEVELS,
+  normalizeGradeLevel,
+  resolveGradeSettings,
+  type GradeLevel,
+  type GradeSettings,
+} from "@/lib/grade-config";
 import { getLegalDocument } from "@/lib/legal";
 import {
   buildPolicyAcknowledgmentOverview,
@@ -73,6 +82,7 @@ export interface AdminStudent {
   studentNumber: string | null;
   policyAcknowledged: boolean;
   studyField: StudyField | null;
+  gradeLevel: GradeLevel;
   teacherId: string | null;
   teacherName: string | null;
 }
@@ -178,6 +188,7 @@ const createUserSchema = z
         "Öğrenci numarası geçersiz.",
       ),
     studyField: z.enum(studyFields).optional().nullable(),
+    gradeLevel: z.union([z.literal(11), z.literal(12)]).optional(),
   })
   .superRefine((value, ctx) => {
     if (value.role === "teacher") {
@@ -216,7 +227,7 @@ export async function adminCreateUser(
       message: parsed.error.issues.map((i) => i.message).join(", "),
     };
   }
-  const { name, email, password, role, studentNumber, studyField } =
+  const { name, email, password, role, studentNumber, studyField, gradeLevel } =
     parsed.data;
   const normalizedStudentNumber =
     role === "student" && studentNumber ? studentNumber.trim() : null;
@@ -275,6 +286,7 @@ export async function adminCreateUser(
         role,
         studentNumber: normalizedStudentNumber,
         studyField: role === "student" ? (studyField ?? null) : null,
+        gradeLevel: normalizeGradeLevel(gradeLevel),
         passwordHash,
         mustChangePassword: true,
       })
@@ -313,6 +325,7 @@ const bulkStudentsSchema = z.object({
     )
     .min(1, "En az 1 satır gerekli.")
     .max(1000, "Tek dosyada en fazla 1000 öğrenci olabilir."),
+  gradeLevel: z.union([z.literal(11), z.literal(12)]).optional(),
 });
 
 export interface BulkCreateSkipped {
@@ -344,11 +357,13 @@ export async function bulkCreateStudents(
   }
 
   const skipped: BulkCreateSkipped[] = [];
+  const bulkGradeLevel = normalizeGradeLevel(parsed.data.gradeLevel);
   const toInsert: Array<{
     name: string;
     email: string;
     role: "student";
     studentNumber: string;
+    gradeLevel: GradeLevel;
     passwordHash: string;
     mustChangePassword: true;
   }> = [];
@@ -408,6 +423,7 @@ export async function bulkCreateStudents(
         email: `${number}@kocluk.local`,
         role: "student",
         studentNumber: number,
+        gradeLevel: bulkGradeLevel,
         passwordHash,
         mustChangePassword: true,
       });
@@ -457,6 +473,7 @@ export async function adminListUsers(): Promise<
         role: users.role,
         studentNumber: users.studentNumber,
         studyField: users.studyField,
+        gradeLevel: users.gradeLevel,
         studentAckAt: ackStudent.acceptedAt,
         teacherAckAt: ackTeacher.acceptedAt,
         teacherId: teacherUsers.id,
@@ -512,6 +529,7 @@ export async function adminListUsers(): Promise<
         studentNumber: r.studentNumber,
         policyAcknowledged: r.studentAckAt !== null,
         studyField: r.studyField ?? null,
+        gradeLevel: normalizeGradeLevel(r.gradeLevel),
         teacherId: r.teacherId ?? null,
         teacherName: r.teacherName ?? null,
       });
@@ -583,6 +601,198 @@ export async function adminUpdateStudentField(
       message: studyField
         ? `Alan ${STUDY_FIELD_LABELS[studyField]} olarak güncellendi.`
         : "Alan seçimi kaldırıldı.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+const updateStudentGradeSchema = z.object({
+  studentId: z.string().uuid("Geçerli bir öğrenci seçin."),
+  gradeLevel: z.union([z.literal(11), z.literal(12)]),
+});
+
+export async function adminUpdateStudentGrade(
+  input: unknown,
+): Promise<AdminActionResult<{ gradeLevel: GradeLevel }>> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  const parsed = updateStudentGradeSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((i) => i.message).join(", "),
+    };
+  }
+  const { studentId, gradeLevel } = parsed.data;
+
+  try {
+    const student = await db
+      .select({ id: users.id, gradeLevel: users.gradeLevel })
+      .from(users)
+      .where(and(eq(users.id, studentId), eq(users.role, "student")))
+      .limit(1);
+    if (student.length === 0) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message: "Öğrenci bulunamadı.",
+      };
+    }
+
+    if (normalizeGradeLevel(student[0].gradeLevel) === gradeLevel) {
+      return {
+        success: true,
+        data: { gradeLevel },
+        message: `Öğrenci zaten ${GRADE_LABELS[gradeLevel]} grubunda.`,
+      };
+    }
+
+    await db
+      .update(users)
+      .set({ gradeLevel })
+      .where(eq(users.id, studentId));
+
+    return {
+      success: true,
+      data: { gradeLevel },
+      message: `Öğrenci ${GRADE_LABELS[gradeLevel]} grubuna taşındı.`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+export type AdminGradeSettings = Record<GradeLevel, GradeSettings>;
+
+function buildGradeSettingsMap(
+  rows: Array<{
+    gradeLevel: number;
+    entryStartHour: number;
+    entryEndHour: number;
+    enforceTimeWindow: boolean;
+  }>,
+): AdminGradeSettings {
+  const map = {} as AdminGradeSettings;
+  for (const level of GRADE_LEVELS) {
+    const row = rows.find((r) => r.gradeLevel === level);
+    map[level] = row
+      ? resolveGradeSettings(level, {
+          entryStartHour: row.entryStartHour,
+          entryEndHour: row.entryEndHour,
+          enforceTimeWindow: row.enforceTimeWindow,
+        })
+      : resolveGradeSettings(level, null);
+  }
+  return map;
+}
+
+export async function adminGetGradeSettings(): Promise<
+  AdminActionResult<{ settings: AdminGradeSettings }>
+> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  try {
+    const rows = await db
+      .select({
+        gradeLevel: gradeSettings.gradeLevel,
+        entryStartHour: gradeSettings.entryStartHour,
+        entryEndHour: gradeSettings.entryEndHour,
+        enforceTimeWindow: gradeSettings.enforceTimeWindow,
+      })
+      .from(gradeSettings)
+      .where(inArray(gradeSettings.gradeLevel, [...GRADE_LEVELS]));
+
+    return {
+      success: true,
+      data: { settings: buildGradeSettingsMap(rows) },
+      message: "",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+const updateGradeSettingsSchema = z
+  .object({
+    gradeLevel: z.union([z.literal(11), z.literal(12)]),
+    entryStartHour: z
+      .number()
+      .int("Başlangıç saati tam sayı olmalı.")
+      .min(0, "Başlangıç saati 0-23 arasında olmalı.")
+      .max(23, "Başlangıç saati 0-23 arasında olmalı."),
+    entryEndHour: z
+      .number()
+      .int("Bitiş saati tam sayı olmalı.")
+      .min(1, "Bitiş saati 1-24 arasında olmalı.")
+      .max(24, "Bitiş saati 1-24 arasında olmalı."),
+    enforceTimeWindow: z.boolean(),
+  })
+  .refine((value) => value.entryStartHour !== value.entryEndHour, {
+    path: ["entryEndHour"],
+    message: "Başlangıç ve bitiş saati aynı olamaz.",
+  });
+
+export async function adminUpdateGradeSettings(
+  input: unknown,
+): Promise<AdminActionResult<{ settings: GradeSettings }>> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  const parsed = updateGradeSettingsSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((i) => i.message).join(", "),
+    };
+  }
+  const { gradeLevel, entryStartHour, entryEndHour, enforceTimeWindow } =
+    parsed.data;
+
+  try {
+    await db.execute(sql`
+      INSERT INTO grade_settings (grade_level, entry_start_hour, entry_end_hour, enforce_time_window)
+      VALUES (${gradeLevel}, ${entryStartHour}, ${entryEndHour}, ${enforceTimeWindow})
+      ON CONFLICT (grade_level) DO UPDATE SET
+        entry_start_hour = excluded.entry_start_hour,
+        entry_end_hour = excluded.entry_end_hour,
+        enforce_time_window = excluded.enforce_time_window,
+        updated_at = now()
+    `);
+
+    return {
+      success: true,
+      data: {
+        settings: {
+          gradeLevel,
+          entryStartHour,
+          entryEndHour,
+          enforceTimeWindow,
+        },
+      },
+      message: `${GRADE_LABELS[gradeLevel]} giriş saatleri güncellendi.`,
     };
   } catch (err) {
     return {

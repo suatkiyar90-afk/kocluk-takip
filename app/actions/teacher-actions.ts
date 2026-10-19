@@ -2,6 +2,7 @@
 
 import { auth } from "@/auth";
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { logActivity } from "@/lib/activity-log";
 import {
@@ -31,6 +32,7 @@ import {
 } from "@/components/quiz-entry/weekly-quiz-schema";
 import { coachingFeedbackSchema } from "@/components/coaching/feedback-schema";
 import { actionErrorMessage } from "@/lib/action-error";
+import { normalizeGradeLevel, type GradeLevel } from "@/lib/grade-config";
 
 export type TeacherActionResult<T> =
   | { success: true; data: T }
@@ -65,7 +67,14 @@ export interface SubjectSummary {
 }
 
 export interface WeeklySummaryData {
-  student: { id: string; name: string };
+  student: {
+    id: string;
+    name: string;
+    studentNumber: string | null;
+    studyField: string | null;
+    gradeLevel: GradeLevel;
+    advisorName: string | null;
+  };
   weekStart: string;
   subjects: SubjectSummary[];
   totals: {
@@ -424,11 +433,26 @@ export async function getStudentWeeklySummary(
 
     const weekStart = parseMonday(weekStartArg);
     const weekEnd = weekEndOf(weekStart);
+    const advisor = alias(users, "summary_advisor");
 
     const [profileRows, rows, feedbackRows] = await Promise.all([
       db
-        .select({ name: users.name })
+        .select({
+          name: users.name,
+          studentNumber: users.studentNumber,
+          studyField: users.studyField,
+          gradeLevel: users.gradeLevel,
+          advisorName: advisor.name,
+        })
         .from(users)
+        .leftJoin(
+          teacherStudents,
+          eq(teacherStudents.studentId, users.id),
+        )
+        .leftJoin(
+          advisor,
+          and(eq(advisor.id, teacherStudents.teacherId), eq(advisor.role, "teacher")),
+        )
         .where(eq(users.id, studentId))
         .limit(1),
       db
@@ -509,7 +533,11 @@ export async function getStudentWeeklySummary(
       data: {
         student: {
           id: studentId,
-          name: profileRows[0]?.name || "İsimsiz öğrenci",
+          name: profileRows[0]?.name || "İsimsiz Öğrenci",
+          studentNumber: profileRows[0]?.studentNumber ?? null,
+          studyField: profileRows[0]?.studyField ?? null,
+          gradeLevel: normalizeGradeLevel(profileRows[0]?.gradeLevel),
+          advisorName: profileRows[0]?.advisorName ?? null,
         },
         weekStart,
         subjects,

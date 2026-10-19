@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { GradeSettingsCard } from "@/components/admin/grade-settings-card";
 import { ChangePasswordForm } from "./change-password-form";
 
 export const metadata = {
@@ -27,6 +28,10 @@ export default async function AdminSettingsPage() {
             Profil bilgilerinizi görüntüleyin ve şifrenizi değiştirin.
           </p>
         </header>
+
+        <div className="mb-4">
+          <GradeSettingsCard />
+        </div>
 
         <section className="mb-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-gray-900">Profilim</h2>

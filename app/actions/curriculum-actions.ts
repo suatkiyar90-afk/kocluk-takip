@@ -29,6 +29,8 @@ export interface CurriculumTopicRow {
   status: TopicStatus;
   avgRecentQuestions: number;
   yearlyQuestionCounts: Record<string, number> | null;
+  totalSolved: number;
+  accuracy: number | null;
 }
 
 export interface CurriculumSubjectGroup {
@@ -136,7 +138,7 @@ async function isAssigned(
 }
 
 async function loadSnapshot(studentId: string): Promise<CurriculumSnapshot> {
-  const [topicRows, progressRows] = await Promise.all([
+  const [topicRows, progressRows, statRows] = await Promise.all([
     db
       .select()
       .from(curriculumTopics)
@@ -149,10 +151,36 @@ async function loadSnapshot(studentId: string): Promise<CurriculumSnapshot> {
       .select()
       .from(studentTopicProgress)
       .where(eq(studentTopicProgress.studentId, studentId)),
+    db
+      .select({
+        topicId: dailyQuestionEntries.topicId,
+        totalSolved:
+          sql<number>`coalesce(sum(${dailyQuestionEntries.correct} + ${dailyQuestionEntries.wrong} + ${dailyQuestionEntries.blank}), 0)::int`,
+        correctCount:
+          sql<number>`coalesce(sum(${dailyQuestionEntries.correct}), 0)::int`,
+      })
+      .from(dailyQuestionEntries)
+      .where(eq(dailyQuestionEntries.studentId, studentId))
+      .groupBy(dailyQuestionEntries.topicId),
   ]);
 
   const statusById = new Map<number, TopicStatus>(
     progressRows.map((p) => [p.topicId, p.status]),
+  );
+  const statByTopic = new Map<
+    number,
+    { totalSolved: number; accuracy: number | null }
+  >(
+    statRows.map((row) => [
+      row.topicId,
+      {
+        totalSolved: row.totalSolved,
+        accuracy:
+          row.totalSolved > 0
+            ? Math.round((row.correctCount / row.totalSolved) * 100)
+            : null,
+      },
+    ]),
   );
 
   const groups = new Map<string, CurriculumSubjectGroup>();
@@ -180,6 +208,8 @@ async function loadSnapshot(studentId: string): Promise<CurriculumSnapshot> {
       status: statusById.get(t.id) ?? "baslamadi",
       avgRecentQuestions: t.avgRecentQuestions,
       yearlyQuestionCounts: t.yearlyQuestionCounts ?? null,
+      totalSolved: statByTopic.get(t.id)?.totalSolved ?? 0,
+      accuracy: statByTopic.get(t.id)?.accuracy ?? null,
     });
   }
 

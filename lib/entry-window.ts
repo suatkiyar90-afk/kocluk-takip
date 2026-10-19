@@ -29,6 +29,8 @@ export class EntryWindowError extends Error {
 
 const ISTANBUL_OFFSET_MS = 3 * 60 * 60 * 1000;
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 const FORCE_OPEN_DURATION_MS = 60 * 60 * 1000;
 
 export function isEntryWindowForceOpen(): boolean {
@@ -59,6 +61,14 @@ export function getIstanbulHour(now: Date = new Date()): number {
 }
 
 export function getEntryWindow(now: Date = new Date()): EntryWindow {
+  return getEntryWindowForRange(now, ENTRY_OPEN_HOUR, ENTRY_CLOSE_HOUR);
+}
+
+export function getEntryWindowForRange(
+  now: Date,
+  startHour: number,
+  endHour: number,
+): EntryWindow {
   const parts = istanbulFormatter.formatToParts(now);
   let year = 0;
   let month = 1;
@@ -84,19 +94,38 @@ export function getEntryWindow(now: Date = new Date()): EntryWindow {
     };
   }
 
-  const opensAt = new Date(
-    Date.UTC(year, month - 1, day, ENTRY_OPEN_HOUR) - ISTANBUL_OFFSET_MS,
-  );
-  const closesAt = new Date(
-    Date.UTC(year, month - 1, day, ENTRY_CLOSE_HOUR) - ISTANBUL_OFFSET_MS,
-  );
+  const start = normalizeHour(startHour);
+  const end = normalizeHour(endHour);
+  const dayStartMs = Date.UTC(year, month - 1, day) - ISTANBUL_OFFSET_MS;
+  const atHour = (baseMs: number, h: number) =>
+    new Date(baseMs + h * 60 * 60 * 1000);
 
-  const state: EntryWindowState =
-    hour < ENTRY_OPEN_HOUR
+  const crossMidnight = start > end;
+  const openNow = crossMidnight
+    ? hour >= start || hour < end
+    : hour >= start && hour < end;
+
+  let opensAt: Date;
+  let closesAt: Date;
+  if (!crossMidnight) {
+    opensAt = atHour(dayStartMs, start);
+    closesAt = atHour(dayStartMs, end);
+  } else if (hour >= start) {
+    opensAt = atHour(dayStartMs, start);
+    closesAt = atHour(dayStartMs + DAY_MS, end);
+  } else if (hour < end) {
+    opensAt = atHour(dayStartMs - DAY_MS, start);
+    closesAt = atHour(dayStartMs, end);
+  } else {
+    opensAt = atHour(dayStartMs, start);
+    closesAt = atHour(dayStartMs + DAY_MS, end);
+  }
+
+  const state: EntryWindowState = openNow
+    ? "open"
+    : hour < start
       ? "before"
-      : hour < ENTRY_CLOSE_HOUR
-        ? "open"
-        : "after";
+      : "after";
 
   return {
     state,
@@ -108,8 +137,26 @@ export function getEntryWindow(now: Date = new Date()): EntryWindow {
   };
 }
 
+function normalizeHour(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  const floored = Math.floor(value);
+  return ((floored % 24) + 24) % 24;
+}
+
 export function assertEntryWindowOpen(now: Date = new Date()): void {
   if (getEntryWindow(now).state !== "open") {
     throw new EntryWindowError();
   }
+}
+
+export function isWithinRange(
+  hour: number,
+  startHour: number,
+  endHour: number,
+): boolean {
+  const start = normalizeHour(startHour);
+  const end = normalizeHour(endHour);
+  if (start === end) return false;
+  if (start < end) return hour >= start && hour < end;
+  return hour >= start || hour < end;
 }

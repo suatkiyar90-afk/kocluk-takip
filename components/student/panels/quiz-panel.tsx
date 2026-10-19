@@ -109,6 +109,7 @@ export function QuizPanel({ studentId }: QuizPanelProps) {
           subjects={result.data.subjects}
           initialDailyNote={result.data.dailyNote}
           windowOpen={windowOpen}
+          streakMessage={status?.streakMessage ?? null}
           onSaved={handleSaved}
         />
       )}

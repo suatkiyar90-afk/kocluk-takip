@@ -49,11 +49,6 @@ import {
   resolveTytBlank,
   validateDenemeCounts,
 } from "@/lib/deneme";
-import {
-  ENTRY_CLOSE_HOUR,
-  ENTRY_OPEN_HOUR,
-  getIstanbulHour,
-} from "@/lib/entry-window";
 
 function formatNet(value: number): string {
   return value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
@@ -99,6 +94,7 @@ interface DailyEntryFormProps {
   initialAttempts: DayAttemptRow[];
   initialSummary: string;
   windowOpen: boolean;
+  streakMessage?: string | null;
   onSaved: () => void;
 }
 
@@ -110,6 +106,7 @@ export function DailyEntryForm({
   initialAttempts,
   initialSummary,
   windowOpen,
+  streakMessage,
   onSaved,
 }: DailyEntryFormProps) {
   const [examType, setExamType] = useState<ExamType>("TYT");
@@ -613,14 +610,7 @@ export function DailyEntryForm({
         setSavedFlash(true);
         if (savedTimer.current) clearTimeout(savedTimer.current);
         savedTimer.current = setTimeout(() => setSavedFlash(false), 2000);
-        const istanbulHour = getIstanbulHour();
-        const isNightBand =
-          istanbulHour >= ENTRY_OPEN_HOUR && istanbulHour < ENTRY_CLOSE_HOUR;
-        toast.success(
-          isNightBand
-            ? "Serin devam ediyor! Yarın 22.00–23.59 arası görüşmek üzere 👋"
-            : "Gün kaydedildi.",
-        );
+        toast.success(streakMessage ?? "Gün kaydedildi.");
         setAnnounce("Kaydedildi.");
         onSaved();
       } else {

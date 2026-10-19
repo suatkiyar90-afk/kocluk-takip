@@ -7,6 +7,7 @@ import { db } from "@/db";
 import {
   curriculumTopics,
   dailyQuestionEntries,
+  gradeSettings,
   studentDailyNotes,
   studentDenemeAttempts,
   teacherStudents,
@@ -39,11 +40,19 @@ import {
   type PastDayGroup,
 } from "@/lib/past-entry-days";
 import {
-  assertEntryWindowOpen,
   ENTRY_DATE_MESSAGE,
-  ENTRY_WINDOW_MESSAGE,
   getEntryWindow,
+  getEntryWindowForRange,
+  getIstanbulHour,
+  isWithinRange,
 } from "@/lib/entry-window";
+import {
+  buildEntryWindowMessage,
+  buildGradeBadgeLabel,
+  buildStreakToastMessage,
+  resolveGradeSettings,
+  type GradeSettings,
+} from "@/lib/grade-config";
 import { markUserSeen } from "@/lib/touch-last-seen";
 import {
   planSaveDay,
@@ -84,8 +93,34 @@ async function getStudentId(): Promise<
   return { ok: true, studentId: session.user.id };
 }
 
-async function getTeacherId(): Promise<
-  | { ok: true; teacherId: string }
+async function loadStudentGradeContext(
+  studentId: string,
+): Promise<GradeSettings> {
+  const rows = await db
+    .select({
+      gradeLevel: users.gradeLevel,
+      entryStartHour: gradeSettings.entryStartHour,
+      entryEndHour: gradeSettings.entryEndHour,
+      enforceTimeWindow: gradeSettings.enforceTimeWindow,
+    })
+    .from(users)
+    .leftJoin(gradeSettings, eq(gradeSettings.gradeLevel, users.gradeLevel))
+    .where(eq(users.id, studentId))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return resolveGradeSettings(undefined, null);
+
+  return resolveGradeSettings(row.gradeLevel, {
+    entryStartHour:
+      row.entryStartHour === null ? undefined : row.entryStartHour,
+    entryEndHour: row.entryEndHour === null ? undefined : row.entryEndHour,
+    enforceTimeWindow:
+      row.enforceTimeWindow === null ? undefined : row.enforceTimeWindow,
+  });
+}
+
+async function getTeacherId(): Promise<  | { ok: true; teacherId: string }
   | {
       ok: false;
       status: "UNAUTHORIZED" | "FORBIDDEN";
@@ -831,6 +866,13 @@ export interface EntryWindowStatusData {
   opensAt: string;
   closesAt: string;
   hasEntryToday: boolean;
+  gradeLevel: 11 | 12;
+  entryStartHour: number;
+  entryEndHour: number;
+  enforceTimeWindow: boolean;
+  windowMessage: string;
+  streakMessage: string;
+  badgeLabel: string;
 }
 
 export type EntryWindowStatusResult =
@@ -849,7 +891,15 @@ export async function getEntryWindowStatus(): Promise<EntryWindowStatusResult> {
 
   try {
     const now = new Date();
-    const entryWindow = getEntryWindow(now);
+    const gradeContext = await loadStudentGradeContext(guard.studentId);
+    const rangedWindow = getEntryWindowForRange(
+      now,
+      gradeContext.entryStartHour,
+      gradeContext.entryEndHour,
+    );
+    const entryWindow = gradeContext.enforceTimeWindow
+      ? rangedWindow
+      : getEntryWindow(now);
 
     const [entryRows, noteRows] = await Promise.all([
       db
@@ -877,11 +927,18 @@ export async function getEntryWindowStatus(): Promise<EntryWindowStatusResult> {
     return {
       success: true,
       data: {
-        state: entryWindow.state,
+        state: gradeContext.enforceTimeWindow ? entryWindow.state : "open",
         serverNow: now.toISOString(),
-        opensAt: entryWindow.opensAt.toISOString(),
-        closesAt: entryWindow.closesAt.toISOString(),
+        opensAt: rangedWindow.opensAt.toISOString(),
+        closesAt: rangedWindow.closesAt.toISOString(),
         hasEntryToday: entryRows.length > 0 || noteRows.length > 0,
+        gradeLevel: gradeContext.gradeLevel,
+        entryStartHour: gradeContext.entryStartHour,
+        entryEndHour: gradeContext.entryEndHour,
+        enforceTimeWindow: gradeContext.enforceTimeWindow,
+        windowMessage: buildEntryWindowMessage(gradeContext),
+        streakMessage: buildStreakToastMessage(gradeContext),
+        badgeLabel: buildGradeBadgeLabel(gradeContext),
       },
       message: "Giriş penceresi durumu yüklendi.",
     };
@@ -1031,13 +1088,28 @@ export async function saveDay(payload: unknown): Promise<SaveDayResult> {
     "attempts" in payload;
 
   const now = new Date();
+  let gradeContext: GradeSettings;
   try {
-    assertEntryWindowOpen(now);
+    gradeContext = await loadStudentGradeContext(studentId);
   } catch (err) {
     return {
       success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+  if (
+    gradeContext.enforceTimeWindow &&
+    !isWithinRange(
+      getIstanbulHour(now),
+      gradeContext.entryStartHour,
+      gradeContext.entryEndHour,
+    )
+  ) {
+    return {
+      success: false,
       status: "VALIDATION_FAILED",
-      message: err instanceof Error ? err.message : ENTRY_WINDOW_MESSAGE,
+      message: buildEntryWindowMessage(gradeContext),
     };
   }
   const today = getEntryWindow(now).today;

@@ -28,6 +28,7 @@ interface QuizEntryClientProps {
   subjects: SubjectOptions;
   initialDailyNote: string | null;
   windowOpen: boolean;
+  streakMessage?: string | null;
   onSaved?: () => void;
 }
 
@@ -41,6 +42,7 @@ export function QuizEntryClient({
   subjects,
   initialDailyNote,
   windowOpen,
+  streakMessage,
   onSaved,
 }: QuizEntryClientProps) {
   const [pastDays, setPastDays] = useState<PastDayGroup[]>(
@@ -108,6 +110,7 @@ export function QuizEntryClient({
         initialAttempts={attempts}
         initialSummary={initialDailyNote ?? ""}
         windowOpen={windowOpen}
+        streakMessage={streakMessage}
         onSaved={onSaved ?? (() => {})}
       />
 

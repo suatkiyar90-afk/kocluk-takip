@@ -7,6 +7,12 @@ import {
   bulkCreateStudents,
   type BulkCreateData,
 } from "@/app/actions/admin-actions";
+import {
+  DEFAULT_GRADE_LEVEL,
+  GRADE_LABELS,
+  GRADE_LEVELS,
+  type GradeLevel,
+} from "@/lib/grade-config";
 
 const inputClass =
   "h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-base text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200";
@@ -72,6 +78,7 @@ export function BulkStudentsForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<BulkCreateData | null>(null);
+  const [gradeLevel, setGradeLevel] = useState<GradeLevel>(DEFAULT_GRADE_LEVEL);
 
   const preview = useMemo(() => parsedRows.slice(0, 20), [parsedRows]);
 
@@ -159,7 +166,7 @@ export function BulkStudentsForm() {
 
     setLoading(true);
     try {
-      const result = await bulkCreateStudents({ rows: parsedRows });
+      const result = await bulkCreateStudents({ rows: parsedRows, gradeLevel });
       if (result.success === true) {
         setSummary(result.data);
         toast.success(result.message);
@@ -188,6 +195,27 @@ export function BulkStudentsForm() {
         </p>
 
         <div className="mt-5 space-y-4">
+          <div>
+            <label htmlFor="bulk-grade" className={labelClass}>
+              Sınıf Grubu
+            </label>
+            <select
+              id="bulk-grade"
+              value={gradeLevel}
+              onChange={(e) => setGradeLevel(Number(e.target.value) as GradeLevel)}
+              className={inputClass}
+            >
+              {GRADE_LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {GRADE_LABELS[level]}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              Dosyadaki tüm öğrenciler bu sınıf grubuna eklenir.
+            </p>
+          </div>
+
           <div>
             <label htmlFor="bulk-file" className={labelClass}>
               Öğrenci Listesi Dosyası
