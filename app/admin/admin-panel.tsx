@@ -14,6 +14,11 @@ import {
   type AdminTeacher,
 } from "@/app/actions/admin-actions";
 import type { PolicyAcknowledgmentOverview } from "@/lib/policy-overview";
+import {
+  STUDY_FIELD_LABELS,
+  studyFields,
+  type StudyField,
+} from "@/components/quiz-entry/weekly-quiz-schema";
 import { StudentManageList } from "@/components/admin/student-manage-list";
 import { PolicyOverviewSection } from "./policy-overview-section";
 
@@ -181,6 +186,7 @@ function CreateUserForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [studentNumber, setStudentNumber] = useState("");
+  const [studyField, setStudyField] = useState<StudyField | "">("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -196,6 +202,7 @@ function CreateUserForm({
         password,
         role,
         studentNumber,
+        studyField: role === "student" ? studyField || null : null,
       });
       if (result.success === true) {
         toast.success(result.message);
@@ -203,6 +210,7 @@ function CreateUserForm({
         setEmail("");
         setPassword("");
         setStudentNumber("");
+        setStudyField("");
         onCreated();
       } else {
         setError(result.message);
@@ -295,6 +303,26 @@ function CreateUserForm({
                 placeholder="Örn. 1234 (deneme sınavı eşleştirmesinde kullanılır)"
                 autoComplete="off"
               />
+            </div>
+            <div>
+              <label htmlFor="student-field" className={labelClass}>
+                Alan
+              </label>
+              <select
+                id="student-field"
+                value={studyField}
+                onChange={(e) =>
+                  setStudyField(e.target.value as StudyField | "")
+                }
+                className={inputClass}
+              >
+                <option value="">Seçilmedi (varsayılan: Sayısal)</option>
+                {studyFields.map((field) => (
+                  <option key={field} value={field}>
+                    {STUDY_FIELD_LABELS[field]}
+                  </option>
+                ))}
+              </select>
             </div>
           </>
         ) : null}

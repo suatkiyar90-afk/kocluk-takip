@@ -90,6 +90,7 @@ function formatSelectedDay(iso: string): string {
 interface StudentDetailTabsProps {
   weekStart: string;
   studentId: string;
+  studentName: string;
   initialComment: string | undefined;
   initialTab?: string;
   reportResult: WeeklyReportResult;
@@ -106,6 +107,7 @@ interface StudentDetailTabsProps {
 export function StudentDetailTabs({
   weekStart,
   studentId,
+  studentName,
   initialComment,
   initialTab,
   reportResult,
@@ -534,6 +536,7 @@ export function StudentDetailTabs({
       <div role="tabpanel" id="detail-panel-targets" aria-labelledby="detail-tab-targets" hidden={activeTab !== "targets"}>
         <TargetsPanel
           studentId={studentId}
+          studentName={studentName}
           weekStart={weekStart}
           snapshot={curriculumResult.success === true ? curriculumResult.data : null}
         />

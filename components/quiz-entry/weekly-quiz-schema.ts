@@ -48,6 +48,41 @@ export const ALL_SUBJECTS: Record<ExamType, SubjectDef[]> = {
   YDT: YDT_SUBJECTS,
 };
 
+export const studyFields = ["SAY", "EA", "SOZ", "DIL"] as const;
+export type StudyField = (typeof studyFields)[number];
+
+export const STUDY_FIELD_LABELS: Record<StudyField, string> = {
+  SAY: "Sayısal",
+  EA: "Eşit Ağırlık",
+  SOZ: "Sözel",
+  DIL: "Dil",
+};
+
+const TYT_SUBJECT_IDS = TYT_SUBJECTS.map((s) => s.id);
+
+export const ALLOWED_SUBJECTS_BY_FIELD: Record<StudyField, string[]> = {
+  SAY: [...TYT_SUBJECT_IDS, "matematik-ayt", "geometri-ayt", "fizik", "kimya", "biyoloji"],
+  EA: [...TYT_SUBJECT_IDS, "matematik-ayt", "geometri-ayt", "edebiyat", "tarih1", "cografya1"],
+  SOZ: [
+    ...TYT_SUBJECT_IDS,
+    "edebiyat",
+    "tarih1",
+    "cografya1",
+    "tarih2",
+    "cografya2",
+    "felsefe",
+    "din",
+  ],
+  DIL: [...TYT_SUBJECT_IDS, "ydt-ingilizce"],
+};
+
+export function isSubjectAllowedForField(
+  field: StudyField,
+  subjectId: string,
+): boolean {
+  return ALLOWED_SUBJECTS_BY_FIELD[field].includes(subjectId);
+}
+
 export const countField = z
   .coerce.number()
   .int("Tam sayı girin")

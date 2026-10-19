@@ -8,10 +8,16 @@ import { saveWeeklyScheduleFile } from "@/app/actions/weekly-target-actions";
 import { isImageUrl, isPdfUrl } from "@/lib/schedule-file";
 import {
   deleteWeeklyTarget,
+  getSmartTargetRecommendations,
   getWeeklyDenemeBundle,
   listWeeklyTargets,
   saveWeeklyDenemeTargets,
   saveWeeklyTarget,
+  teacherUpdateStudentField,
+  type SmartTargetRecommendation,
+  type SmartTargetScenario,
+  type SmartTargetTopicStat,
+  type TopicStatus,
   type WeeklyTargetView,
 } from "@/app/actions/weekly-target-actions";
 import {
@@ -23,6 +29,12 @@ import {
 } from "@/lib/deneme";
 import type { CurriculumSnapshot } from "@/app/actions/curriculum-actions";
 import { OsymBadge } from "@/components/curriculum/osym-badge";
+import {
+  ALLOWED_SUBJECTS_BY_FIELD,
+  STUDY_FIELD_LABELS,
+  studyFields,
+  type StudyField,
+} from "@/components/quiz-entry/weekly-quiz-schema";
 
 const inputClass =
   "h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-base text-gray-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200";
@@ -36,9 +48,41 @@ interface DenemeItemRow {
 
 interface TargetsPanelProps {
   studentId: string;
+  studentName: string;
   weekStart: string;
   snapshot: CurriculumSnapshot | null;
 }
+
+const SCENARIO_META: Record<
+  SmartTargetScenario,
+  { label: string; className: string }
+> = {
+  next_guarantee: {
+    label: "🔥 Sıradaki Garanti",
+    className: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+  },
+  unfinished: {
+    label: "⏳ Yarım Kalan",
+    className: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+  },
+  low_accuracy: {
+    label: "⚠️ Doğruluk Düşük",
+    className: "bg-orange-50 text-orange-700 ring-1 ring-orange-200",
+  },
+  spaced_repetition: {
+    label: "🔄 Tekrar Zamanı",
+    className: "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
+  },
+};
+
+const TOPIC_STATUS_META: Record<
+  TopicStatus,
+  { label: string; className: string }
+> = {
+  baslamadi: { label: "Başlanmadı", className: "text-gray-400" },
+  calisiliyor: { label: "⏳ Çalışılıyor", className: "text-amber-600" },
+  bitti: { label: "✅ Bitti", className: "text-emerald-600" },
+};
 
 function formatRange(mondayIso: string): string {
   const [y, m, d] = mondayIso.split("-").map(Number);
@@ -48,7 +92,12 @@ function formatRange(mondayIso: string): string {
   return `${start.toLocaleDateString("tr-TR", opts)} - ${end.toLocaleDateString("tr-TR", opts)}`;
 }
 
-export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelProps) {
+export function TargetsPanel({
+  studentId,
+  studentName,
+  weekStart,
+  snapshot,
+}: TargetsPanelProps) {
   const [targets, setTargets] = useState<WeeklyTargetView[]>([]);
   const [mode, setMode] = useState<"ders" | "deneme">("ders");
   const [subjectId, setSubjectId] = useState("");
@@ -61,13 +110,25 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
   const [saving, setSaving] = useState(false);
   const [uploadingSchedule, setUploadingSchedule] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [studyField, setStudyField] = useState<StudyField>("SAY");
+  const [studyFieldSelected, setStudyFieldSelected] = useState(true);
+  const [recommendations, setRecommendations] = useState<
+    SmartTargetRecommendation[]
+  >([]);
+  const [topicStats, setTopicStats] = useState<Map<number, SmartTargetTopicStat>>(
+    new Map(),
+  );
+  const [savingField, setSavingField] = useState(false);
+  const [applyingTopicId, setApplyingTopicId] = useState<number | null>(null);
+  const [showAllSubjects, setShowAllSubjects] = useState(false);
   const denemeUidRef = useRef(1);
 
   const refresh = useCallback(async () => {
     setLoadingList(true);
-    const [listResult, denemeResult] = await Promise.all([
+    const [listResult, denemeResult, recommendationResult] = await Promise.all([
       listWeeklyTargets(studentId, weekStart),
       getWeeklyDenemeBundle(studentId, weekStart),
+      getSmartTargetRecommendations(studentId, weekStart),
     ]);
     if (listResult.success === true) {
       setTargets(listResult.data);
@@ -84,6 +145,22 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
         })),
       );
     }
+    if (recommendationResult.success === true) {
+      setStudyField(recommendationResult.data.studyField);
+      setStudyFieldSelected(recommendationResult.data.studyFieldSelected);
+      setRecommendations(recommendationResult.data.recommendations);
+      setTopicStats(
+        new Map(
+          recommendationResult.data.topicStats.map((stat) => [
+            stat.topicId,
+            stat,
+          ]),
+        ),
+      );
+    } else {
+      setRecommendations([]);
+      setError(recommendationResult.message);
+    }
     setLoadingList(false);
   }, [studentId, weekStart]);
 
@@ -97,7 +174,12 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
   const subjectGroups = snapshot
     ? [...snapshot.tyt, ...snapshot.ayt, ...snapshot.ydt]
     : [];
-  const activeGroup = subjectGroups.find((g) => g.subjectId === subjectId);
+  const allowedSubjectIds = ALLOWED_SUBJECTS_BY_FIELD[studyField];
+  const visibleSubjectGroups = showAllSubjects
+    ? subjectGroups
+    : subjectGroups.filter((g) => allowedSubjectIds.includes(g.subjectId));
+  const hiddenSubjectCount = subjectGroups.length - visibleSubjectGroups.length;
+  const activeGroup = visibleSubjectGroups.find((g) => g.subjectId === subjectId);
   const orderedTopics = activeGroup
     ? topicSort === "osym"
       ? [...activeGroup.topics].sort(
@@ -116,6 +198,19 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
       setCount(String(existing.targetQuestionCount));
       setSelectedTopics(new Set(existing.targetTopics.map((t) => t.topicId)));
     }
+  }
+
+  function toggleAllSubjects() {
+    const next = !showAllSubjects;
+    if (
+      next === false &&
+      subjectId !== "" &&
+      !ALLOWED_SUBJECTS_BY_FIELD[studyField].includes(subjectId)
+    ) {
+      setSubjectId("");
+      setSelectedTopics(new Set());
+    }
+    setShowAllSubjects(next);
   }
 
   function toggleTopic(topicId: number) {
@@ -255,6 +350,67 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
     }
   }
 
+  async function handleStudyFieldChange(next: StudyField) {
+    setSavingField(true);
+    try {
+      const result = await teacherUpdateStudentField({
+        studentId,
+        studyField: next,
+      });
+      if (result.success === true) {
+        toast.success(`Alan ${STUDY_FIELD_LABELS[result.data.studyField]} olarak kaydedildi.`);
+        setSubjectId("");
+        setSelectedTopics(new Set());
+        await refresh();
+      } else {
+        toast.error(result.message);
+      }
+    } catch {
+      toast.error("Bilinmeyen bir hata oluştu.");
+    } finally {
+      setSavingField(false);
+    }
+  }
+
+  async function applyRecommendation(rec: SmartTargetRecommendation) {
+    setApplyingTopicId(rec.topicId);
+    try {
+      const existing = targets.find((t) => t.subjectId === rec.subjectId);
+      const nextTopics = [
+        ...new Set([
+          ...(existing?.targetTopics.map((topic) => topic.topicId) ?? []),
+          rec.topicId,
+        ]),
+      ];
+      const nextCount = Math.min(
+        10000,
+        (existing?.targetQuestionCount ?? 0) + rec.suggestedQuestions,
+      );
+
+      const result = await saveWeeklyTarget({
+        studentId,
+        weekStart,
+        subjectId: rec.subjectId,
+        targetQuestionCount: Math.max(1, nextCount),
+        targetTopics: nextTopics,
+      });
+      if (result.success === true) {
+        toast.success(`"${rec.topicName}" hedefe eklendi.`);
+        if (subjectId === rec.subjectId) {
+          setSelectedTopics(new Set(nextTopics));
+          setCount(String(Math.max(1, nextCount)));
+        }
+        await refresh();
+      } else {
+        toast.error(result.message);
+      }
+    } catch {
+      toast.error("Bilinmeyen bir hata oluştu.");
+    } finally {
+      setApplyingTopicId(null);
+    }
+  }
+
   async function handleScheduleUpload(url: string | undefined | null) {
     if (!url) return;
     setUploadingSchedule(true);
@@ -281,6 +437,111 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
         <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
           Hedef Belirle · {formatRange(weekStart)}
         </h2>
+
+        <div className="mb-4 rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400">
+                Öğrenci
+              </p>
+              <p className="truncate text-sm font-bold text-gray-900">
+                {studentName}
+              </p>
+            </div>
+            <div className="w-full sm:w-56">
+              <label htmlFor="study-field" className={labelClass}>
+                Alan
+              </label>
+              <select
+                id="study-field"
+                value={studyField}
+                disabled={savingField}
+                onChange={(e) =>
+                  void handleStudyFieldChange(e.target.value as StudyField)
+                }
+                className={inputClass}
+              >
+                {studyFields.map((field) => (
+                  <option key={field} value={field}>
+                    {STUDY_FIELD_LABELS[field]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {studyFieldSelected === false ? (
+            <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+              Alan seçilmedi. Öneriler varsayılan olarak Sayısal alanına göre
+              hazırlanıyor.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mb-4">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
+            <h3 className="text-sm font-bold text-gray-900">
+              ✨ Akıllı Hedef Önerileri
+            </h3>
+            <span className="text-[11px] font-semibold text-gray-400">
+              {STUDY_FIELD_LABELS[studyField]} alanı
+            </span>
+          </div>
+          {loadingList ? (
+            <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm font-medium text-gray-500 shadow-sm">
+              Öneriler hazırlanıyor…
+            </div>
+          ) : recommendations.length === 0 ? (
+            <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm font-medium text-gray-500 shadow-sm">
+              Bu hafta için uygun öneri bulunamadı. Konu durumlarını ve hedef
+              seçimlerini kontrol edebilirsin.
+            </div>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {recommendations.map((rec) => {
+                const meta = SCENARIO_META[rec.scenario];
+                const busy = applyingTopicId === rec.topicId;
+                return (
+                  <div
+                    key={`${rec.subjectId}-${rec.topicId}`}
+                    className="flex flex-col rounded-2xl border border-gray-200 bg-white p-3.5 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span
+                          className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold ${meta.className}`}
+                        >
+                          {meta.label}
+                        </span>
+                        <p className="mt-1.5 truncate text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                          {rec.examType} · {rec.subjectName}
+                        </p>
+                        <p className="truncate text-sm font-bold text-gray-900">
+                          {rec.topicName}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-lg bg-gray-50 px-2 py-1 text-[10px] font-bold text-gray-500 ring-1 ring-gray-200">
+                        Öncelik {Math.round(rec.priorityScore)}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 text-xs font-medium text-gray-600">
+                      {rec.reason}
+                    </p>
+                    <button
+                      type="button"
+                      disabled={applyingTopicId !== null}
+                      onClick={() => void applyRecommendation(rec)}
+                      className="mt-2.5 h-10 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white shadow-sm shadow-indigo-600/20 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation"
+                    >
+                      {busy
+                        ? "Ekleniyor…"
+                        : `+ Hedefe Uygula · ${rec.suggestedQuestions} soru`}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <form
           onSubmit={handleSave}
@@ -327,9 +588,22 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
             {mode === "ders" ? (
             <>
             <div>
-              <label htmlFor="target-subject" className={labelClass}>
-                Ders
-              </label>
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <label htmlFor="target-subject" className={labelClass}>
+                  Ders
+                </label>
+                <button
+                  type="button"
+                  onClick={toggleAllSubjects}
+                  className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition touch-manipulation ${
+                    showAllSubjects
+                      ? "bg-indigo-600 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {showAllSubjects ? "Alan Derslerine Dön" : "Tüm Dersleri Göster"}
+                </button>
+              </div>
               <select
                 id="target-subject"
                 value={subjectId}
@@ -337,12 +611,18 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
                 className={inputClass}
               >
                 <option value="">Ders seçin</option>
-                {subjectGroups.map((g) => (
+                {visibleSubjectGroups.map((g) => (
                   <option key={g.subjectId} value={g.subjectId}>
                     {g.subjectName}
                   </option>
                 ))}
               </select>
+              {showAllSubjects === false && hiddenSubjectCount > 0 ? (
+                <p className="mt-1 text-[11px] font-medium text-gray-500">
+                  {STUDY_FIELD_LABELS[studyField]} alanına uygun dersler
+                  gösteriliyor; {hiddenSubjectCount} ders gizli.
+                </p>
+              ) : null}
             </div>
 
             <div>
@@ -389,6 +669,9 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
                   <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50/60 p-2.5">
                     {orderedTopics.map((topic) => {
                       const checked = selectedTopics.has(topic.topicId);
+                      const stat = topicStats.get(topic.topicId);
+                      const statusMeta =
+                        TOPIC_STATUS_META[stat?.status ?? topic.status];
                       return (
                         <div
                           key={topic.topicId}
@@ -409,6 +692,22 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
                               {topic.topicName}
                             </span>
                           </label>
+                          <div className="flex shrink-0 flex-col items-end gap-0.5">
+                            <span
+                              className={`text-[10px] font-bold ${statusMeta.className}`}
+                            >
+                              {statusMeta.label}
+                            </span>
+                            <span className="text-[10px] font-medium text-gray-400">
+                              {stat && stat.totalSolved > 0
+                                ? `${stat.totalSolved} soru${
+                                    stat.accuracy !== null
+                                      ? ` · %${Math.round(stat.accuracy * 100)}`
+                                      : ""
+                                  }`
+                                : "—"}
+                            </span>
+                          </div>
                           <OsymBadge
                             avgRecentQuestions={topic.avgRecentQuestions}
                             yearlyQuestionCounts={topic.yearlyQuestionCounts}

@@ -7,9 +7,15 @@ import { toast } from "sonner";
 import {
   adminChangeStudentTeacher,
   adminDeleteStudent,
+  adminUpdateStudentField,
   type AdminStudent,
   type AdminTeacher,
 } from "@/app/actions/admin-actions";
+import {
+  STUDY_FIELD_LABELS,
+  studyFields,
+  type StudyField,
+} from "@/components/quiz-entry/weekly-quiz-schema";
 
 interface StudentManageListProps {
   teachers: AdminTeacher[];
@@ -42,6 +48,26 @@ export function StudentManageList({
       const result = await adminChangeStudentTeacher({
         studentId,
         teacherId: teacherId === "" ? null : teacherId,
+      });
+      if (result.success === true) {
+        toast.success(result.message);
+        onChanged();
+      } else {
+        toast.error(result.message);
+      }
+    } catch {
+      toast.error("Bilinmeyen bir hata oluştu.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleFieldChange(studentId: string, value: string) {
+    setBusyId(studentId);
+    try {
+      const result = await adminUpdateStudentField({
+        studentId,
+        studyField: value === "" ? null : (value as StudyField),
       });
       if (result.success === true) {
         toast.success(result.message);
@@ -112,6 +138,11 @@ export function StudentManageList({
                         ? "KVKK onaylı"
                         : "KVKK onaylamadı"}
                     </span>
+                    <span className="whitespace-nowrap rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-700">
+                      {s.studyField
+                        ? STUDY_FIELD_LABELS[s.studyField]
+                        : "Alan seçilmedi"}
+                    </span>
                   </div>
                   <p className="truncate text-xs text-gray-500">
                     Kullanıcı adı: {s.studentNumber ?? "—"}
@@ -129,32 +160,61 @@ export function StudentManageList({
                 </button>
               </div>
 
-              <div className="mt-2">
-                <label
-                  htmlFor={`manage-advisor-${s.id}`}
-                  className="mb-1 block text-[11px] font-bold text-gray-500"
-                >
-                  Danışman Öğretmen
-                </label>
-                <select
-                  id={`manage-advisor-${s.id}`}
-                  value={s.teacherId ?? ""}
-                  disabled={busyId !== null}
-                  onChange={(e) => handleTeacherChange(s.id, e.target.value)}
-                  className="h-10 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-sm text-gray-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 disabled:opacity-50"
-                >
-                  <option value="">Atamayı Kaldır</option>
-                  {teacherOptionsFor(s, teachers).map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-                {s.teacherId === null ? (
-                  <p className="mt-1 text-[11px] text-gray-400">
-                    Danışman atanmamış
-                  </p>
-                ) : null}
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor={`manage-advisor-${s.id}`}
+                    className="mb-1 block text-[11px] font-bold text-gray-500"
+                  >
+                    Danışman Öğretmen
+                  </label>
+                  <select
+                    id={`manage-advisor-${s.id}`}
+                    value={s.teacherId ?? ""}
+                    disabled={busyId !== null}
+                    onChange={(e) => handleTeacherChange(s.id, e.target.value)}
+                    className="h-10 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-sm text-gray-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 disabled:opacity-50"
+                  >
+                    <option value="">Atamayı Kaldır</option>
+                    {teacherOptionsFor(s, teachers).map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                  {s.teacherId === null ? (
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      Danışman atanmamış
+                    </p>
+                  ) : null}
+                </div>
+                <div>
+                  <label
+                    htmlFor={`manage-field-${s.id}`}
+                    className="mb-1 block text-[11px] font-bold text-gray-500"
+                  >
+                    Alan
+                  </label>
+                  <select
+                    id={`manage-field-${s.id}`}
+                    value={s.studyField ?? ""}
+                    disabled={busyId !== null}
+                    onChange={(e) => handleFieldChange(s.id, e.target.value)}
+                    className="h-10 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-sm text-gray-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 disabled:opacity-50"
+                  >
+                    <option value="">Seçilmedi</option>
+                    {studyFields.map((field) => (
+                      <option key={field} value={field}>
+                        {STUDY_FIELD_LABELS[field]}
+                      </option>
+                    ))}
+                  </select>
+                  {s.studyField === null ? (
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      Varsayılan: Sayısal
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </li>
           ))}

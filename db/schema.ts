@@ -17,6 +17,8 @@ import {
 
 export const examTypeEnum = pgEnum("exam_type", ["TYT", "AYT", "YDT"]);
 
+export const studyFieldEnum = pgEnum("study_field", ["SAY", "EA", "SOZ", "DIL"]);
+
 export const weeklyQuestionEntries = pgTable(
   "weekly_question_entries",
   {
@@ -59,6 +61,7 @@ export const users = pgTable("users", {
   emailVerified: timestamp("email_verified", { withTimezone: true }),
   image: text("image"),
   role: userRoleEnum("role").notNull().default("student"),
+  studyField: studyFieldEnum("study_field"),
   passwordHash: text("password_hash"),
   mustChangePassword: boolean("must_change_password").notNull().default(true),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),

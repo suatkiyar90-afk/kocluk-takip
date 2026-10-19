@@ -40,6 +40,11 @@ import {
   users,
   weeklyQuestionEntries,
 } from "@/db/schema";
+import {
+  STUDY_FIELD_LABELS,
+  studyFields,
+  type StudyField,
+} from "@/components/quiz-entry/weekly-quiz-schema";
 import { actionErrorMessage } from "@/lib/action-error";
 import { buildEnteredTodaySet } from "@/lib/data-entry-activity";
 import { getDenemeLabel } from "@/lib/deneme";
@@ -67,6 +72,7 @@ export interface AdminStudent {
   email: string | null;
   studentNumber: string | null;
   policyAcknowledged: boolean;
+  studyField: StudyField | null;
   teacherId: string | null;
   teacherName: string | null;
 }
@@ -171,6 +177,7 @@ const createUserSchema = z
           /^[A-Za-z0-9\-/._]{1,50}$/.test(v),
         "Öğrenci numarası geçersiz.",
       ),
+    studyField: z.enum(studyFields).optional().nullable(),
   })
   .superRefine((value, ctx) => {
     if (value.role === "teacher") {
@@ -209,7 +216,8 @@ export async function adminCreateUser(
       message: parsed.error.issues.map((i) => i.message).join(", "),
     };
   }
-  const { name, email, password, role, studentNumber } = parsed.data;
+  const { name, email, password, role, studentNumber, studyField } =
+    parsed.data;
   const normalizedStudentNumber =
     role === "student" && studentNumber ? studentNumber.trim() : null;
 
@@ -266,6 +274,7 @@ export async function adminCreateUser(
         email,
         role,
         studentNumber: normalizedStudentNumber,
+        studyField: role === "student" ? (studyField ?? null) : null,
         passwordHash,
         mustChangePassword: true,
       })
@@ -447,6 +456,7 @@ export async function adminListUsers(): Promise<
         email: users.email,
         role: users.role,
         studentNumber: users.studentNumber,
+        studyField: users.studyField,
         studentAckAt: ackStudent.acceptedAt,
         teacherAckAt: ackTeacher.acceptedAt,
         teacherId: teacherUsers.id,
@@ -501,6 +511,7 @@ export async function adminListUsers(): Promise<
         email: r.email,
         studentNumber: r.studentNumber,
         policyAcknowledged: r.studentAckAt !== null,
+        studyField: r.studyField ?? null,
         teacherId: r.teacherId ?? null,
         teacherName: r.teacherName ?? null,
       });
@@ -520,6 +531,64 @@ export async function adminListUsers(): Promise<
       status: "DATABASE_ERROR",
       message:
         actionErrorMessage(err),
+    };
+  }
+}
+
+const updateStudentFieldSchema = z.object({
+  studentId: z.string().uuid("Geçerli bir öğrenci seçin."),
+  studyField: z.enum(studyFields).nullable(),
+});
+
+export async function adminUpdateStudentField(
+  input: unknown,
+): Promise<AdminActionResult<{ studyField: StudyField | null }>> {
+  const ctx = await getAdminUserId();
+  if (ctx.ok === false) {
+    return { success: false, status: "UNAUTHORIZED", message: ctx.message };
+  }
+
+  const parsed = updateStudentFieldSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((i) => i.message).join(", "),
+    };
+  }
+  const { studentId, studyField } = parsed.data;
+
+  try {
+    const student = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.id, studentId), eq(users.role, "student")))
+      .limit(1);
+    if (student.length === 0) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message: "Öğrenci bulunamadı.",
+      };
+    }
+
+    await db
+      .update(users)
+      .set({ studyField: studyField ?? null })
+      .where(eq(users.id, studentId));
+
+    return {
+      success: true,
+      data: { studyField: studyField ?? null },
+      message: studyField
+        ? `Alan ${STUDY_FIELD_LABELS[studyField]} olarak güncellendi.`
+        : "Alan seçimi kaldırıldı.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
     };
   }
 }
