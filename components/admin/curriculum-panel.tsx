@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   adminAddTopic,
@@ -20,6 +20,12 @@ import {
   examTypes,
   type ExamType,
 } from "@/components/quiz-entry/weekly-quiz-schema";
+import { OsymBadge } from "@/components/curriculum/osym-badge";
+import {
+  classifyOsymFrequency,
+  computeRecentAverage,
+  sanitizeYearlyCounts,
+} from "@/lib/osym-frequency";
 
 const inputClass =
   "h-11 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-base text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 disabled:opacity-50";
@@ -268,9 +274,20 @@ export function CurriculumPanel({ initialList }: CurriculumPanelProps) {
                           Pasif
                         </span>
                       )}
+                      <OsymBadge
+                        avgRecentQuestions={topic.avgRecentQuestions}
+                        yearlyQuestionCounts={topic.yearlyQuestionCounts}
+                        className="shrink-0"
+                      />
                     </div>
                     <p className="mt-1 text-xs text-gray-500">
                       {topicStats(topic)}
+                      {topic.avgRecentQuestions > 0 ? (
+                        <span className="font-semibold text-indigo-600">
+                          {" "}
+                          · ÖSYM ort. {topic.avgRecentQuestions}/yıl
+                        </span>
+                      ) : null}
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-1.5">
@@ -616,6 +633,101 @@ function AddTopicDialog({
   );
 }
 
+function OsymCountsEditor({
+  counts,
+  onChange,
+}: {
+  counts: Record<string, string>;
+  onChange: (next: Record<string, string>) => void;
+}) {
+  const [newYear, setNewYear] = useState("");
+  const [newCount, setNewCount] = useState("");
+  const years = Object.keys(counts).sort((a, b) => Number(b) - Number(a));
+
+  function addYear() {
+    const year = newYear.trim();
+    if (!/^\d{4}$/.test(year)) {
+      toast.error("Yıl 4 haneli olmalı (ör. 2024).");
+      return;
+    }
+    onChange({ ...counts, [year]: newCount.trim() || "0" });
+    setNewYear("");
+    setNewCount("");
+  }
+
+  return (
+    <div>
+      <label className={labelClass}>ÖSYM Yıl Bazlı Soru Sayıları</label>
+      <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50/60 p-2">
+        {years.length === 0 ? (
+          <p className="px-1 py-1 text-xs text-gray-400">
+            Kayıtlı ÖSYM soru verisi yok.
+          </p>
+        ) : (
+          years.map((year) => (
+            <div key={year} className="flex items-center gap-2">
+              <span className="w-12 shrink-0 text-xs font-bold text-gray-600">
+                {year}
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                aria-label={`${year} soru sayısı`}
+                value={counts[year]}
+                onChange={(event) =>
+                  onChange({ ...counts, [year]: event.target.value })
+                }
+                className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2.5 text-sm text-gray-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const next = { ...counts };
+                  delete next[year];
+                  onChange(next);
+                }}
+                aria-label={`${year} yılını kaldır`}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition active:scale-[0.98] touch-manipulation"
+              >
+                <X aria-hidden="true" className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+      <div className="mt-1.5 flex items-center gap-2">
+        <input
+          type="number"
+          inputMode="numeric"
+          placeholder="Yıl"
+          aria-label="Eklenecek yıl"
+          value={newYear}
+          onChange={(event) => setNewYear(event.target.value)}
+          className="h-9 w-20 shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
+        />
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          placeholder="Soru"
+          aria-label="Eklenecek yılın soru sayısı"
+          value={newCount}
+          onChange={(event) => setNewCount(event.target.value)}
+          className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
+        />
+        <button
+          type="button"
+          onClick={addYear}
+          className="h-9 shrink-0 rounded-lg border border-gray-200 bg-white px-3 text-xs font-bold text-indigo-600 transition active:scale-[0.98] touch-manipulation"
+        >
+          Ekle
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function EditTopicDialog({
   topic,
   subjects,
@@ -632,8 +744,20 @@ function EditTopicDialog({
   const [topicName, setTopicName] = useState(topic.topicName);
   const [sortOrder, setSortOrder] = useState(String(topic.sortOrder));
   const [nextSubjectId, setNextSubjectId] = useState(currentSubjectId);
+  const [osymCounts, setOsymCounts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      Object.entries(topic.yearlyQuestionCounts ?? {}).map(([year, count]) => [
+        year,
+        String(count),
+      ]),
+    ),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const osymPayload = sanitizeYearlyCounts(osymCounts);
+  const osymAverage = computeRecentAverage(osymPayload);
+  const osymInfo = classifyOsymFrequency(osymAverage, osymPayload);
 
   const subjectChanged = nextSubjectId !== currentSubjectId;
   const targetSubjectName =
@@ -653,6 +777,7 @@ function EditTopicDialog({
         topicName: topicName.trim(),
         sortOrder: Number(sortOrder),
         subjectId: nextSubjectId,
+        yearlyQuestionCounts: osymPayload,
       });
       if (result.success === true) {
         toast.success(
@@ -680,8 +805,8 @@ function EditTopicDialog({
             Konuyu Düzenle
           </Dialog.Title>
           <Dialog.Description className="mt-1 text-sm text-gray-500">
-            Konu adı, sırası ve bağlı olduğu ders güncellenir; konuya bağlı soru
-            kayıtları korunur.
+            Konu adı, sırası, bağlı olduğu ders ve ÖSYM soru dağılımı güncellenir;
+            konuya bağlı soru kayıtları korunur.
           </Dialog.Description>
 
           <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-4">
@@ -737,6 +862,15 @@ function EditTopicDialog({
                 onChange={(event) => setSortOrder(event.target.value)}
                 className={inputClass}
               />
+            </div>
+
+            <div>
+              <OsymCountsEditor counts={osymCounts} onChange={setOsymCounts} />
+              <p className="mt-1.5 text-[11px] text-gray-400">
+                {osymInfo.tier === "yok"
+                  ? "Bu konu için ÖSYM soru verisi girilmedi."
+                  : `Son 5 yıl ortalaması: ${osymAverage}/yıl · ${osymInfo.icon} ${osymInfo.label}`}
+              </p>
             </div>
 
             {error ? (

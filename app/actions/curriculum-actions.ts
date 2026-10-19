@@ -15,6 +15,11 @@ import {
 import { ALL_SUBJECTS, examTypes, type ExamType } from "@/components/quiz-entry/weekly-quiz-schema";
 import { actionErrorMessage } from "@/lib/action-error";
 import { onlyActiveTopics } from "@/lib/topic-activity";
+import {
+  computeRecentAverage,
+  sanitizeYearlyCounts,
+  weightedMastery,
+} from "@/lib/osym-frequency";
 
 export type TopicStatus = "baslamadi" | "calisiliyor" | "bitti";
 
@@ -22,6 +27,8 @@ export interface CurriculumTopicRow {
   topicId: number;
   topicName: string;
   status: TopicStatus;
+  avgRecentQuestions: number;
+  yearlyQuestionCounts: Record<string, number> | null;
 }
 
 export interface CurriculumSubjectGroup {
@@ -31,6 +38,9 @@ export interface CurriculumSubjectGroup {
   totalTopics: number;
   doneTopics: number;
   inProgressTopics: number;
+  weightedDone: number;
+  weightedTotal: number;
+  weightedPercent: number | null;
   topics: CurriculumTopicRow[];
 }
 
@@ -157,6 +167,9 @@ async function loadSnapshot(studentId: string): Promise<CurriculumSnapshot> {
         totalTopics: 0,
         doneTopics: 0,
         inProgressTopics: 0,
+        weightedDone: 0,
+        weightedTotal: 0,
+        weightedPercent: null,
         topics: [],
       };
       groups.set(key, group);
@@ -165,6 +178,8 @@ async function loadSnapshot(studentId: string): Promise<CurriculumSnapshot> {
       topicId: t.id,
       topicName: t.topicName,
       status: statusById.get(t.id) ?? "baslamadi",
+      avgRecentQuestions: t.avgRecentQuestions,
+      yearlyQuestionCounts: t.yearlyQuestionCounts ?? null,
     });
   }
 
@@ -202,6 +217,17 @@ async function loadSnapshot(studentId: string): Promise<CurriculumSnapshot> {
     group.inProgressTopics = group.topics.filter(
       (t) => t.status === "calisiliyor",
     ).length;
+
+    const mastery = weightedMastery(
+      group.topics.map((t) => ({
+        status: t.status,
+        avgRecentQuestions: t.avgRecentQuestions,
+      })),
+    );
+    group.weightedDone = mastery.weightedDone;
+    group.weightedTotal = mastery.weightedTotal;
+    group.weightedPercent = mastery.percent;
+
     doneTopics += group.doneTopics;
     inProgressTopics += group.inProgressTopics;
 
@@ -449,6 +475,8 @@ export interface AdminCurriculumTopicRow {
   topicName: string;
   sortOrder: number;
   isActive: boolean;
+  avgRecentQuestions: number;
+  yearlyQuestionCounts: Record<string, number> | null;
   entryCount: number;
   questionCount: number;
   progressCount: number;
@@ -503,6 +531,8 @@ export async function adminListCurriculumTopics(
         topicName: curriculumTopics.topicName,
         sortOrder: curriculumTopics.sortOrder,
         isActive: curriculumTopics.isActive,
+        avgRecentQuestions: curriculumTopics.avgRecentQuestions,
+        yearlyQuestionCounts: curriculumTopics.yearlyQuestionCounts,
       })
       .from(curriculumTopics)
       .where(
@@ -715,11 +745,23 @@ export async function adminAddTopic(
   }
 }
 
+const yearlyCountsSchema = z
+  .record(
+    z.string(),
+    z.coerce
+      .number()
+      .int("Soru sayısı tam sayı olmalı.")
+      .min(0, "Soru sayısı negatif olamaz.")
+      .max(500, "Soru sayısı çok büyük."),
+  )
+  .optional();
+
 const updateTopicSchema = z.object({
   topicId: z.coerce.number().int().positive("Geçerli bir konu seçin."),
   topicName: topicNameSchema,
   sortOrder: sortOrderSchema,
   subjectId: z.string().min(1, "Ders seçilmedi.").optional(),
+  yearlyQuestionCounts: yearlyCountsSchema,
 });
 
 export async function adminUpdateTopic(
@@ -738,8 +780,13 @@ export async function adminUpdateTopic(
       message: parsed.error.issues.map((issue) => issue.message).join(", "),
     };
   }
-  const { topicId, topicName, sortOrder, subjectId: requestedSubjectId } =
-    parsed.data;
+  const {
+    topicId,
+    topicName,
+    sortOrder,
+    subjectId: requestedSubjectId,
+    yearlyQuestionCounts,
+  } = parsed.data;
 
   try {
     const topicRows = await db
@@ -793,11 +840,23 @@ export async function adminUpdateTopic(
       };
     }
 
+    const osymValues =
+      yearlyQuestionCounts === undefined
+        ? {}
+        : (() => {
+            const sanitized = sanitizeYearlyCounts(yearlyQuestionCounts);
+            return {
+              yearlyQuestionCounts: sanitized,
+              avgRecentQuestions: computeRecentAverage(sanitized),
+            };
+          })();
+
     const updateValues = {
       topicName,
       sortOrder,
       subjectId: nextSubjectId,
       subjectName: nextSubjectName,
+      ...osymValues,
     };
 
     await db.transaction(async (tx) => {

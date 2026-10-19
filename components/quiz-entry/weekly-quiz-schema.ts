@@ -34,7 +34,7 @@ export const AYT_SUBJECTS: SubjectDef[] = [
   { id: "biyoloji", name: "Biyoloji", maxQuestions: 13 },
   { id: "tarih2", name: "Tarih (S2)", maxQuestions: 11 },
   { id: "cografya2", name: "Coğrafya (S2)", maxQuestions: 12 },
-  { id: "felsefe", name: "Felsefe", maxQuestions: 6 },
+  { id: "felsefe", name: "Felsefe Grubu", maxQuestions: 12 },
   { id: "din", name: "Din Kültürü ve Ahlak Bilgisi", maxQuestions: 6 },
 ];
 

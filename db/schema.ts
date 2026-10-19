@@ -3,6 +3,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -292,6 +293,10 @@ export const curriculumTopics = pgTable(
     topicName: text("topic_name").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
     isActive: boolean("is_active").notNull().default(true),
+    yearlyQuestionCounts: jsonb("yearly_question_counts")
+      .$type<Record<string, number>>()
+      .default({}),
+    avgRecentQuestions: real("avg_recent_questions").notNull().default(0),
   },
   (t) => ({
     curriculumTopicsUnique: uniqueIndex("curriculum_topics_unique").on(

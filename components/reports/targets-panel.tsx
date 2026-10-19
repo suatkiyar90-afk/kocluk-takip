@@ -22,6 +22,7 @@ import {
   getDenemeLabel,
 } from "@/lib/deneme";
 import type { CurriculumSnapshot } from "@/app/actions/curriculum-actions";
+import { OsymBadge } from "@/components/curriculum/osym-badge";
 
 const inputClass =
   "h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-base text-gray-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200";
@@ -53,6 +54,7 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
   const [subjectId, setSubjectId] = useState("");
   const [count, setCount] = useState("100");
   const [selectedTopics, setSelectedTopics] = useState<Set<number>>(new Set());
+  const [topicSort, setTopicSort] = useState<"mufredat" | "osym">("mufredat");
   const [denemeItems, setDenemeItems] = useState<DenemeItemRow[]>([]);
   const [denemeSaving, setDenemeSaving] = useState(false);
   const [loadingList, setLoadingList] = useState(true);
@@ -96,6 +98,13 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
     ? [...snapshot.tyt, ...snapshot.ayt, ...snapshot.ydt]
     : [];
   const activeGroup = subjectGroups.find((g) => g.subjectId === subjectId);
+  const orderedTopics = activeGroup
+    ? topicSort === "osym"
+      ? [...activeGroup.topics].sort(
+          (a, b) => b.avgRecentQuestions - a.avgRecentQuestions,
+        )
+      : activeGroup.topics
+    : [];
   const scheduleUrl =
     targets.find((t) => t.scheduleFileUrl !== null)?.scheduleFileUrl ?? null;
 
@@ -355,33 +364,57 @@ export function TargetsPanel({ studentId, weekStart, snapshot }: TargetsPanelPro
 
             {activeGroup ? (
               <div>
-                <p className={labelClass}>
-                  Bitirilecek Konular ({selectedTopics.size}/
-                  {activeGroup.topics.length})
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className={labelClass}>
+                    Bitirilecek Konular ({selectedTopics.size}/
+                    {activeGroup.topics.length})
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTopicSort((prev) =>
+                        prev === "osym" ? "mufredat" : "osym",
+                      )
+                    }
+                    className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition touch-manipulation ${
+                      topicSort === "osym"
+                        ? "bg-indigo-600 text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    En Çok Soru Çıkanlara Göre Sırala
+                  </button>
+                </div>
                 {activeGroup.topics.length > 0 ? (
                   <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50/60 p-2.5">
-                    {activeGroup.topics.map((topic) => {
+                    {orderedTopics.map((topic) => {
                       const checked = selectedTopics.has(topic.topicId);
                       return (
-                        <label
+                        <div
                           key={topic.topicId}
-                          className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 transition ${
+                          className={`flex items-center gap-2 rounded-lg px-2.5 py-2 transition ${
                             checked
                               ? "bg-indigo-50 ring-1 ring-indigo-200"
                               : "bg-white ring-1 ring-gray-200 hover:bg-gray-50"
                           }`}
                         >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleTopic(topic.topicId)}
-                            className="h-4 w-4 shrink-0 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleTopic(topic.topicId)}
+                              className="h-4 w-4 shrink-0 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className="min-w-0 truncate text-xs font-medium text-gray-700">
+                              {topic.topicName}
+                            </span>
+                          </label>
+                          <OsymBadge
+                            avgRecentQuestions={topic.avgRecentQuestions}
+                            yearlyQuestionCounts={topic.yearlyQuestionCounts}
+                            className="shrink-0"
                           />
-                          <span className="text-xs font-medium text-gray-700">
-                            {topic.topicName}
-                          </span>
-                        </label>
+                        </div>
                       );
                     })}
                   </div>

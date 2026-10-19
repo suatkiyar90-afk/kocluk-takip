@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { CurriculumSnapshot } from "@/app/actions/curriculum-actions";
+import { weightedMastery } from "@/lib/osym-frequency";
 
 const STATUS_DOT: Record<string, string> = {
   bitti: "bg-green-500",
@@ -18,6 +19,15 @@ export function CurriculumSummaryCard({
     snapshot.totalTopics > 0
       ? Math.round((snapshot.doneTopics / snapshot.totalTopics) * 100)
       : 0;
+
+  const weighted = weightedMastery(
+    [...snapshot.tyt, ...snapshot.ayt, ...snapshot.ydt].flatMap((g) =>
+      g.topics.map((t) => ({
+        status: t.status,
+        avgRecentQuestions: t.avgRecentQuestions,
+      })),
+    ),
+  );
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -41,6 +51,20 @@ export function CurriculumSummaryCard({
           Başlamadı: {snapshot.notStartedTopics}
         </span>
       </div>
+      {weighted.percent !== null ? (
+        <div className="mt-3 rounded-xl bg-indigo-50/70 px-3 py-2">
+          <div className="flex items-center justify-between text-[11px] font-semibold text-indigo-700">
+            <span>ÖSYM Soru Ağırlığına Göre Hakimiyet</span>
+            <span className="font-bold">%{weighted.percent}</span>
+          </div>
+          <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-indigo-100">
+            <div
+              className="h-full rounded-full bg-indigo-500 transition-[width]"
+              style={{ width: `${weighted.percent}%` }}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

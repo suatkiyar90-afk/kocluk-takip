@@ -10,6 +10,8 @@ import type {
   TopicStatus,
 } from "@/app/actions/curriculum-actions";
 import { CurriculumSummaryCard } from "@/components/curriculum/curriculum-progress";
+import { OsymBadge } from "@/components/curriculum/osym-badge";
+import { weightedMastery } from "@/lib/osym-frequency";
 
 const STATUS_OPTIONS: { value: TopicStatus; label: string; active: string }[] = [
   {
@@ -40,9 +42,16 @@ function TopicStatusPicker({
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <p className="flex-1 text-sm font-medium text-gray-800">
-        {topic.topicName}
-      </p>
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <p className="min-w-0 truncate text-sm font-medium text-gray-800">
+          {topic.topicName}
+        </p>
+        <OsymBadge
+          avgRecentQuestions={topic.avgRecentQuestions}
+          yearlyQuestionCounts={topic.yearlyQuestionCounts}
+          className="shrink-0"
+        />
+      </div>
       <div className="grid shrink-0 grid-cols-3 gap-0.5 rounded-lg bg-gray-100 p-0.5">
         {STATUS_OPTIONS.map((opt) => {
           const selected = topic.status === opt.value;
@@ -102,6 +111,12 @@ function SubjectGroup({ group }: { group: CurriculumSubjectGroup }) {
   }
 
   const done = topics.filter((t) => t.status === "bitti").length;
+  const mastery = weightedMastery(
+    topics.map((t) => ({
+      status: t.status,
+      avgRecentQuestions: t.avgRecentQuestions,
+    })),
+  );
 
   return (
     <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
@@ -113,6 +128,20 @@ function SubjectGroup({ group }: { group: CurriculumSubjectGroup }) {
           {done}/{group.totalTopics}
         </span>
       </div>
+      {mastery.percent !== null ? (
+        <div className="mt-2">
+          <div className="flex items-center justify-between text-[11px] font-medium text-gray-500">
+            <span>ÖSYM Soru Ağırlığına Göre Hakimiyet</span>
+            <span className="font-bold text-indigo-700">%{mastery.percent}</span>
+          </div>
+          <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-gray-200">
+            <div
+              className="h-full rounded-full bg-indigo-500 transition-[width]"
+              style={{ width: `${mastery.percent}%` }}
+            />
+          </div>
+        </div>
+      ) : null}
       <div className="mt-2.5 space-y-2">
         {topics.map((t) => (
           <TopicStatusPicker
