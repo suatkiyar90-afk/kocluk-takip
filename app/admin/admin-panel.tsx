@@ -109,6 +109,12 @@ export function AdminPanel({
             Genel Raporlar
           </Link>
           <Link
+            href="/admin/curriculum"
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-violet-200 bg-white px-4 text-sm font-bold text-violet-700 transition active:scale-[0.98] touch-manipulation"
+          >
+            Müfredat Yönetimi
+          </Link>
+          <Link
             href="/admin/settings"
             className="inline-flex h-11 items-center justify-center rounded-xl border border-gray-200 bg-white px-4 text-sm font-bold text-gray-700 transition active:scale-[0.98] touch-manipulation"
           >

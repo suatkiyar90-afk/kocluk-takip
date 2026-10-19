@@ -2,12 +2,15 @@
 
 import { z } from "zod";
 import { auth } from "@/auth";
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
   curriculumTopics,
+  dailyQuestionEntries,
   studentTopicProgress,
   teacherStudents,
+  weeklyTargets,
 } from "@/db/schema";
 import { ALL_SUBJECTS, examTypes, type ExamType } from "@/components/quiz-entry/weekly-quiz-schema";
 import { actionErrorMessage } from "@/lib/action-error";
@@ -345,6 +348,676 @@ export async function updateTopicStatus(
       status: "DATABASE_ERROR",
       message:
         actionErrorMessage(err),
+    };
+  }
+}
+const ADMIN_SESSION_MESSAGE = "Oturum açmanız gerekiyor.";
+const ADMIN_ROLE_MESSAGE = "Bu işlem için yönetici yetkisi gerekli.";
+
+async function getAdminId(): Promise<
+  | { ok: true; adminId: string }
+  | { ok: false; status: "UNAUTHORIZED"; message: string }
+> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return {
+      ok: false,
+      status: "UNAUTHORIZED",
+      message: ADMIN_SESSION_MESSAGE,
+    };
+  }
+  if (session.user.role !== "admin") {
+    return { ok: false, status: "UNAUTHORIZED", message: ADMIN_ROLE_MESSAGE };
+  }
+  return { ok: true, adminId: session.user.id };
+}
+
+const examTypeSchema = z.string().refine(
+  (value): value is ExamType =>
+    (examTypes as readonly string[]).includes(value),
+  { message: "Geçerli bir sınav türü seçin." },
+);
+
+function subjectNameOf(
+  examType: ExamType,
+  subjectId: string,
+): string | null {
+  return ALL_SUBJECTS[examType].find((s) => s.id === subjectId)?.name ?? null;
+}
+
+function executeRows(result: unknown): Record<string, unknown>[] {
+  if (Array.isArray(result)) {
+    return result as Record<string, unknown>[];
+  }
+  if (result !== null && typeof result === "object" && "rows" in result) {
+    const rows = (result as { rows?: unknown }).rows;
+    return Array.isArray(rows) ? (rows as Record<string, unknown>[]) : [];
+  }
+  return [];
+}
+
+function numberOf(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export interface AdminCurriculumTopicRow {
+  id: number;
+  topicName: string;
+  sortOrder: number;
+  isActive: boolean;
+  entryCount: number;
+  questionCount: number;
+  progressCount: number;
+  weeklyTargetCount: number;
+}
+
+export interface AdminCurriculumTopicList {
+  examType: ExamType;
+  subjectId: string;
+  subjectName: string;
+  topics: AdminCurriculumTopicRow[];
+}
+
+const curriculumScopeSchema = z.object({
+  examType: examTypeSchema,
+  subjectId: z.string().min(1, "Ders seçilmedi."),
+});
+
+export async function adminListCurriculumTopics(
+  input: unknown,
+): Promise<CurriculumActionResult<AdminCurriculumTopicList>> {
+  const ctx = await getAdminId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  const parsed = curriculumScopeSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((issue) => issue.message).join(", "),
+    };
+  }
+  const { examType, subjectId } = parsed.data;
+  const subjectName = subjectNameOf(examType, subjectId);
+  if (subjectName === null) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: "Seçilen ders bu sınav türüne ait değil.",
+    };
+  }
+
+  try {
+    const topicRows = await db
+      .select({
+        id: curriculumTopics.id,
+        topicName: curriculumTopics.topicName,
+        sortOrder: curriculumTopics.sortOrder,
+        isActive: curriculumTopics.isActive,
+      })
+      .from(curriculumTopics)
+      .where(
+        and(
+          eq(curriculumTopics.examType, examType),
+          eq(curriculumTopics.subjectId, subjectId),
+        ),
+      )
+      .orderBy(asc(curriculumTopics.sortOrder), asc(curriculumTopics.id));
+
+    const entryCounts = new Map<
+      number,
+      { entries: number; questions: number }
+    >();
+    const progressCounts = new Map<number, number>();
+    const weeklyCounts = new Map<number, number>();
+
+    if (topicRows.length > 0) {
+      const entryRows = await db
+        .select({
+          topicId: dailyQuestionEntries.topicId,
+          entries: sql<number>`count(*)::int`,
+          questions: sql<number>`coalesce(sum(${dailyQuestionEntries.correct} + ${dailyQuestionEntries.wrong} + ${dailyQuestionEntries.blank}), 0)::int`,
+        })
+        .from(dailyQuestionEntries)
+        .innerJoin(
+          curriculumTopics,
+          eq(curriculumTopics.id, dailyQuestionEntries.topicId),
+        )
+        .where(
+          and(
+            eq(curriculumTopics.examType, examType),
+            eq(curriculumTopics.subjectId, subjectId),
+          ),
+        )
+        .groupBy(dailyQuestionEntries.topicId);
+      for (const row of entryRows) {
+        entryCounts.set(row.topicId, {
+          entries: numberOf(row.entries),
+          questions: numberOf(row.questions),
+        });
+      }
+
+      const progressRows = await db
+        .select({
+          topicId: studentTopicProgress.topicId,
+          total: sql<number>`count(*)::int`,
+        })
+        .from(studentTopicProgress)
+        .innerJoin(
+          curriculumTopics,
+          eq(curriculumTopics.id, studentTopicProgress.topicId),
+        )
+        .where(
+          and(
+            eq(curriculumTopics.examType, examType),
+            eq(curriculumTopics.subjectId, subjectId),
+          ),
+        )
+        .groupBy(studentTopicProgress.topicId);
+      for (const row of progressRows) {
+        progressCounts.set(row.topicId, numberOf(row.total));
+      }
+
+      const weeklyResult = await db.execute(sql`
+        select t.id as topic_id, count(w.id)::int as total
+        from curriculum_topics t
+        left join weekly_targets w
+          on w.target_topics @> array[t.id] and w.subject_id = t.subject_id
+        where t.exam_type = ${examType}::exam_type
+          and t.subject_id = ${subjectId}
+        group by t.id
+      `);
+      for (const row of executeRows(weeklyResult)) {
+        weeklyCounts.set(numberOf(row.topic_id), numberOf(row.total));
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        examType,
+        subjectId,
+        subjectName,
+        topics: topicRows.map((topic) => ({
+          ...topic,
+          entryCount: entryCounts.get(topic.id)?.entries ?? 0,
+          questionCount: entryCounts.get(topic.id)?.questions ?? 0,
+          progressCount: progressCounts.get(topic.id) ?? 0,
+          weeklyTargetCount: weeklyCounts.get(topic.id) ?? 0,
+        })),
+      },
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+const topicNameSchema = z
+  .string()
+  .trim()
+  .min(2, "Konu adı en az 2 karakter olmalı.")
+  .max(120, "Konu adı en fazla 120 karakter olabilir.");
+
+const sortOrderSchema = z.coerce
+  .number()
+  .int("Sıra numarası tam sayı olmalı.")
+  .min(0, "Sıra numarası negatif olamaz.")
+  .max(100000, "Sıra numarası çok büyük.");
+
+const addTopicSchema = z.object({
+  examType: examTypeSchema,
+  subjectId: z.string().min(1, "Ders seçilmedi."),
+  topicName: topicNameSchema,
+  sortOrder: sortOrderSchema,
+});
+
+export interface AdminTopicData {
+  topicId: number;
+  topicName: string;
+  sortOrder: number;
+}
+
+export async function adminAddTopic(
+  input: unknown,
+): Promise<CurriculumActionResult<AdminTopicData>> {
+  const ctx = await getAdminId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  const parsed = addTopicSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((issue) => issue.message).join(", "),
+    };
+  }
+  const { examType, subjectId, topicName, sortOrder } = parsed.data;
+  const subjectName = subjectNameOf(examType, subjectId);
+  if (subjectName === null) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: "Seçilen ders bu sınav türüne ait değil.",
+    };
+  }
+
+  try {
+    const existing = await db
+      .select({ id: curriculumTopics.id })
+      .from(curriculumTopics)
+      .where(
+        and(
+          eq(curriculumTopics.examType, examType),
+          eq(curriculumTopics.subjectId, subjectId),
+          eq(curriculumTopics.topicName, topicName),
+        ),
+      )
+      .limit(1);
+    if (existing.length > 0) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message: `"${topicName}" konusu bu derste zaten var.`,
+      };
+    }
+
+    const insertValues = {
+      examType,
+      subjectId,
+      subjectName,
+      topicName,
+      sortOrder,
+      isActive: true,
+    };
+
+    const inserted = await db
+      .insert(curriculumTopics)
+      .values(insertValues)
+      .returning({ id: curriculumTopics.id });
+
+    const topicId = inserted[0]?.id;
+    if (typeof topicId !== "number") {
+      return {
+        success: false,
+        status: "DATABASE_ERROR",
+        message: "Konu kaydedilemedi.",
+      };
+    }
+
+    revalidatePath("/admin/curriculum");
+    revalidatePath("/mufredat");
+
+    return { success: true, data: { topicId, topicName, sortOrder } };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+const updateTopicSchema = z.object({
+  topicId: z.coerce.number().int().positive("Geçerli bir konu seçin."),
+  topicName: topicNameSchema,
+  sortOrder: sortOrderSchema,
+});
+
+export async function adminUpdateTopic(
+  input: unknown,
+): Promise<CurriculumActionResult<AdminTopicData>> {
+  const ctx = await getAdminId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  const parsed = updateTopicSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((issue) => issue.message).join(", "),
+    };
+  }
+  const { topicId, topicName, sortOrder } = parsed.data;
+
+  try {
+    const topicRows = await db
+      .select({
+        id: curriculumTopics.id,
+        examType: curriculumTopics.examType,
+        subjectId: curriculumTopics.subjectId,
+      })
+      .from(curriculumTopics)
+      .where(eq(curriculumTopics.id, topicId))
+      .limit(1);
+    const topic = topicRows[0];
+    if (!topic) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message: "Konu bulunamadı.",
+      };
+    }
+
+    const sameName = await db
+      .select({ id: curriculumTopics.id })
+      .from(curriculumTopics)
+      .where(
+        and(
+          eq(curriculumTopics.examType, topic.examType),
+          eq(curriculumTopics.subjectId, topic.subjectId),
+          eq(curriculumTopics.topicName, topicName),
+        ),
+      );
+    if (sameName.some((row) => row.id !== topicId)) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message: `"${topicName}" konusu bu derste zaten var.`,
+      };
+    }
+
+    const updateValues = { topicName, sortOrder };
+
+    await db
+      .update(curriculumTopics)
+      .set(updateValues)
+      .where(eq(curriculumTopics.id, topicId));
+
+    revalidatePath("/admin/curriculum");
+    revalidatePath("/mufredat");
+
+    return { success: true, data: { topicId, topicName, sortOrder } };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
+    };
+  }
+}
+
+const mergeTopicSchema = z.object({
+  sourceTopicId: z.coerce.number().int().positive("Geçerli bir konu seçin."),
+  targetTopicId: z.coerce
+    .number()
+    .int()
+    .positive("Geçerli bir hedef konu seçin.")
+    .nullish(),
+});
+
+export interface TopicUsageCounts {
+  entries: number;
+  progress: number;
+  weekly: number;
+}
+
+export interface MergeTopicSummary extends TopicUsageCounts {
+  sourceTopicId: number;
+  sourceTopicName: string;
+  targetTopicId: number | null;
+  targetTopicName: string | null;
+  mergedDailyEntries: number;
+  movedDailyEntries: number;
+  mergedProgressRecords: number;
+  movedProgressRecords: number;
+  updatedWeeklyTargets: number;
+}
+
+async function countTopicUsage(topicId: number): Promise<TopicUsageCounts> {
+  const [entryRow] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(dailyQuestionEntries)
+    .where(eq(dailyQuestionEntries.topicId, topicId));
+  const [progressRow] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(studentTopicProgress)
+    .where(eq(studentTopicProgress.topicId, topicId));
+  const [weeklyRow] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(weeklyTargets)
+    .where(sql`${weeklyTargets.targetTopics} @> array[${topicId}::int]`);
+  return {
+    entries: numberOf(entryRow?.total),
+    progress: numberOf(progressRow?.total),
+    weekly: numberOf(weeklyRow?.total),
+  };
+}
+
+export async function adminMergeAndDeleteTopic(
+  input: unknown,
+): Promise<CurriculumActionResult<MergeTopicSummary>> {
+  const ctx = await getAdminId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  const parsed = mergeTopicSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: parsed.error.issues.map((issue) => issue.message).join(", "),
+    };
+  }
+  const sourceTopicId = parsed.data.sourceTopicId;
+  const targetTopicId = parsed.data.targetTopicId ?? null;
+
+  if (targetTopicId !== null && targetTopicId === sourceTopicId) {
+    return {
+      success: false,
+      status: "VALIDATION_FAILED",
+      message: "Hedef konu, silinecek konu ile aynı olamaz.",
+    };
+  }
+
+  try {
+    const sourceRows = await db
+      .select({
+        id: curriculumTopics.id,
+        topicName: curriculumTopics.topicName,
+        examType: curriculumTopics.examType,
+        subjectId: curriculumTopics.subjectId,
+      })
+      .from(curriculumTopics)
+      .where(eq(curriculumTopics.id, sourceTopicId))
+      .limit(1);
+    const source = sourceRows[0];
+    if (!source) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message: "Silinecek konu bulunamadı.",
+      };
+    }
+
+    let targetTopicName: string | null = null;
+    if (targetTopicId !== null) {
+      const targetRows = await db
+        .select({
+          id: curriculumTopics.id,
+          topicName: curriculumTopics.topicName,
+          examType: curriculumTopics.examType,
+          subjectId: curriculumTopics.subjectId,
+        })
+        .from(curriculumTopics)
+        .where(eq(curriculumTopics.id, targetTopicId))
+        .limit(1);
+      const target = targetRows[0];
+      if (!target) {
+        return {
+          success: false,
+          status: "VALIDATION_FAILED",
+          message: "Hedef konu bulunamadı.",
+        };
+      }
+      if (
+        target.examType !== source.examType ||
+        target.subjectId !== source.subjectId
+      ) {
+        return {
+          success: false,
+          status: "VALIDATION_FAILED",
+          message: "Hedef konu aynı sınav türünde ve aynı ders içinde olmalıdır.",
+        };
+      }
+      targetTopicName = target.topicName;
+    }
+
+    const usage = await countTopicUsage(sourceTopicId);
+    const usageTotal = usage.entries + usage.progress + usage.weekly;
+    if (usageTotal > 0 && targetTopicId === null) {
+      return {
+        success: false,
+        status: "VALIDATION_FAILED",
+        message:
+          `"${source.topicName}" konusuna bağlı ${usage.entries} soru kaydı, ` +
+          `${usage.progress} konu ilerleme kaydı ve ${usage.weekly} haftalık hedef bulundu. ` +
+          "Bu kayıtların aktarılacağı hedef konuyu seçin.",
+      };
+    }
+
+    const summary: MergeTopicSummary = {
+      sourceTopicId,
+      sourceTopicName: source.topicName,
+      targetTopicId,
+      targetTopicName,
+      entries: usage.entries,
+      progress: usage.progress,
+      weekly: usage.weekly,
+      mergedDailyEntries: 0,
+      movedDailyEntries: 0,
+      mergedProgressRecords: 0,
+      movedProgressRecords: 0,
+      updatedWeeklyTargets: 0,
+    };
+
+    if (targetTopicId !== null) {
+      await db.transaction(async (tx) => {
+        const mergedDaily = executeRows(
+          await tx.execute(sql`
+            with updated as (
+              update daily_question_entries as source
+              set correct = source.correct + target.correct,
+                  wrong = source.wrong + target.wrong,
+                  blank = source.blank + target.blank
+              from daily_question_entries as target
+              where source.topic_id = ${sourceTopicId}::int
+                and target.topic_id = ${targetTopicId}::int
+                and target.student_id = source.student_id
+                and target.date = source.date
+                and target.exam_type = source.exam_type
+                and target.subject_id = source.subject_id
+              returning source.id
+            )
+            select count(*)::int as total from updated
+          `),
+        );
+        summary.mergedDailyEntries = numberOf(mergedDaily[0]?.total);
+
+        await tx.execute(sql`
+          delete from daily_question_entries as source
+          using daily_question_entries as target
+          where source.topic_id = ${sourceTopicId}::int
+            and target.topic_id = ${targetTopicId}::int
+            and target.student_id = source.student_id
+            and target.date = source.date
+            and target.exam_type = source.exam_type
+            and target.subject_id = source.subject_id
+        `);
+
+        const movedDaily = executeRows(
+          await tx.execute(sql`
+            with moved as (
+              update daily_question_entries
+              set topic_id = ${targetTopicId}::int
+              where topic_id = ${sourceTopicId}::int
+              returning id
+            )
+            select count(*)::int as total from moved
+          `),
+        );
+        summary.movedDailyEntries = numberOf(movedDaily[0]?.total);
+
+        const mergedProgress = executeRows(
+          await tx.execute(sql`
+            with deleted as (
+              delete from student_topic_progress as source
+              using student_topic_progress as target
+              where source.topic_id = ${sourceTopicId}::int
+                and target.topic_id = ${targetTopicId}::int
+                and target.student_id = source.student_id
+              returning source.id
+            )
+            select count(*)::int as total from deleted
+          `),
+        );
+        summary.mergedProgressRecords = numberOf(mergedProgress[0]?.total);
+
+        const movedProgress = executeRows(
+          await tx.execute(sql`
+            with moved as (
+              update student_topic_progress
+              set topic_id = ${targetTopicId}::int
+              where topic_id = ${sourceTopicId}::int
+              returning id
+            )
+            select count(*)::int as total from moved
+          `),
+        );
+        summary.movedProgressRecords = numberOf(movedProgress[0]?.total);
+
+        const updatedWeekly = executeRows(
+          await tx.execute(sql`
+            with updated as (
+              update weekly_targets
+              set target_topics = (
+                select coalesce(array_agg(distinct item order by item), '{}'::int[])
+                from unnest(
+                  array_replace(
+                    target_topics,
+                    ${sourceTopicId}::int,
+                    ${targetTopicId}::int
+                  )
+                ) as item
+              )
+              where target_topics @> array[${sourceTopicId}::int]
+              returning id
+            )
+            select count(*)::int as total from updated
+          `),
+        );
+        summary.updatedWeeklyTargets = numberOf(updatedWeekly[0]?.total);
+
+        await tx
+          .delete(curriculumTopics)
+          .where(eq(curriculumTopics.id, sourceTopicId));
+      });
+    } else {
+      await db
+        .delete(curriculumTopics)
+        .where(eq(curriculumTopics.id, sourceTopicId));
+    }
+
+    revalidatePath("/admin/curriculum");
+    revalidatePath("/mufredat");
+
+    return { success: true, data: summary };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: actionErrorMessage(err),
     };
   }
 }

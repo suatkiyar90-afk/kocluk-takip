@@ -59,6 +59,12 @@ export default async function AdminLayout({
                   Aktiviteler
                 </Link>
                 <Link
+                  href="/admin/curriculum"
+                  className="rounded-lg px-2 py-1.5 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 touch-manipulation"
+                >
+                  Müfredat
+                </Link>
+                <Link
                   href="/admin/settings"
                   className="rounded-lg px-2 py-1.5 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 touch-manipulation"
                 >
