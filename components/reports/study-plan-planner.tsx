@@ -105,6 +105,11 @@ export function StudyPlanPlanner({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [poolOpen, setPoolOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
+  /** Kaydedilmiş bir program var mı? Varsa takip modu özeti gösterilir. */
+  const [planSaved, setPlanSaved] = useState(false);
+  /** Düzenleyici açık mı? null = plan henüz yükleniyor. */
+  const [editorOpen, setEditorOpen] = useState<boolean | null>(null);
+  const [trackDay, setTrackDay] = useState(0);
   const [copyTargetDay, setCopyTargetDay] = useState(1);
   const [weekdayStart, setWeekdayStart] = useState(
     () => profileTimeRange("medium").weekdayStart,
@@ -140,6 +145,10 @@ export function StudyPlanPlanner({
   const loadPlan = useCallback(async () => {
     setLoading(true);
     const result = await getWeeklyStudyPlan(studentId, weekStart);
+    const hasSavedPlan =
+      result.success === true &&
+      result.data !== null &&
+      result.data.slots.length > 0;
     if (result.success === true && result.data !== null) {
       setSlots(result.data.slots);
       setTeacherNote(result.data.teacherNote);
@@ -149,6 +158,10 @@ export function StudyPlanPlanner({
       setTeacherNote("");
       setStudentApproved(false);
     }
+    // Kaydedilmiş program varsa planlayıcı kapalı (takip modu), yoksa açık gelir.
+    setPlanSaved(hasSavedPlan);
+    setEditorOpen(!hasSavedPlan);
+    setTrackDay(0);
     setLoading(false);
   }, [studentId, weekStart]);
 
@@ -222,6 +235,24 @@ export function StudyPlanPlanner({
   const completedCount = slots.filter((slot) => slot.isCompleted).length;
   const completionPercent =
     slots.length > 0 ? Math.round((completedCount / slots.length) * 100) : 0;
+  const dailyStats = useMemo(
+    () =>
+      DAY_LONG_LABELS.map((label, index) => {
+        const list = slots.filter((slot) => slot.dayIndex === index);
+        return {
+          dayIndex: index,
+          label,
+          total: list.length,
+          done: list.filter((slot) => slot.isCompleted).length,
+          questions: list.reduce((sum, slot) => sum + slot.questionCount, 0),
+          slots: [...list].sort(
+            (a, b) => parseMinutes(a.startTime) - parseMinutes(b.startTime),
+          ),
+        };
+      }),
+    [slots],
+  );
+  const trackedDay = dailyStats[trackDay] ?? dailyStats[0];
   const printIntensity =
     lastGenerated?.intensity ??
     (load.status === "low" ||
@@ -350,6 +381,9 @@ export function StudyPlanPlanner({
       if (result.success === true) {
         setSlots(result.data.slots);
         setLastGenerated(result.data);
+        // Yeni taslak kaydedilmediği için takip özeti gizlenir, düzenleyici açılır.
+        setPlanSaved(false);
+        setEditorOpen(true);
         toast.success(
           `${result.data.slots.length} etüt ve ${result.data.summary.totalQuestions} soruluk taslak oluşturuldu.`,
         );
@@ -387,6 +421,10 @@ export function StudyPlanPlanner({
             completedAt: null,
           })),
         );
+        // Yayınlandıktan sonra düzenleyici kapanır, temiz takip görünümü açılır.
+        setPlanSaved(true);
+        setEditorOpen(false);
+        setTrackDay(0);
         onSaved?.();
       } else {
         toast.error(result.message);
@@ -396,6 +434,10 @@ export function StudyPlanPlanner({
     } finally {
       setSaving(false);
     }
+  }
+
+  function toggleEditor() {
+    setEditorOpen((prev) => (prev === null ? prev : !prev));
   }
 
   function addSuggestion(rec: SmartTargetRecommendation) {
@@ -433,29 +475,196 @@ export function StudyPlanPlanner({
         <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">
           Haftalık Çalışma Planlayıcısı · {formatWeekRange(weekStart)}
         </h2>
-        <div className="flex flex-wrap items-center gap-2">
-          {slots.length > 0 ? (
-            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200">
-              ✅ {completedCount} / {slots.length} Etüt (%{completionPercent})
-            </span>
-          ) : null}
-          {slots.length > 0 ? (
-            <span
-              className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                studentApproved
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "bg-sky-50 text-sky-700"
-              }`}
-            >
-              {studentApproved
-                ? "✓ Öğrenci onayladı"
-                : "⏳ Öğrenci onayı bekleniyor"}
-            </span>
-          ) : null}
-        </div>
+        {planSaved ? null : (
+          <div className="flex flex-wrap items-center gap-2">
+            {slots.length > 0 ? (
+              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200">
+                ✅ {completedCount} / {slots.length} Etüt (%{completionPercent})
+              </span>
+            ) : null}
+            {slots.length > 0 ? (
+              <span
+                className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                  studentApproved
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-sky-50 text-sky-700"
+                }`}
+              >
+                {studentApproved
+                  ? "✓ Öğrenci onayladı"
+                  : "⏳ Öğrenci onayı bekleniyor"}
+              </span>
+            ) : null}
+          </div>
+        )}
       </div>
 
-      <div className="mb-3 rounded-2xl border border-indigo-100 bg-white p-3 shadow-sm">
+      {planSaved ? (
+        <div className="mb-3 overflow-hidden rounded-2xl border border-indigo-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-2 border-b border-indigo-100 bg-gradient-to-r from-indigo-50 via-white to-white px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-wide text-indigo-600">
+                📊 Haftalık Program İlerleme Takibi
+              </p>
+              <p className="mt-0.5 truncate text-xs font-semibold text-gray-600">
+                {formatWeekRange(weekStart)} · {slots.length} Etüt
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPrintOpen(true)}
+                className="inline-flex h-9 items-center gap-1 rounded-xl bg-white px-2.5 text-[11px] font-bold text-indigo-700 ring-1 ring-indigo-200 transition hover:bg-indigo-50 touch-manipulation"
+              >
+                🖨️ PDF Çizelge
+              </button>
+              <button
+                type="button"
+                onClick={toggleEditor}
+                aria-expanded={editorOpen === true}
+                className="inline-flex h-9 items-center gap-1 rounded-xl bg-indigo-600 px-2.5 text-[11px] font-bold text-white shadow-sm shadow-indigo-600/20 transition hover:bg-indigo-700 touch-manipulation"
+              >
+                {editorOpen
+                  ? "▲ Planlayıcıyı Gizle"
+                  : "✏️ Programı Düzenle / Planlayıcıyı Aç ▾"}
+              </button>
+            </div>
+          </div>
+
+          <div className="p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400">
+                Genel Uyum
+              </p>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  studentApproved
+                    ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                    : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                }`}
+              >
+                {studentApproved
+                  ? "✅ Programı İnceledi / Onayladı"
+                  : "⏳ Onay Bekleniyor"}
+              </span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <p className="text-sm font-black text-gray-900">
+                {completedCount} / {slots.length} Etüt{" "}
+                <span className="text-indigo-600">(%{completionPercent})</span>
+              </p>
+              <p className="text-[11px] font-semibold text-gray-500">
+                Toplam Hedef:{" "}
+                <span className="font-black text-gray-900">
+                  {totalQuestions} Soru
+                </span>
+              </p>
+            </div>
+            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+              <div
+                className={`h-full rounded-full transition-[width] ${
+                  completionPercent >= 100
+                    ? "bg-emerald-500"
+                    : "bg-gradient-to-r from-indigo-500 to-violet-500"
+                }`}
+                style={{ width: `${completionPercent}%` }}
+              />
+            </div>
+
+            <div className="mt-3 grid grid-cols-7 gap-1">
+              {dailyStats.map((stat) => {
+                const active = trackDay === stat.dayIndex;
+                const allDone = stat.total > 0 && stat.done === stat.total;
+                return (
+                  <button
+                    key={stat.dayIndex}
+                    type="button"
+                    onClick={() => setTrackDay(stat.dayIndex)}
+                    aria-pressed={active}
+                    aria-label={`${stat.label} ${stat.done}/${stat.total} etüt`}
+                    className={`flex flex-col items-center justify-center rounded-lg border px-0.5 py-1.5 transition touch-manipulation ${
+                      active
+                        ? "border-indigo-400 bg-indigo-50 ring-1 ring-indigo-200"
+                        : allDone
+                          ? "border-emerald-200 bg-emerald-50/70 hover:bg-emerald-50"
+                          : "border-gray-200 bg-white hover:bg-gray-50"
+                    }`}
+                  >
+                    <span className="text-[9px] font-bold uppercase text-gray-500">
+                      {DAY_LABELS[stat.dayIndex]}
+                    </span>
+                    <span className="text-[11px] font-black text-gray-900">
+                      {stat.done}/{stat.total}
+                    </span>
+                    <span className="h-3 text-[9px] leading-none">
+                      {allDone ? "✅" : stat.done > 0 ? "⏳" : ""}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50/60 p-2">
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <p className="text-[11px] font-bold text-gray-700">
+                  {trackedDay.label} · salt okunur
+                </p>
+                <span className="text-[10px] font-semibold text-gray-500">
+                  {trackedDay.done}/{trackedDay.total} tamamlandı ·{" "}
+                  {trackedDay.questions} soru
+                </span>
+              </div>
+              {trackedDay.slots.length === 0 ? (
+                <p className="mt-1.5 rounded-lg bg-white px-2 py-2 text-[11px] font-medium text-gray-400 ring-1 ring-gray-200">
+                  Bu gün için etüt planlanmamış.
+                </p>
+              ) : (
+                <ul className="mt-1.5 space-y-1">
+                  {trackedDay.slots.map((slot) => (
+                    <li
+                      key={slot.id}
+                      className="flex items-center gap-1.5 rounded-lg bg-white px-2 py-1.5 ring-1 ring-gray-200"
+                    >
+                      <span className="w-[5.25rem] shrink-0 text-[10px] font-bold text-gray-600">
+                        {slot.startTime}–{slot.endTime}
+                      </span>
+                      <span className="shrink-0 text-[10px]">
+                        {TASK_META[slot.taskType].icon}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-gray-800">
+                        {slot.subjectName}
+                        {slot.topicName ? ` · ${slot.topicName}` : ""}
+                      </span>
+                      {slot.questionCount > 0 ? (
+                        <span className="shrink-0 text-[10px] font-bold text-gray-500">
+                          {slot.questionCount} soru
+                        </span>
+                      ) : null}
+                      <span
+                        className={`shrink-0 text-[11px] font-bold ${
+                          slot.isCompleted
+                            ? "text-emerald-600"
+                            : "text-gray-300"
+                        }`}
+                      >
+                        {slot.isCompleted ? "✓" : "•"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editorOpen === null ? (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm font-medium text-gray-500 shadow-sm">
+          Plan yükleniyor…
+        </div>
+      ) : editorOpen ? (
+        <>
+          <div className="mb-3 rounded-2xl border border-indigo-100 bg-white p-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[11px] font-bold uppercase tracking-wide text-indigo-500">
             Canlı Yük Göstergesi
@@ -1152,6 +1361,8 @@ export function StudyPlanPlanner({
           </p>
         </div>
       </div>
+        </>
+      ) : null}
 
       {printOpen ? (
         <div className="fixed inset-0 z-50 flex flex-col bg-black/50 p-2 sm:p-4">

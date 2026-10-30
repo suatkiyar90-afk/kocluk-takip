@@ -818,7 +818,7 @@ export function TargetsPanel({
             Bu hafta için henüz hedef girilmedi.
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
             {targets.map((t) => {
               const pct =
                 t.targetQuestionCount > 0
@@ -828,47 +828,71 @@ export function TargetsPanel({
                     )
                   : 0;
               const reached = t.solvedCount >= t.targetQuestionCount;
+              const remaining = Math.max(
+                t.targetQuestionCount - t.solvedCount,
+                0,
+              );
               return (
                 <div
                   key={t.id}
-                  className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+                  className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-gray-900">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 flex-1 items-start gap-1.5">
+                      <span className="mt-0.5 shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-600 ring-1 ring-indigo-100">
+                        {t.examType}
+                      </span>
+                      <p className="min-w-0 break-words text-sm font-bold leading-tight text-gray-900">
                         {t.subjectName}
                       </p>
-                      <p className="mt-0.5 text-xs font-semibold text-gray-500">
-                        Hedef {t.targetQuestionCount} soru · Çözülen{" "}
-                        {t.solvedCount}
-                      </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(t.id)}
-                      className="flex h-11 shrink-0 items-center rounded-lg border border-red-200 bg-red-50 px-3.5 text-xs font-bold text-red-600 transition active:scale-95 touch-manipulation"
-                    >
-                      Sil
-                    </button>
+                    <div className="flex shrink-0 items-start gap-1.5">
+                      <div className="flex flex-col items-end gap-0.5 leading-tight">
+                        <span className="whitespace-nowrap text-xs font-black text-gray-900">
+                          {t.solvedCount}
+                          <span className="font-bold text-gray-400">
+                            {" "}
+                            / {t.targetQuestionCount}
+                          </span>
+                        </span>
+                        <span
+                          className={`whitespace-nowrap text-[10px] font-bold ${
+                            reached ? "text-emerald-600" : "text-gray-500"
+                          }`}
+                        >
+                          {reached
+                            ? "✓ Tamamlandı"
+                            : `%${pct} • ${remaining} kaldı`}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`${t.subjectName} hedefini sil`}
+                        onClick={() => handleDelete(t.id)}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-[10px] font-bold text-red-600 transition active:scale-95 touch-manipulation"
+                      >
+                        🗑
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-gray-200">
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-100">
                     <div
                       className={`h-full rounded-full transition-[width] ${
-                        reached ? "bg-green-500" : "bg-indigo-500"
+                        reached ? "bg-emerald-500" : "bg-indigo-500"
                       }`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
 
                   {t.targetTopics.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
+                    <div className="mt-2 flex flex-wrap gap-1.5">
                       {t.targetTopics.map((topic) => (
                         <span
                           key={topic.topicId}
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          className={`max-w-full rounded-full px-2 py-0.5 text-xs font-semibold leading-snug ${
                             topic.solved
-                              ? "bg-green-50 text-green-700 ring-1 ring-green-200"
+                              ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
                               : "bg-gray-50 text-gray-600 ring-1 ring-gray-200"
                           }`}
                         >

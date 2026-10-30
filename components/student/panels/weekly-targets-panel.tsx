@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import {
   approveWeeklySchedule,
   getMyWeeklyDenemeBundle,
@@ -24,6 +25,102 @@ type FeedbackResult = Awaited<ReturnType<typeof getMyWeeklyFeedback>>;
 type DenemeBundleResult = Awaited<
   ReturnType<typeof getMyWeeklyDenemeBundle>
 >;
+
+type TargetItem = Extract<TargetsResult, { success: true }>["data"][number];
+
+function targetPercent(target: TargetItem): number {
+  return target.targetQuestionCount > 0
+    ? Math.min(
+        Math.round((target.solvedCount / target.targetQuestionCount) * 100),
+        100,
+      )
+    : 0;
+}
+
+function TargetGoalCard({ target }: { target: TargetItem }) {
+  const pct = targetPercent(target);
+  const reached = target.solvedCount >= target.targetQuestionCount;
+  const remaining = Math.max(
+    target.targetQuestionCount - target.solvedCount,
+    0,
+  );
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-start gap-1.5">
+          <span className="mt-0.5 shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-600 ring-1 ring-indigo-100">
+            {target.examType}
+          </span>
+          <h3 className="min-w-0 break-words text-sm font-bold leading-tight text-gray-900">
+            {target.subjectName}
+          </h3>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-0.5 leading-tight">
+          <span className="whitespace-nowrap text-xs font-black text-gray-900">
+            {target.solvedCount}
+            <span className="font-bold text-gray-400">
+              {" "}
+              / {target.targetQuestionCount}
+            </span>
+          </span>
+          <span
+            className={`whitespace-nowrap text-[10px] font-bold ${
+              reached ? "text-emerald-600" : "text-gray-500"
+            }`}
+          >
+            {reached ? "✓ Tamamlandı" : `%${pct} • ${remaining} kaldı`}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+        <div
+          className={`h-full rounded-full transition-[width] ${
+            reached ? "bg-emerald-500" : "bg-indigo-500"
+          }`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      {target.targetTopics.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {target.targetTopics.map((topic) => (
+            <span
+              key={topic.topicId}
+              className={`max-w-full rounded-full px-2 py-0.5 text-xs font-semibold leading-snug ${
+                topic.solved
+                  ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                  : "bg-gray-50 text-gray-600 ring-1 ring-gray-200"
+              }`}
+            >
+              {topic.solved ? "✓ " : ""}
+              {topic.topicName}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TargetGoalGrid({ items }: { items: TargetItem[] }) {
+  return (
+    <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+      {items.map((target) => (
+        <TargetGoalCard key={target.id} target={target} />
+      ))}
+    </div>
+  );
+}
+
+function TargetEmptyNote({ text }: { text: string }) {
+  return (
+    <p className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-xs font-medium text-gray-500 shadow-sm">
+      {text}
+    </p>
+  );
+}
 
 function formatRange(mondayIso: string): string {
   const [y, m, d] = mondayIso.split("-").map(Number);
@@ -59,6 +156,10 @@ export function WeeklyTargetsPanel() {
   const [approving, setApproving] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false);
+  const [targetFilter, setTargetFilter] = useState<"active" | "done" | "all">(
+    "all",
+  );
+  const [doneOpen, setDoneOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,6 +248,14 @@ export function WeeklyTargetsPanel() {
       ? Math.min(Math.round((totalSolved / totalTarget) * 100), 100)
       : 0;
   const totalReached = totalTarget > 0 && totalSolved >= totalTarget;
+
+  const targetList = targets ?? [];
+  const activeTargets = targetList
+    .filter((t) => t.solvedCount < t.targetQuestionCount)
+    .sort((a, b) => targetPercent(a) - targetPercent(b));
+  const doneTargets = targetList
+    .filter((t) => t.solvedCount >= t.targetQuestionCount)
+    .sort((a, b) => a.subjectName.localeCompare(b.subjectName, "tr"));
 
   return (
     <>
@@ -320,101 +429,120 @@ export function WeeklyTargetsPanel() {
           <PanelError message={targetsResult.message} />
         ) : targets && targets.length > 0 ? (
           <>
-            <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between text-xs font-semibold">
-                <span className="text-gray-500">Genel İlerleme</span>
-                <span className="text-gray-900">
-                  {totalSolved} / {totalTarget} soru
-                </span>
+            <section className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                  Genel Haftalık Hedef İlerlemesi
+                </p>
+                <p className="text-[11px] font-semibold text-gray-500">
+                  Toplam Çözülen:{" "}
+                  <span className="font-black text-gray-900">{totalSolved}</span>{" "}
+                  / {totalTarget} Soru
+                  <span className="mx-1.5 text-gray-300">•</span>
+                  <span
+                    className={`font-black ${
+                      totalReached ? "text-emerald-600" : "text-indigo-600"
+                    }`}
+                  >
+                    %{totalPct} Tamamlandı
+                  </span>
+                </p>
               </div>
-              <div className="mt-2 h-3 w-full overflow-hidden rounded-full bg-gray-200">
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
                 <div
                   className={`h-full rounded-full transition-[width] ${
-                    totalReached ? "bg-green-500" : "bg-indigo-500"
+                    totalReached ? "bg-emerald-500" : "bg-indigo-500"
                   }`}
                   style={{ width: `${totalPct}%` }}
                 />
               </div>
-              <p className="mt-1.5 text-[11px] font-medium text-gray-500">
-                {totalReached
-                  ? `Tüm haftalık hedefler tamamlandı (%${totalPct}).`
-                  : `Hedefin %${totalPct} tamamlandı · ${Math.max(
-                      totalTarget - totalSolved,
-                      0,
-                    )} soru kaldı.`}
-              </p>
             </section>
 
-            {targets.map((t) => {
-              const pct =
-                t.targetQuestionCount > 0
-                  ? Math.min(
-                      Math.round((t.solvedCount / t.targetQuestionCount) * 100),
-                      100,
-                    )
-                  : 0;
-              const reached = t.solvedCount >= t.targetQuestionCount;
-              return (
-                <section
-                  key={t.id}
-                  className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-600 ring-1 ring-indigo-100">
-                        {t.examType}
+            <div
+              role="tablist"
+              aria-label="Hedef filtresi"
+              className="flex gap-1.5 overflow-x-auto pb-0.5"
+            >
+              {(
+                [
+                  {
+                    id: "active" as const,
+                    label: `⏳ Devam Edenler (${activeTargets.length})`,
+                  },
+                  {
+                    id: "done" as const,
+                    label: `✅ Tamamlananlar (${doneTargets.length})`,
+                  },
+                  {
+                    id: "all" as const,
+                    label: `Tümü (${targets.length})`,
+                  },
+                ] as const
+              ).map((tab) => {
+                const active = targetFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setTargetFilter(tab.id)}
+                    className={`h-9 shrink-0 rounded-lg border px-2.5 text-[11px] font-bold transition touch-manipulation ${
+                      active
+                        ? "border-indigo-500 bg-indigo-600 text-white shadow-sm"
+                        : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {targetFilter === "done" ? (
+              doneTargets.length > 0 ? (
+                <TargetGoalGrid items={doneTargets} />
+              ) : (
+                <TargetEmptyNote text="Henüz tamamlanan ders hedefi yok." />
+              )
+            ) : targetFilter === "active" ? (
+              activeTargets.length > 0 ? (
+                <TargetGoalGrid items={activeTargets} />
+              ) : (
+                <TargetEmptyNote text="Devam eden ders hedefi yok. Tüm hedefler tamamlandı 🎉" />
+              )
+            ) : (
+              <>
+                {activeTargets.length > 0 ? (
+                  <TargetGoalGrid items={activeTargets} />
+                ) : null}
+
+                {doneTargets.length > 0 ? (
+                  <section className="overflow-hidden rounded-xl border border-emerald-200 bg-white shadow-sm">
+                    <button
+                      type="button"
+                      onClick={() => setDoneOpen((prev) => !prev)}
+                      aria-expanded={doneOpen}
+                      className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left touch-manipulation"
+                    >
+                      <span className="text-xs font-bold text-emerald-800">
+                        ✅ Tamamlanan Ders Hedefleri ({doneTargets.length} Ders)
                       </span>
-                      <h2 className="text-sm font-bold text-gray-900">
-                        {t.subjectName}
-                      </h2>
-                    </div>
-                    <span className="text-xs font-semibold text-gray-500">
-                      {t.solvedCount} / {t.targetQuestionCount}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-gray-200">
-                    <div
-                      className={`h-full rounded-full transition-[width] ${
-                        reached ? "bg-green-500" : "bg-indigo-500"
-                      }`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <p className="mt-1.5 text-[11px] font-medium text-gray-500">
-                    {reached
-                      ? "Hedef tamamlandı!"
-                      : `Hedefin %${pct} tamamlandı · ${Math.max(
-                          t.targetQuestionCount - t.solvedCount,
-                          0,
-                        )} soru kaldı.`}
-                  </p>
-
-                  {t.targetTopics.length > 0 ? (
-                    <div className="mt-3">
-                      <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400">
-                        Hedef Konular
-                      </p>
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {t.targetTopics.map((topic) => (
-                          <span
-                            key={topic.topicId}
-                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                              topic.solved
-                                ? "bg-green-50 text-green-700 ring-1 ring-green-200"
-                                : "bg-gray-50 text-gray-600 ring-1 ring-gray-200"
-                            }`}
-                          >
-                            {topic.solved ? "✓ " : ""}
-                            {topic.topicName}
-                          </span>
-                        ))}
+                      <ChevronDown
+                        className={`h-4 w-4 shrink-0 text-emerald-600 transition-transform ${
+                          doneOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                    {doneOpen ? (
+                      <div className="border-t border-emerald-100 bg-emerald-50/20 p-2.5">
+                        <TargetGoalGrid items={doneTargets} />
                       </div>
-                    </div>
-                  ) : null}
-                </section>
-              );
-            })}
+                    ) : null}
+                  </section>
+                ) : null}
+              </>
+            )}
           </>
         ) : (
           <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm font-medium text-gray-500 shadow-sm">
