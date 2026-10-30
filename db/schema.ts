@@ -149,6 +149,7 @@ export const mockExams = pgTable(
     biyolojiNet: real("biyoloji_net").notNull().default(0),
     toplamNet: real("toplam_net").notNull().default(0),
     tytPuani: real("tyt_puani").notNull().default(0),
+    weakTopicIds: integer("weak_topic_ids").array(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -325,6 +326,93 @@ export const curriculumTopics = pgTable(
   }),
 );
 
+export interface ExamAnalysisOutcome {
+  kazanimName: string;
+  totalQuestions: number;
+  correct: number;
+  wrong: number;
+  blank: number;
+  net: number;
+  successPct: number;
+  statusLabel: string;
+}
+
+export const examAnalysisPeriods = pgTable("exam_analysis_periods", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const studentPeriodExams = pgTable(
+  "student_period_exams",
+  {
+    id: serial("id").primaryKey(),
+    periodId: integer("period_id")
+      .notNull()
+      .references(() => examAnalysisPeriods.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    examName: text("exam_name").notNull(),
+    examDate: text("exam_date"),
+    totalNet: real("total_net").notNull().default(0),
+  },
+  (t) => ({
+    studentPeriodExamsStudentIdx: index("student_period_exams_student_idx").on(
+      t.periodId,
+      t.studentId,
+    ),
+  }),
+);
+
+export const studentPeriodTopicAnalyses = pgTable(
+  "student_period_topic_analyses",
+  {
+    id: serial("id").primaryKey(),
+    periodId: integer("period_id")
+      .notNull()
+      .references(() => examAnalysisPeriods.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectGroup: text("subject_group").notNull().default("TYT"),
+    subjectName: text("subject_name").notNull(),
+    topicName: text("topic_name").notNull(),
+    matchedTopicId: integer("matched_topic_id").references(
+      () => curriculumTopics.id,
+      { onDelete: "set null" },
+    ),
+    totalQuestions: integer("total_questions").notNull().default(0),
+    correct: integer("correct").notNull().default(0),
+    wrong: integer("wrong").notNull().default(0),
+    blank: integer("blank").notNull().default(0),
+    net: real("net").notNull().default(0),
+    successPct: integer("success_pct").notNull().default(0),
+    statusLabel: text("status_label").notNull().default("🔴 Acil Çalış"),
+    priorityLevel: integer("priority_level"),
+    priorityOrder: integer("priority_order"),
+    lostPoints: real("lost_points").notNull().default(0),
+    outcomes: jsonb("outcomes")
+      .$type<ExamAnalysisOutcome[]>()
+      .notNull()
+      .default([]),
+  },
+  (t) => ({
+    studentPeriodTopicsUnique: uniqueIndex(
+      "student_period_topics_unique",
+    ).on(t.periodId, t.studentId, t.subjectName, t.topicName),
+    studentPeriodTopicsStudentIdx: index(
+      "student_period_topics_student_idx",
+    ).on(t.periodId, t.studentId),
+  }),
+);
+
 export const dailyQuestionEntries = pgTable(
   "daily_question_entries",
   {
@@ -445,6 +533,57 @@ export const weeklyDenemeTargets = pgTable(
     weeklyDenemeTargetsStudentWeekIdx: index(
       "weekly_deneme_targets_student_week_idx",
     ).on(t.studentId, t.weekStartDate),
+  }),
+);
+
+export type StudyPlanTaskType =
+  | "konu"
+  | "soru"
+  | "tekrar"
+  | "rutin"
+  | "deneme";
+
+export interface StudyPlanSlot {
+  id: string;
+  dayIndex: number;
+  startTime: string;
+  endTime: string;
+  taskType: StudyPlanTaskType;
+  examType: "TYT" | "AYT" | "YDT";
+  subjectId: string;
+  subjectName: string;
+  topicId: number | null;
+  topicName: string | null;
+  questionCount: number;
+  note: string;
+  recommendationReason?: string;
+  isCompleted?: boolean;
+  completedAt?: string | null;
+}
+
+export const weeklyStudyPlans = pgTable(
+  "weekly_study_plans",
+  {
+    id: serial("id").primaryKey(),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    teacherId: uuid("teacher_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    weekStartDate: date("week_start_date").notNull(),
+    slots: jsonb("slots").$type<StudyPlanSlot[]>().notNull().default([]),
+    teacherNote: text("teacher_note").notNull().default(""),
+    isApproved: boolean("is_approved").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    weeklyStudyPlansUnique: uniqueIndex("weekly_study_plans_unique").on(
+      t.studentId,
+      t.weekStartDate,
+    ),
   }),
 );
 
@@ -660,5 +799,15 @@ export type NewWeeklyDenemeTarget = typeof weeklyDenemeTargets.$inferInsert;
 export type StudentDenemeAttempt = typeof studentDenemeAttempts.$inferSelect;
 export type NewStudentDenemeAttempt =
   typeof studentDenemeAttempts.$inferInsert;
+export type WeeklyStudyPlan = typeof weeklyStudyPlans.$inferSelect;
+export type NewWeeklyStudyPlan = typeof weeklyStudyPlans.$inferInsert;
+export type ExamAnalysisPeriod = typeof examAnalysisPeriods.$inferSelect;
+export type NewExamAnalysisPeriod = typeof examAnalysisPeriods.$inferInsert;
+export type StudentPeriodExam = typeof studentPeriodExams.$inferSelect;
+export type NewStudentPeriodExam = typeof studentPeriodExams.$inferInsert;
+export type StudentPeriodTopicAnalysis =
+  typeof studentPeriodTopicAnalyses.$inferSelect;
+export type NewStudentPeriodTopicAnalysis =
+  typeof studentPeriodTopicAnalyses.$inferInsert;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type NewPushSubscription = typeof pushSubscriptions.$inferInsert;

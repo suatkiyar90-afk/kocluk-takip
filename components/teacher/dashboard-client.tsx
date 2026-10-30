@@ -2,10 +2,16 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SearchX, TriangleAlert } from "lucide-react";
 import { NotificationBanner } from "@/components/notifications/notification-banner";
 import type { AttentionListData } from "@/app/actions/teacher-actions";
+import { GRADE_LABELS, GRADE_LEVELS, type GradeLevel } from "@/lib/grade-config";
+import {
+  STUDY_FIELD_LABELS,
+  studyFields,
+  type StudyField,
+} from "@/components/quiz-entry/weekly-quiz-schema";
 
 export type DashboardFilter = "all" | "stale" | "waiting";
 export type DashboardSort = "name" | "week" | "recent";
@@ -51,6 +57,7 @@ interface TeacherDashboardProps {
   initialQ: string;
   initialFilter: DashboardFilter;
   initialSort: DashboardSort;
+  isAdmin?: boolean;
 }
 
 export function TeacherDashboard({
@@ -58,13 +65,27 @@ export function TeacherDashboard({
   initialQ,
   initialFilter,
   initialSort,
+  isAdmin = false,
 }: TeacherDashboardProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [q, setQ] = useState(initialQ);
   const [filter, setFilter] = useState<DashboardFilter>(initialFilter);
   const [sort, setSort] = useState<DashboardSort>(initialSort);
+  const [gradeFilter, setGradeFilter] = useState<"all" | GradeLevel>("all");
+  const [fieldFilter, setFieldFilter] = useState<"all" | StudyField>("all");
+  const [advisorFilter, setAdvisorFilter] = useState<string>("all");
   const firstRunRef = useRef(true);
+
+  const advisors = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const student of data.students) {
+      if (student.advisorId) {
+        map.set(student.advisorId, student.advisorName ?? "Bilinmeyen öğretmen");
+      }
+    }
+    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1], "tr"));
+  }, [data.students]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -86,10 +107,12 @@ export function TeacherDashboard({
     return (
       <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
         <p className="text-sm font-semibold text-gray-900">
-          Henüz atanmış öğrenci yok
+          {isAdmin ? "Henüz kayıtlı öğrenci yok" : "Henüz atanmış öğrenci yok"}
         </p>
         <p className="mt-1 text-xs text-gray-500">
-          Sorumlu olduğunuz öğrenciler burada listelenecek.
+          {isAdmin
+            ? "Öğrenci hesapları eklendiğinde burada listelenecek."
+            : "Sorumlu olduğunuz öğrenciler burada listelenecek."}
         </p>
       </div>
     );
@@ -107,7 +130,23 @@ export function TeacherDashboard({
         : filter === "stale"
           ? isStale(student.daysSinceEntry)
           : student.pendingQuestionCount > 0;
-    return matchesQuery && matchesFilter;
+    const matchesGrade =
+      gradeFilter === "all" || student.gradeLevel === gradeFilter;
+    const matchesField =
+      fieldFilter === "all" || student.studyField === fieldFilter;
+    const matchesAdvisor =
+      advisorFilter === "all"
+        ? true
+        : advisorFilter === "none"
+          ? student.advisorId === null
+          : student.advisorId === advisorFilter;
+    return (
+      matchesQuery &&
+      matchesFilter &&
+      matchesGrade &&
+      matchesField &&
+      matchesAdvisor
+    );
   });
 
   const sorted = [...filtered].sort((a, b) => {
@@ -186,6 +225,65 @@ export function TeacherDashboard({
       <div className="relative">
         <SearchInput value={q} onChange={setQ} />
       </div>
+
+      {isAdmin ? (
+        <div className="grid gap-2 sm:grid-cols-3">
+          <label className="flex flex-col gap-1 text-[11px] font-bold text-gray-500">
+            Sınıf
+            <select
+              value={gradeFilter}
+              onChange={(e) =>
+                setGradeFilter(
+                  e.target.value === "all"
+                    ? "all"
+                    : (Number(e.target.value) as GradeLevel),
+                )
+              }
+              className="h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 touch-manipulation"
+            >
+              <option value="all">Tüm sınıflar</option>
+              {GRADE_LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {GRADE_LABELS[level]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-[11px] font-bold text-gray-500">
+            Alan
+            <select
+              value={fieldFilter}
+              onChange={(e) =>
+                setFieldFilter(e.target.value as "all" | StudyField)
+              }
+              className="h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 touch-manipulation"
+            >
+              <option value="all">Tüm alanlar</option>
+              {studyFields.map((field) => (
+                <option key={field} value={field}>
+                  {STUDY_FIELD_LABELS[field]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-[11px] font-bold text-gray-500">
+            Danışman Öğretmen
+            <select
+              value={advisorFilter}
+              onChange={(e) => setAdvisorFilter(e.target.value)}
+              className="h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 touch-manipulation"
+            >
+              <option value="all">Tüm danışmanlar</option>
+              <option value="none">Danışman atanmamış</option>
+              {advisors.map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      ) : null}
 
       <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {FILTERS.map((item) => {
@@ -276,6 +374,17 @@ export function TeacherDashboard({
                         Son giriş: {lastEntryLabel(student.daysSinceEntry)}
                       </span>
                     </div>
+                    {isAdmin ? (
+                      <p className="mt-1 truncate text-[11px] font-medium text-gray-400">
+                        {GRADE_LABELS[student.gradeLevel]}
+                        {" · "}
+                        {student.studyField
+                          ? STUDY_FIELD_LABELS[student.studyField]
+                          : "Alan seçilmedi"}
+                        {" · "}
+                        {student.advisorName ?? "Danışman atanmamış"}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="flex shrink-0 flex-col items-end gap-1">

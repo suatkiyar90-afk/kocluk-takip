@@ -17,6 +17,7 @@ import {
 import { parseMonday } from "@/lib/week-utils";
 import { normalizeStudentDetailTab } from "@/lib/student-detail-tabs";
 import { StudentDetailTabs } from "@/components/reports/student-detail-tabs";
+import { StudentViewPreview } from "@/components/reports/student-view-preview";
 
 function formatWeekShort(iso: string): string {
   const start = new Date(`${iso}T00:00:00`);
@@ -76,7 +77,11 @@ export default async function StudentDetailPage({
         <div className="sticky top-[calc(env(safe-area-inset-top)+3.5rem)] z-30 -mx-4 mb-4 flex items-center gap-2 border-b border-gray-200 bg-gray-50/95 px-4 py-1.5 backdrop-blur print:hidden">
           <Link
             href="/dashboard"
-            aria-label="Öğrencilerim"
+            aria-label={
+              session?.user?.role === "admin"
+                ? "Öğrenci Profilleri"
+                : "Öğrencilerim"
+            }
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-gray-600 transition hover:bg-gray-100 active:scale-95 touch-manipulation"
           >
             <ArrowLeft aria-hidden="true" className="h-5 w-5" />
@@ -84,7 +89,15 @@ export default async function StudentDetailPage({
           <h1 className="min-w-0 flex-1 truncate text-base font-bold text-gray-900">
             {student.name}
           </h1>
-          <p className="shrink-0 text-[11px] font-semibold text-gray-400">
+          <StudentViewPreview
+            studentId={student.id}
+            studentName={student.name}
+            weekStart={weekStart}
+            curriculum={
+              curriculumResult.success === true ? curriculumResult.data : null
+            }
+          />
+          <p className="hidden shrink-0 text-[11px] font-semibold text-gray-400 md:block">
             {formatWeekShort(weekStart)}
           </p>
         </div>
@@ -103,6 +116,9 @@ export default async function StudentDetailPage({
           curriculumResult={curriculumResult}
           qaResult={qaResult}
           actorName={session?.user?.name ?? ""}
+          canAssignTarget={
+            session?.user?.role === "teacher" || session?.user?.role === "admin"
+          }
           schoolName={process.env.SCHOOL_NAME ?? "Koçluk Takip Sistemi"}
           studentProfile={{
             name: student.name,

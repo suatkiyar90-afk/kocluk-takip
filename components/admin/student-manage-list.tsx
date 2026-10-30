@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Trash2 } from "lucide-react";
+import { Eye, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   adminChangeStudentTeacher,
@@ -218,16 +219,27 @@ export function StudentManageList({
                     Kullanıcı adı: {s.studentNumber ?? "—"}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setPendingDelete(s)}
-                  disabled={busyId !== null}
-                  aria-label={`${s.name} adlı öğrenciyi sil`}
-                  title="Öğrenciyi Sil"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-200 bg-white text-red-600 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation"
-                >
-                  <Trash2 className="h-4 w-4" aria-hidden="true" />
-                </button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Link
+                    href={`/students/${s.id}`}
+                    aria-label={`${s.name} adlı öğrencinin profilini ve analizini görüntüle`}
+                    title="Profili & Analizi Gör"
+                    className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-indigo-600 px-2.5 text-xs font-bold text-white shadow-sm shadow-indigo-600/25 transition active:scale-[0.98] touch-manipulation"
+                  >
+                    <Eye className="h-4 w-4" aria-hidden="true" />
+                    <span>Profili &amp; Analizi Gör</span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setPendingDelete(s)}
+                    disabled={busyId !== null}
+                    aria-label={`${s.name} adlı öğrenciyi sil`}
+                    title="Öğrenciyi Sil"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-200 bg-white text-red-600 transition active:scale-[0.98] disabled:opacity-50 touch-manipulation"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
               </div>
 
               <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">

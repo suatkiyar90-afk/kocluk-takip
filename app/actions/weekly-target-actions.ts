@@ -11,7 +11,6 @@ import {
   dailyQuestionEntries,
   studentDenemeAttempts,
   studentTopicProgress,
-  teacherStudents,
   users,
   weeklyDenemeTargets,
   weeklyTargets,
@@ -38,7 +37,18 @@ import {
 } from "@/components/quiz-entry/weekly-quiz-schema";
 import { sendPushNotification } from "@/lib/web-push-helper";
 import { isAllowedUploadUrl } from "@/lib/url-guard";
+import { buildAnalysisTopicNote } from "@/lib/exam-analysis";
+import { loadLatestAnalysisPlan } from "@/lib/exam-analysis-plan";
+import {
+  fieldPriorityLabel,
+  resolveFieldPriority,
+} from "@/lib/study-field-priority";
+import { OSYM_GUARANTEED_AVG } from "@/lib/osym-frequency";
 import { actionErrorMessage } from "@/lib/action-error";
+import {
+  canStaffAccessStudent,
+  type StaffRole,
+} from "@/lib/student-access";
 
 export type WeeklyTargetActionResult<T> =
   | { success: true; data: T }
@@ -68,7 +78,7 @@ export interface WeeklyTargetView {
 }
 
 async function getTeacherId(): Promise<
-  | { ok: true; teacherId: string }
+  | { ok: true; teacherId: string; role: StaffRole }
   | { ok: false; status: "UNAUTHORIZED" | "FORBIDDEN"; message: string }
 > {
   const session = await auth();
@@ -86,7 +96,11 @@ async function getTeacherId(): Promise<
       message: "Bu işlem için öğretmen yetkisi gerekli.",
     };
   }
-  return { ok: true, teacherId: session.user.id };
+  return {
+    ok: true,
+    teacherId: session.user.id,
+    role: session.user.role === "admin" ? "admin" : "teacher",
+  };
 }
 
 async function getStudentId(): Promise<
@@ -109,23 +123,6 @@ async function getStudentId(): Promise<
     };
   }
   return { ok: true, studentId: session.user.id };
-}
-
-async function isAssigned(
-  teacherId: string,
-  studentId: string,
-): Promise<boolean> {
-  const rows = await db
-    .select({ studentId: teacherStudents.studentId })
-    .from(teacherStudents)
-    .where(
-      and(
-        eq(teacherStudents.teacherId, teacherId),
-        eq(teacherStudents.studentId, studentId),
-      ),
-    )
-    .limit(1);
-  return rows.length === 1;
 }
 
 async function buildTargetViews(
@@ -260,7 +257,7 @@ export async function saveWeeklyTarget(
   const weekStart = parseMonday(parsed.data.weekStart);
 
   try {
-    if (!(await isAssigned(ctx.teacherId, studentId))) {
+    if (!(await canStaffAccessStudent(ctx, studentId))) {
       return {
         success: false,
         status: "FORBIDDEN",
@@ -330,7 +327,7 @@ export async function listWeeklyTargets(
   }
 
   try {
-    if (!(await isAssigned(ctx.teacherId, studentId))) {
+    if (!(await canStaffAccessStudent(ctx, studentId))) {
       return {
         success: false,
         status: "FORBIDDEN",
@@ -362,10 +359,12 @@ export async function deleteWeeklyTarget(
     const rows = await db
       .delete(weeklyTargets)
       .where(
-        and(
-          eq(weeklyTargets.id, targetId),
-          eq(weeklyTargets.teacherId, ctx.teacherId),
-        ),
+        ctx.role === "admin"
+          ? eq(weeklyTargets.id, targetId)
+          : and(
+              eq(weeklyTargets.id, targetId),
+              eq(weeklyTargets.teacherId, ctx.teacherId),
+            ),
       )
       .returning({ id: weeklyTargets.id });
 
@@ -406,6 +405,11 @@ export interface SmartTargetRecommendation {
   suggestedQuestions: number;
   priorityScore: number;
   reason: string;
+  analysisPriority?: boolean;
+  /** Branş öğrencinin alanının çekirdek branşı mı (+25 alan önceliği). */
+  fieldPriority: boolean;
+  /** Önerinin hazırlandığı alan (SAY / EA / SOZ / DIL). */
+  fieldCode: StudyField;
 }
 
 export interface SmartTargetTopicStat {
@@ -453,7 +457,7 @@ export async function teacherUpdateStudentField(
   const { studentId, studyField } = parsed.data;
 
   try {
-    if (!(await isAssigned(ctx.teacherId, studentId))) {
+    if (!(await canStaffAccessStudent(ctx, studentId))) {
       return {
         success: false,
         status: "FORBIDDEN",
@@ -519,7 +523,7 @@ export async function getSmartTargetRecommendations(
   const weekStart = parseMonday(weekStartArg);
 
   try {
-    if (!(await isAssigned(ctx.teacherId, student))) {
+    if (!(await canStaffAccessStudent(ctx, student))) {
       return {
         success: false,
         status: "FORBIDDEN",
@@ -527,7 +531,7 @@ export async function getSmartTargetRecommendations(
       };
     }
 
-    const [profileRows, progressRows, solvedRows, targetRows] =
+    const [profileRows, progressRows, solvedRows, targetRows, analysisPlan] =
       await Promise.all([
         db
           .select({ studyField: users.studyField })
@@ -561,6 +565,7 @@ export async function getSmartTargetRecommendations(
               eq(weeklyTargets.weekStartDate, weekStart),
             ),
           ),
+        loadLatestAnalysisPlan(student),
       ]);
 
     if (profileRows.length === 0) {
@@ -658,6 +663,23 @@ export async function getSmartTargetRecommendations(
         lastSolvedDate,
       });
 
+      const analysis = analysisPlan?.byTopicId.get(topic.id);
+      const fieldInfo = resolveFieldPriority({
+        field: studyField,
+        subjectId: topic.subjectId,
+        examType: topic.examType,
+        priorityLevel: analysis?.priorityLevel ?? null,
+        statusLabel: analysis?.statusLabel ?? null,
+        avgRecentQuestions: topic.avgRecentQuestions,
+      });
+
+      // Alan dışı branşlarda yalnızca deneme analizi 1. öncelik / 🔴 Acil
+      // Çalış ise tutulur; EA alanında garanti olmayan TYT Fen konuları ise
+      // hiç önerilmez.
+      if (!fieldInfo.allowed) {
+        continue;
+      }
+
       if (assignedTopicIds.has(topic.id)) {
         continue;
       }
@@ -719,12 +741,69 @@ export async function getSmartTargetRecommendations(
         }
       }
 
+      const analysisBoost =
+        analysis?.isPriority === true
+          ? (analysis.priorityLevel === 1 ? 70 : 45) + analysis.lostPoints
+          : 0;
+      if (analysisBoost > 0 && analysis) {
+        if (candidates.length === 0) {
+          candidates.push({
+            scenario:
+              status === "bitti"
+                ? "spaced_repetition"
+                : status === "calisiliyor"
+                  ? "unfinished"
+                  : "next_guarantee",
+            score: 30 + analysisBoost,
+            suggested: analysis.priorityLevel === 1 ? 100 : 80,
+            reason: "",
+          });
+        } else {
+          for (const candidate of candidates) candidate.score += analysisBoost;
+        }
+      }
+
+      // Alanın çekirdek branşında hiç aday yoksa, ÖSYM'de garanti çıkan
+      // konular alan önceliğiyle havuza girer (ör. SAY öğrencisinde AYT Fizik).
+      if (
+        candidates.length === 0 &&
+        fieldInfo.isCore &&
+        status !== "bitti" &&
+        topic.avgRecentQuestions >= OSYM_GUARANTEED_AVG
+      ) {
+        candidates.push({
+          scenario: status === "calisiliyor" ? "unfinished" : "next_guarantee",
+          score: 20 + topic.avgRecentQuestions * 25,
+          suggested: topic.avgRecentQuestions >= 2 ? 120 : 80,
+          reason: `${fieldPriorityLabel(studyField)} • Garanti konu • ÖSYM son 5 yıl ort. ${topic.avgRecentQuestions.toFixed(1)} soru`,
+        });
+      }
+
       if (candidates.length === 0) {
         continue;
       }
       const best = candidates.reduce((a, b) =>
         b.score > a.score ? b : a,
       );
+      const analysisNote =
+        analysisBoost > 0 && analysis
+          ? buildAnalysisTopicNote({
+              periodTitle: analysisPlan?.periodTitle ?? "",
+              priorityLevel: analysis.priorityLevel,
+              lostPoints: analysis.lostPoints,
+              outcomes: analysis.outcomes,
+            })
+          : null;
+      const fieldPrefix = fieldInfo.isCore
+        ? fieldPriorityLabel(studyField)
+        : fieldInfo.boost < 0
+          ? `🔻 ${fieldInfo.label}`
+          : `⚖️ ${fieldInfo.label}`;
+      const detailReason = analysisNote
+        ? best.reason
+          ? `${analysisNote} • ${best.reason}`
+          : analysisNote
+        : best.reason;
 
       recommendations.push({
         topicId: topic.id,
@@ -734,12 +813,23 @@ export async function getSmartTargetRecommendations(
         examType: topic.examType,
         scenario: best.scenario,
         suggestedQuestions: best.suggested,
-        priorityScore: Math.round(best.score * 100) / 100,
-        reason: best.reason,
+        priorityScore:
+          Math.round((best.score + fieldInfo.boost) * 100) / 100,
+        reason:
+          detailReason === "" ? fieldPrefix : `${fieldPrefix} • ${detailReason}`,
+        analysisPriority: analysisBoost > 0,
+        fieldPriority: fieldInfo.isCore,
+        fieldCode: studyField,
       });
     }
 
-    recommendations.sort((a, b) => b.priorityScore - a.priorityScore);
+    recommendations.sort(
+      (a, b) =>
+        Number(b.fieldPriority) - Number(a.fieldPriority) ||
+        Number(b.analysisPriority ?? false) -
+          Number(a.analysisPriority ?? false) ||
+        b.priorityScore - a.priorityScore,
+    );
 
     const perSubject = new Map<string, number>();
     const limited: SmartTargetRecommendation[] = [];
@@ -861,7 +951,7 @@ export async function saveWeeklyScheduleFile(
   const weekStart = parseMonday(weekStartArg);
 
   try {
-    if (!(await isAssigned(ctx.teacherId, studentId))) {
+    if (!(await canStaffAccessStudent(ctx, studentId))) {
       return {
         success: false,
         status: "FORBIDDEN",
@@ -1076,7 +1166,7 @@ export async function saveWeeklyDenemeTargets(
   }
 
   try {
-    if (!(await isAssigned(ctx.teacherId, parsed.data.studentId))) {
+    if (!(await canStaffAccessStudent(ctx, parsed.data.studentId))) {
       return {
         success: false,
         status: "FORBIDDEN",
@@ -1147,7 +1237,7 @@ export async function getWeeklyDenemeBundle(
   }
 
   try {
-    if (!(await isAssigned(ctx.teacherId, studentId))) {
+    if (!(await canStaffAccessStudent(ctx, studentId))) {
       return {
         success: false,
         status: "FORBIDDEN",
@@ -1203,11 +1293,14 @@ export async function approveWeeklySchedule(
   const weekStart = parseMonday(weekStartArg);
 
   try {
+    const planResult = await db.execute(
+      sql`UPDATE weekly_study_plans SET is_approved = true WHERE student_id = ${ctx.studentId} AND week_start_date = ${weekStart}`,
+    );
     const result = await db.execute(
       sql`UPDATE weekly_targets SET is_schedule_approved = true WHERE student_id = ${ctx.studentId} AND week_start_date = ${weekStart} AND schedule_file_url IS NOT NULL`,
     );
 
-    const updated = result.rowCount ?? 0;
+    const updated = (planResult.rowCount ?? 0) + (result.rowCount ?? 0);
     if (updated === 0) {
       return {
         success: false,

@@ -9,7 +9,6 @@ import {
   curriculumTopics,
   dailyQuestionEntries,
   studentTopicProgress,
-  teacherStudents,
   weeklyTargets,
 } from "@/db/schema";
 import { ALL_SUBJECTS, examTypes, type ExamType } from "@/components/quiz-entry/weekly-quiz-schema";
@@ -20,6 +19,10 @@ import {
   sanitizeYearlyCounts,
   weightedMastery,
 } from "@/lib/osym-frequency";
+import {
+  canStaffAccessStudent,
+  type StaffRole,
+} from "@/lib/student-access";
 
 export type TopicStatus = "baslamadi" | "calisiliyor" | "bitti";
 
@@ -95,7 +98,7 @@ async function getStudentId(): Promise<
 }
 
 async function getTeacherId(): Promise<
-  | { ok: true; teacherId: string }
+  | { ok: true; teacherId: string; role: StaffRole }
   | {
       ok: false;
       status: "UNAUTHORIZED" | "FORBIDDEN";
@@ -117,24 +120,11 @@ async function getTeacherId(): Promise<
       message: "Bu işlem için öğretmen yetkisi gerekli.",
     };
   }
-  return { ok: true, teacherId: session.user.id };
-}
-
-async function isAssigned(
-  teacherId: string,
-  studentId: string,
-): Promise<boolean> {
-  const rows = await db
-    .select({ studentId: teacherStudents.studentId })
-    .from(teacherStudents)
-    .where(
-      and(
-        eq(teacherStudents.teacherId, teacherId),
-        eq(teacherStudents.studentId, studentId),
-      ),
-    )
-    .limit(1);
-  return rows.length === 1;
+  return {
+    ok: true,
+    teacherId: session.user.id,
+    role: session.user.role === "admin" ? "admin" : "teacher",
+  };
 }
 
 async function loadSnapshot(studentId: string): Promise<CurriculumSnapshot> {
@@ -316,7 +306,7 @@ export async function getStudentCurriculumProgress(
   }
 
   try {
-    if (!(await isAssigned(ctx.teacherId, studentId))) {
+    if (!(await canStaffAccessStudent(ctx, studentId))) {
       return {
         success: false,
         status: "FORBIDDEN",

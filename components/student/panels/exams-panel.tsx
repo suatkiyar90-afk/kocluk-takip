@@ -9,6 +9,8 @@ import {
 } from "@/app/actions/quiz-actions";
 import { MockExamHistory } from "@/components/exams/mock-exam-history";
 import { MyDenemeAttempts } from "@/components/exams/my-deneme-attempts";
+import { ExamAnalysisView } from "@/components/exam-analysis/exam-analysis-view";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PanelError, PanelSkeleton } from "@/components/student/panel-ui";
 import { ChartSkeleton } from "@/components/charts/chart-ui";
 
@@ -43,7 +45,7 @@ export function ExamsPanel() {
 
   return (
     <>
-      <header className="mb-6">
+      <header className="mb-4">
         <h1 className="text-xl font-bold text-gray-900">
           Deneme Sınavı Geçmişi
         </h1>
@@ -52,28 +54,41 @@ export function ExamsPanel() {
         </p>
       </header>
 
-      {result === null ? (
-        <PanelSkeleton rows={6} />
-      ) : result.success === false ? (
-        <PanelError message={result.message} />
-      ) : (
-        <div className="space-y-4">
-          <ExamCharts records={result.data} />
-          <MockExamHistory records={result.data} />
-        </div>
-      )}
+      <Tabs defaultValue="exams" className="w-full">
+        <TabsList className="w-full">
+          <TabsTrigger value="exams">📝 Denemeler</TabsTrigger>
+          <TabsTrigger value="analysis">🎯 Analiz</TabsTrigger>
+        </TabsList>
 
-      {denemeResult === null ? null : denemeResult.success === false ? (
-        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
-          {denemeResult.message}
-        </div>
-      ) : (
-        <MyDenemeAttempts
-          rows={denemeResult.data}
-          title="Kendi Denemelerim"
-          subtitle="Kendin çözdüğün denemeler (son 10)"
-        />
-      )}
+        <TabsContent value="exams">
+          {result === null ? (
+            <PanelSkeleton rows={6} />
+          ) : result.success === false ? (
+            <PanelError message={result.message} />
+          ) : (
+            <div className="space-y-4">
+              <ExamCharts records={result.data} />
+              <MockExamHistory records={result.data} />
+            </div>
+          )}
+
+          {denemeResult === null ? null : denemeResult.success === false ? (
+            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+              {denemeResult.message}
+            </div>
+          ) : (
+            <MyDenemeAttempts
+              rows={denemeResult.data}
+              title="Kendi Denemelerim"
+              subtitle="Kendin çözdüğün denemeler (son 10)"
+            />
+          )}
+        </TabsContent>
+
+        <TabsContent value="analysis">
+          <ExamAnalysisView mode="student" canAssignTarget={false} />
+        </TabsContent>
+      </Tabs>
     </>
   );
 }

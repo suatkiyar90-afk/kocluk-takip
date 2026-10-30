@@ -1193,6 +1193,7 @@ export async function getRecentDataEntries(): Promise<
 const ACTIVITY_LABELS: Record<string, string> = {
   feedback_saved: "Dönüt yazdı",
   target_saved: "Hedef belirledi",
+  study_plan_saved: "Çalışma programı yayınladı",
   qa_replied: "Soruyu cevapladı",
   mock_exam_uploaded: "Deneme sonucu yükledi",
   mock_exam_deleted: "Deneme sonucu sildi",

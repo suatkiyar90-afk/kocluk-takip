@@ -5,13 +5,14 @@ import { auth } from "@/auth";
 import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { logActivity } from "@/lib/activity-log";
-import { mockExams, teacherStudents, users } from "@/db/schema";
+import { mockExams, users } from "@/db/schema";
 import { sendPushNotification } from "@/lib/web-push-helper";
 import { isValidISODate } from "@/lib/week-utils";
 import { actionErrorMessage } from "@/lib/action-error";
 import { normalizeSearchText } from "@/lib/search-text";
 import { validateImportedRows } from "@/lib/exam-import/parse-tyt-results";
 import type { ImportedExamValues } from "@/lib/exam-import/parse-tyt-results";
+import { canStaffAccessStudent } from "@/lib/student-access";
 
 export interface MockExamRecord {
   id: number;
@@ -116,7 +117,10 @@ async function getAdminId(): Promise<GuardCtx> {
   return { ok: true, userId: session.user.id };
 }
 
-async function getTeacherOrAdminId(): Promise<GuardCtx> {
+async function getTeacherOrAdminId(): Promise<
+  | { ok: true; userId: string; role: "teacher" | "admin" }
+  | { ok: false; status: "UNAUTHORIZED" | "FORBIDDEN"; message: string }
+> {
   const session = await auth();
   if (!session?.user?.id) {
     return {
@@ -132,24 +136,11 @@ async function getTeacherOrAdminId(): Promise<GuardCtx> {
       message: "Bu işlem için öğretmen yetkisi gerekli.",
     };
   }
-  return { ok: true, userId: session.user.id };
-}
-
-async function isAssigned(
-  teacherId: string,
-  studentId: string,
-): Promise<boolean> {
-  const rows = await db
-    .select({ studentId: teacherStudents.studentId })
-    .from(teacherStudents)
-    .where(
-      and(
-        eq(teacherStudents.teacherId, teacherId),
-        eq(teacherStudents.studentId, studentId),
-      ),
-    )
-    .limit(1);
-  return rows.length === 1;
+  return {
+    ok: true,
+    userId: session.user.id,
+    role: session.user.role === "admin" ? "admin" : "teacher",
+  };
 }
 
 function normalizeNumber(value: string): string {
@@ -480,7 +471,12 @@ export async function getStudentMockExams(
   }
 
   try {
-    if (!(await isAssigned(ctx.userId, studentId))) {
+    if (
+      !(await canStaffAccessStudent(
+        { teacherId: ctx.userId, role: ctx.role },
+        studentId,
+      ))
+    ) {
       return {
         success: false,
         status: "FORBIDDEN",

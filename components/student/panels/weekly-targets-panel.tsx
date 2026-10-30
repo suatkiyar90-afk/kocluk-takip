@@ -13,6 +13,11 @@ import { parseMonday } from "@/lib/week-utils";
 import { isImageUrl, isPdfUrl } from "@/lib/schedule-file";
 import { WeekPicker } from "@/components/ui/week-picker";
 import { PanelError, PanelSkeleton } from "@/components/student/panel-ui";
+import { StudentStudyPlan } from "@/components/student/study-plan-view";
+import {
+  getMyWeeklyStudyPlan,
+  type WeeklyStudyPlanView,
+} from "@/app/actions/study-plan-actions";
 
 type TargetsResult = Awaited<ReturnType<typeof getMyWeeklyTargets>>;
 type FeedbackResult = Awaited<ReturnType<typeof getMyWeeklyFeedback>>;
@@ -50,6 +55,7 @@ export function WeeklyTargetsPanel() {
     null,
   );
   const [schedule, setSchedule] = useState<ScheduleState | null>(null);
+  const [studyPlan, setStudyPlan] = useState<WeeklyStudyPlanView | null>(null);
   const [approving, setApproving] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false);
@@ -58,14 +64,19 @@ export function WeeklyTargetsPanel() {
     let cancelled = false;
     setSchedule(null);
     setPreviewFailed(false);
+    setStudyPlan(null);
     void (async () => {
-      const res = await getMyWeeklySchedule(weekStart);
+      const [res, planRes] = await Promise.all([
+        getMyWeeklySchedule(weekStart),
+        getMyWeeklyStudyPlan(weekStart),
+      ]);
       if (cancelled) return;
       setSchedule(
         res.success === true
           ? res.data
           : { fileUrl: null, isApproved: false },
       );
+      setStudyPlan(planRes.success === true ? planRes.data : null);
     })();
     return () => {
       cancelled = true;
@@ -99,12 +110,15 @@ export function WeeklyTargetsPanel() {
       : null;
 
   async function handleApprove() {
-    if (schedule?.isApproved || approving) return;
+    if (approving) return;
     setApproving(true);
     try {
       const result = await approveWeeklySchedule(weekStart);
       if (result.success === true) {
         setSchedule((prev) =>
+          prev ? { ...prev, isApproved: true } : prev,
+        );
+        setStudyPlan((prev) =>
           prev ? { ...prev, isApproved: true } : prev,
         );
       }
@@ -198,6 +212,15 @@ export function WeeklyTargetsPanel() {
               })}
             </ul>
           </section>
+        ) : null}
+
+        {studyPlan && studyPlan.slots.length > 0 ? (
+          <StudentStudyPlan
+            plan={studyPlan}
+            weekStart={weekStart}
+            approving={approving}
+            onApprove={() => void handleApprove()}
+          />
         ) : null}
 
         {schedule?.fileUrl ? (

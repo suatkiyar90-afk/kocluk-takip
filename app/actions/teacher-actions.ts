@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/auth";
-import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { logActivity } from "@/lib/activity-log";
@@ -33,6 +33,10 @@ import {
 import { coachingFeedbackSchema } from "@/components/coaching/feedback-schema";
 import { actionErrorMessage } from "@/lib/action-error";
 import { normalizeGradeLevel, type GradeLevel } from "@/lib/grade-config";
+import {
+  canStaffAccessStudent,
+  type StaffRole,
+} from "@/lib/student-access";
 
 export type TeacherActionResult<T> =
   | { success: true; data: T }
@@ -96,7 +100,7 @@ function roundNet(n: number): number {
 }
 
 async function getTeacherId(): Promise<
-  | { ok: true; teacherId: string }
+  | { ok: true; teacherId: string; role: StaffRole }
   | {
       ok: false;
       status: "UNAUTHORIZED" | "FORBIDDEN";
@@ -118,24 +122,11 @@ async function getTeacherId(): Promise<
       message: "Bu işlem için öğretmen yetkisi gerekli.",
     };
   }
-  return { ok: true, teacherId: session.user.id };
-}
-
-async function isAssigned(
-  teacherId: string,
-  studentId: string,
-): Promise<boolean> {
-  const rows = await db
-    .select({ studentId: teacherStudents.studentId })
-    .from(teacherStudents)
-    .where(
-      and(
-        eq(teacherStudents.teacherId, teacherId),
-        eq(teacherStudents.studentId, studentId),
-      ),
-    )
-    .limit(1);
-  return rows.length === 1;
+  return {
+    ok: true,
+    teacherId: session.user.id,
+    role: session.user.role === "admin" ? "admin" : "teacher",
+  };
 }
 
 export async function getAssignedStudents(): Promise<
@@ -147,15 +138,25 @@ export async function getAssignedStudents(): Promise<
   }
 
   try {
-    const assignments = await db
-      .select({
-        studentId: teacherStudents.studentId,
-        studentName: users.name,
-      })
-      .from(teacherStudents)
-      .innerJoin(users, eq(users.id, teacherStudents.studentId))
-      .where(eq(teacherStudents.teacherId, ctx.teacherId))
-      .orderBy(users.name);
+    const assignments =
+      ctx.role === "admin"
+        ? await db
+            .select({
+              studentId: users.id,
+              studentName: users.name,
+            })
+            .from(users)
+            .where(eq(users.role, "student"))
+            .orderBy(users.name)
+        : await db
+            .select({
+              studentId: teacherStudents.studentId,
+              studentName: users.name,
+            })
+            .from(teacherStudents)
+            .innerJoin(users, eq(users.id, teacherStudents.studentId))
+            .where(eq(teacherStudents.teacherId, ctx.teacherId))
+            .orderBy(users.name);
 
     const studentIds = assignments.map((a) => a.studentId);
     const weekStart = getCurrentWeekMonday();
@@ -220,6 +221,10 @@ export interface AttentionStudent {
   studentId: string;
   studentName: string;
   studentNumber: string | null;
+  gradeLevel: GradeLevel;
+  studyField: string | null;
+  advisorId: string | null;
+  advisorName: string | null;
   weekTotalQuestions: number;
   weekNet: number;
   lastEntryDate: string | null;
@@ -270,18 +275,83 @@ export async function getAttentionList(): Promise<
     const weekEnd = weekEndOf(weekStart);
     const today = todayInIstanbul();
 
+    const scope =
+      ctx.role === "admin"
+        ? eq(users.role, "student")
+        : and(
+            eq(users.role, "student"),
+            inArray(
+              users.id,
+              db
+                .select({ studentId: teacherStudents.studentId })
+                .from(teacherStudents)
+                .where(eq(teacherStudents.teacherId, ctx.teacherId)),
+            ),
+          );
+
     const rows = await db
       .select({
-        studentId: teacherStudents.studentId,
+        studentId: users.id,
         studentName: users.name,
         studentNumber: users.studentNumber,
-        pendingCount: sql<number>`(select count(*)::int from ${qaThreads} q where q.student_id = ${teacherStudents.studentId} and q.status = 'bekliyor')`,
-        oldestPendingAt: sql<string | null>`(select to_char(min(q.created_at) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') from ${qaThreads} q where q.student_id = ${teacherStudents.studentId} and q.status = 'bekliyor')`,
+        gradeLevel: users.gradeLevel,
+        studyField: users.studyField,
       })
-      .from(teacherStudents)
-      .innerJoin(users, eq(users.id, teacherStudents.studentId))
-      .where(eq(teacherStudents.teacherId, ctx.teacherId))
+      .from(users)
+      .where(scope)
       .orderBy(users.name);
+
+    const [advisorRows, pendingRows] = await Promise.all([
+      db
+        .select({
+          studentId: teacherStudents.studentId,
+          advisorId: users.id,
+          advisorName: users.name,
+        })
+        .from(teacherStudents)
+        .innerJoin(
+          users,
+          and(
+            eq(users.id, teacherStudents.teacherId),
+            eq(users.role, "teacher"),
+          ),
+        )
+        .orderBy(asc(teacherStudents.createdAt)),
+      db
+        .select({
+          studentId: qaThreads.studentId,
+          pendingCount: sql<number>`count(*)::int`,
+          oldestPendingAt: sql<
+            string | null
+          >`to_char(min(${qaThreads.createdAt}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
+        })
+        .from(qaThreads)
+        .where(eq(qaThreads.status, "bekliyor"))
+        .groupBy(qaThreads.studentId),
+    ]);
+
+    const advisorByStudent = new Map<
+      string,
+      { advisorId: string | null; advisorName: string | null }
+    >();
+    for (const row of advisorRows) {
+      if (!advisorByStudent.has(row.studentId)) {
+        advisorByStudent.set(row.studentId, {
+          advisorId: row.advisorId,
+          advisorName: row.advisorName,
+        });
+      }
+    }
+
+    const pendingByStudent = new Map(
+      pendingRows.map((row) => [
+        row.studentId,
+        {
+          pendingCount: Number(row.pendingCount) || 0,
+          oldestPendingAt: row.oldestPendingAt ?? null,
+        },
+      ]),
+    );
 
     const studentIds = rows.map((row) => row.studentId);
 
@@ -353,9 +423,11 @@ export async function getAttentionList(): Promise<
         weekStart,
       );
       const lastEntryDate = lastByStudent.get(row.studentId) ?? null;
-      const pendingCount = Number(row.pendingCount) || 0;
-      const oldestPendingAt = row.oldestPendingAt
-        ? Date.parse(row.oldestPendingAt)
+      const advisor = advisorByStudent.get(row.studentId) ?? null;
+      const pending = pendingByStudent.get(row.studentId) ?? null;
+      const pendingCount = pending?.pendingCount ?? 0;
+      const oldestPendingAt = pending?.oldestPendingAt
+        ? Date.parse(pending.oldestPendingAt)
         : NaN;
       const waitingHours =
         pendingCount > 0 && !Number.isNaN(oldestPendingAt)
@@ -369,6 +441,10 @@ export async function getAttentionList(): Promise<
         studentId: row.studentId,
         studentName: row.studentName || "İsimsiz öğrenci",
         studentNumber: row.studentNumber ?? null,
+        gradeLevel: normalizeGradeLevel(row.gradeLevel),
+        studyField: row.studyField ?? null,
+        advisorId: advisor?.advisorId ?? null,
+        advisorName: advisor?.advisorName ?? null,
         weekTotalQuestions: totals.total,
         weekNet: roundNet(totals.net),
         lastEntryDate,
@@ -423,7 +499,7 @@ export async function getStudentWeeklySummary(
   }
 
   try {
-    if (!(await isAssigned(ctx.teacherId, studentId))) {
+    if (!(await canStaffAccessStudent(ctx, studentId))) {
       return {
         success: false,
         status: "FORBIDDEN",
@@ -482,12 +558,18 @@ export async function getStudentWeeklySummary(
         })
         .from(coachingFeedbacks)
         .where(
-          and(
-            eq(coachingFeedbacks.studentId, studentId),
-            eq(coachingFeedbacks.teacherId, ctx.teacherId),
-            eq(coachingFeedbacks.weekStart, weekStart),
-          ),
+          ctx.role === "admin"
+            ? and(
+                eq(coachingFeedbacks.studentId, studentId),
+                eq(coachingFeedbacks.weekStart, weekStart),
+              )
+            : and(
+                eq(coachingFeedbacks.studentId, studentId),
+                eq(coachingFeedbacks.teacherId, ctx.teacherId),
+                eq(coachingFeedbacks.weekStart, weekStart),
+              ),
         )
+        .orderBy(desc(coachingFeedbacks.createdAt))
         .limit(1),
     ]);
 
@@ -583,7 +665,7 @@ export async function saveCoachingFeedback(
   const weekStart = parseMonday(weekStartArg);
 
   try {
-    if (!(await isAssigned(ctx.teacherId, studentId))) {
+    if (!(await canStaffAccessStudent(ctx, studentId))) {
       return {
         success: false,
         status: "FORBIDDEN",

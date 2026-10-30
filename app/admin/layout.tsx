@@ -59,6 +59,18 @@ export default async function AdminLayout({
                   Aktiviteler
                 </Link>
                 <Link
+                  href="/dashboard"
+                  className="rounded-lg px-2 py-1.5 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 touch-manipulation"
+                >
+                  🎓 Öğrenci Profilleri (Koçluk Ekranı)
+                </Link>
+                <Link
+                  href="/admin/exam-analysis"
+                  className="rounded-lg px-2 py-1.5 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 touch-manipulation"
+                >
+                  📊 Deneme Analizi Yükle
+                </Link>
+                <Link
                   href="/admin/curriculum"
                   className="rounded-lg px-2 py-1.5 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 touch-manipulation"
                 >

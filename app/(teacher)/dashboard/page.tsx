@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Toaster } from "sonner";
+import { auth } from "@/auth";
 import { getAttentionList } from "@/app/actions/teacher-actions";
 import { getCurrentWeekMonday } from "@/lib/week-utils";
 import {
@@ -26,7 +27,11 @@ export default async function TeacherDashboardPage({
   searchParams,
 }: TeacherDashboardPageProps) {
   const params = searchParams ? await searchParams : undefined;
-  const result = await getAttentionList();
+  const [result, session] = await Promise.all([
+    getAttentionList(),
+    auth(),
+  ]);
+  const isAdmin = session?.user?.role === "admin";
   const weekStart = getCurrentWeekMonday();
 
   const initialFilter: DashboardFilter =
@@ -42,9 +47,22 @@ export default async function TeacherDashboardPage({
     <main className="min-h-dvh bg-gray-50 px-4 pt-6 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-10">
       <div className="mx-auto w-full max-w-md md:max-w-3xl xl:max-w-5xl">
         <header className="mb-5">
-          <h1 className="text-xl font-bold text-gray-900">Öğrencilerim</h1>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h1 className="text-xl font-bold text-gray-900">
+              {isAdmin ? "🎓 Öğrenci Profilleri (Koçluk Ekranı)" : "Öğrencilerim"}
+            </h1>
+            {isAdmin ? (
+              <Link
+                href="/admin"
+                className="rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-50 touch-manipulation"
+              >
+                ← Yönetici Paneli
+              </Link>
+            ) : null}
+          </div>
           <p className="mt-1 text-sm text-gray-500">
             Bu hafta ({formatDate(weekStart)})
+            {isAdmin ? " · Tüm öğrenciler" : ""}
           </p>
         </header>
 
@@ -59,6 +77,7 @@ export default async function TeacherDashboardPage({
               initialQ={params?.q ?? ""}
               initialFilter={initialFilter}
               initialSort={initialSort}
+              isAdmin={isAdmin}
             />
             <AnnouncementFab
               studentCount={result.data.students.length}

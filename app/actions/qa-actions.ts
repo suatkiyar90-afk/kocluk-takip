@@ -2,13 +2,17 @@
 
 import { z } from "zod";
 import { auth } from "@/auth";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { logActivity } from "@/lib/activity-log";
 import { qaThreads, teacherStudents, users } from "@/db/schema";
 import { sendPushNotification } from "@/lib/web-push-helper";
 import { isAllowedUploadUrl } from "@/lib/url-guard";
 import { actionErrorMessage } from "@/lib/action-error";
+import {
+  canStaffAccessStudent,
+  type StaffRole,
+} from "@/lib/student-access";
 
 export type QaActionResult<T> =
   | { success: true; data: T }
@@ -49,7 +53,7 @@ async function getStudentId(): Promise<
 }
 
 async function getTeacherId(): Promise<
-  | { ok: true; teacherId: string }
+  | { ok: true; teacherId: string; role: StaffRole }
   | {
       ok: false;
       status: "UNAUTHORIZED" | "FORBIDDEN";
@@ -71,24 +75,11 @@ async function getTeacherId(): Promise<
       message: "Bu işlem için öğretmen yetkisi gerekli.",
     };
   }
-  return { ok: true, teacherId: session.user.id };
-}
-
-async function isAssigned(
-  teacherId: string,
-  studentId: string,
-): Promise<boolean> {
-  const rows = await db
-    .select({ studentId: teacherStudents.studentId })
-    .from(teacherStudents)
-    .where(
-      and(
-        eq(teacherStudents.teacherId, teacherId),
-        eq(teacherStudents.studentId, studentId),
-      ),
-    )
-    .limit(1);
-  return rows.length === 1;
+  return {
+    ok: true,
+    teacherId: session.user.id,
+    role: session.user.role === "admin" ? "admin" : "teacher",
+  };
 }
 
 export interface QaThreadSummary {
@@ -239,15 +230,19 @@ export async function getPendingQuestionCount(): Promise<number> {
     const rows = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(qaThreads)
-      .innerJoin(
-        teacherStudents,
-        eq(teacherStudents.studentId, qaThreads.studentId),
-      )
       .where(
-        and(
-          eq(teacherStudents.teacherId, ctx.teacherId),
-          eq(qaThreads.status, "bekliyor"),
-        ),
+        ctx.role === "admin"
+          ? eq(qaThreads.status, "bekliyor")
+          : and(
+              eq(qaThreads.status, "bekliyor"),
+              inArray(
+                qaThreads.studentId,
+                db
+                  .select({ studentId: teacherStudents.studentId })
+                  .from(teacherStudents)
+                  .where(eq(teacherStudents.teacherId, ctx.teacherId)),
+              ),
+            ),
       );
     return rows[0]?.count ?? 0;
   } catch {
@@ -267,15 +262,19 @@ export async function getStudentPendingQuestionCount(
     const rows = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(qaThreads)
-      .innerJoin(
-        teacherStudents,
-        eq(teacherStudents.studentId, qaThreads.studentId),
-      )
       .where(
         and(
-          eq(teacherStudents.teacherId, ctx.teacherId),
           eq(qaThreads.studentId, studentId),
           eq(qaThreads.status, "bekliyor"),
+          ctx.role === "admin"
+            ? undefined
+            : inArray(
+                qaThreads.studentId,
+                db
+                  .select({ studentId: teacherStudents.studentId })
+                  .from(teacherStudents)
+                  .where(eq(teacherStudents.teacherId, ctx.teacherId)),
+              ),
         ),
       );
     return rows[0]?.count ?? 0;
@@ -313,14 +312,18 @@ export async function listPendingQuestions(): Promise<
       })
       .from(qaThreads)
       .innerJoin(users, eq(users.id, qaThreads.studentId))
-      .innerJoin(
-        teacherStudents,
-        eq(teacherStudents.studentId, qaThreads.studentId),
-      )
       .where(
         and(
-          eq(teacherStudents.teacherId, ctx.teacherId),
           eq(qaThreads.status, "bekliyor"),
+          ctx.role === "admin"
+            ? undefined
+            : inArray(
+                qaThreads.studentId,
+                db
+                  .select({ studentId: teacherStudents.studentId })
+                  .from(teacherStudents)
+                  .where(eq(teacherStudents.teacherId, ctx.teacherId)),
+              ),
         ),
       )
       .orderBy(asc(qaThreads.createdAt));
@@ -351,7 +354,7 @@ export async function listStudentThreads(
   }
 
   try {
-    if (!(await isAssigned(ctx.teacherId, studentId))) {
+    if (!(await canStaffAccessStudent(ctx, studentId))) {
       return {
         success: false,
         status: "FORBIDDEN",
@@ -440,7 +443,7 @@ export async function answerQuestion(
       };
     }
 
-    if (!(await isAssigned(ctx.teacherId, thread.studentId))) {
+    if (!(await canStaffAccessStudent(ctx, thread.studentId))) {
       return {
         success: false,
         status: "FORBIDDEN",

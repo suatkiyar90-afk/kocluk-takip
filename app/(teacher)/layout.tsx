@@ -1,5 +1,6 @@
 import "../globals.css";
 import "@uploadthing/react/styles.css";
+import Link from "next/link";
 import { auth } from "@/auth";
 import { touchLastSeen } from "@/lib/touch-last-seen";
 import { TouchSeenObserver } from "@/components/touch-seen-observer";
@@ -55,7 +56,9 @@ export default async function TeacherLayout({
   })) {
     try {
       const pending = await getMyPendingAnnouncements();
-      announcements = pending.data.announcements;
+      if (pending.success === true) {
+        announcements = pending.data.announcements;
+      }
     } catch (err) {
       console.error("Duyurular yüklenemedi:", err);
     }
@@ -73,10 +76,23 @@ export default async function TeacherLayout({
             <div className="mx-auto flex h-14 w-full max-w-md items-center justify-between gap-3 px-4 md:max-w-3xl xl:max-w-5xl">
               <div className="min-w-0 flex-1">
                 <span className="block truncate text-base font-extrabold tracking-tight text-gray-900">
-                  Danışman Öğretmen
+                  {session?.user?.role === "admin"
+                    ? "Yönetici — Koçluk Ekranı"
+                    : "Danışman Öğretmen"}
                 </span>
                 <p className="truncate text-xs font-medium text-gray-500">
                   {userName}
+                  {session?.user?.role === "admin" ? (
+                    <>
+                      {" · "}
+                      <Link
+                        href="/admin"
+                        className="font-bold text-indigo-600 hover:underline"
+                      >
+                        Yönetici Paneli
+                      </Link>
+                    </>
+                  ) : null}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">

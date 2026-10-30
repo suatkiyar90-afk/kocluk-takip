@@ -66,6 +66,10 @@ import {
   buildDenemeAttemptRows,
   type DenemeAttemptRow,
 } from "@/lib/report-utils";
+import {
+  canStaffAccessStudent,
+  type StaffRole,
+} from "@/lib/student-access";
 
 async function getStudentId(): Promise<
   | { ok: true; studentId: string }
@@ -120,7 +124,8 @@ async function loadStudentGradeContext(
   });
 }
 
-async function getTeacherId(): Promise<  | { ok: true; teacherId: string }
+async function getTeacherId(): Promise<
+  | { ok: true; teacherId: string; role: StaffRole }
   | {
       ok: false;
       status: "UNAUTHORIZED" | "FORBIDDEN";
@@ -142,24 +147,11 @@ async function getTeacherId(): Promise<  | { ok: true; teacherId: string }
       message: "Bu işlem için öğretmen yetkisi gerekli.",
     };
   }
-  return { ok: true, teacherId: session.user.id };
-}
-
-async function isAssigned(
-  teacherId: string,
-  studentId: string,
-): Promise<boolean> {
-  const rows = await db
-    .select({ studentId: teacherStudents.studentId })
-    .from(teacherStudents)
-    .where(
-      and(
-        eq(teacherStudents.teacherId, teacherId),
-        eq(teacherStudents.studentId, studentId),
-      ),
-    )
-    .limit(1);
-  return rows.length === 1;
+  return {
+    ok: true,
+    teacherId: session.user.id,
+    role: session.user.role === "admin" ? "admin" : "teacher",
+  };
 }
 
 function roundNet(n: number): number {
@@ -238,7 +230,7 @@ export async function getWeeklyReportByStudent(
   }
 
   try {
-    if (!(await isAssigned(authCtx.teacherId, studentId))) {
+    if (!(await canStaffAccessStudent(authCtx, studentId))) {
       return {
         success: false,
         status: "FORBIDDEN",
@@ -1526,7 +1518,7 @@ export async function getStudentDenemeAttempts(
     return { success: false, status: ctx.status, message: ctx.message };
   }
 
-  if (!(await isAssigned(ctx.teacherId, studentId))) {
+  if (!(await canStaffAccessStudent(ctx, studentId))) {
     return {
       success: false,
       status: "FORBIDDEN",

@@ -23,6 +23,8 @@ import {
 import { TeacherQASection } from "@/components/qa/teacher-qa-section";
 import { TargetsPanel } from "@/components/reports/targets-panel";
 import { TeacherReportsTab } from "@/components/reports/teacher-reports-tab";
+import { ExamAnalysisView } from "@/components/exam-analysis/exam-analysis-view";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChartSkeleton } from "@/components/charts/chart-ui";
 import { BottomTabBar } from "@/components/ui/bottom-tab-bar";
 import { netScore } from "@/components/quiz-entry/weekly-quiz-schema";
@@ -107,6 +109,11 @@ interface StudentDetailTabsProps {
   actorName?: string;
   schoolName?: string;
   studentProfile?: CurriculumReportProfile | null;
+  /**
+   * "+ Haftalık Hedefe Ekle" butonu yalnızca danışman öğretmen/yönetici
+   * koçluk ekranında görünür. Varsayılan kapalıdır.
+   */
+  canAssignTarget?: boolean;
 }
 
 export function StudentDetailTabs({
@@ -125,6 +132,7 @@ export function StudentDetailTabs({
   actorName,
   schoolName,
   studentProfile,
+  canAssignTarget = false,
 }: StudentDetailTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>(
     normalizeStudentDetailTab(initialTab) as TabId,
@@ -549,25 +557,43 @@ export function StudentDetailTabs({
       </div>
 
       <div role="tabpanel" id="detail-panel-exams" aria-labelledby="detail-tab-exams" hidden={activeTab !== "exams"}>
-        {examsResult.success === false ? (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
-            {examsResult.message}
-          </div>
-        ) : (
-          <MockExamHistory records={examsResult.data} />
-        )}
+        <Tabs defaultValue="exams" className="w-full">
+          <TabsList className="w-full">
+            <TabsTrigger value="exams">📝 Denemeler</TabsTrigger>
+            <TabsTrigger value="analysis">🎯 Analiz</TabsTrigger>
+          </TabsList>
 
-        {denemeAttemptsResult.success === false ? (
-          <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
-            {denemeAttemptsResult.message}
-          </div>
-        ) : (
-          <MyDenemeAttempts
-            rows={denemeAttemptsResult.data}
-            title="Öğrencinin Kendi Denemeleri"
-            subtitle="Öğrencinin kendisi girdiği denemeler (son 10)"
-          />
-        )}
+          <TabsContent value="exams">
+            {examsResult.success === false ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+                {examsResult.message}
+              </div>
+            ) : (
+              <MockExamHistory records={examsResult.data} />
+            )}
+
+            {denemeAttemptsResult.success === false ? (
+              <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+                {denemeAttemptsResult.message}
+              </div>
+            ) : (
+              <MyDenemeAttempts
+                rows={denemeAttemptsResult.data}
+                title="Öğrencinin Kendi Denemeleri"
+                subtitle="Öğrencinin kendisi girdiği denemeler (son 10)"
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="analysis">
+            <ExamAnalysisView
+              mode="teacher"
+              studentId={studentId}
+              weekStart={weekStart}
+              canAssignTarget={canAssignTarget}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
 
       <div role="tabpanel" id="detail-panel-curriculum" aria-labelledby="detail-tab-curriculum" hidden={activeTab !== "curriculum"}>

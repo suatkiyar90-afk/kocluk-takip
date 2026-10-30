@@ -5,6 +5,7 @@ import { markUserSeen } from "@/lib/touch-last-seen";
 export const ACTIVITY_ACTIONS = [
   "feedback_saved",
   "target_saved",
+  "study_plan_saved",
   "qa_replied",
   "mock_exam_uploaded",
   "mock_exam_deleted",
