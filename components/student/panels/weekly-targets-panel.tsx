@@ -209,6 +209,14 @@ export function WeeklyTargetsPanel() {
     feedbackResult !== null && feedbackResult.success === true
       ? feedbackResult.data.comment
       : null;
+  const feedbackFromPreviousWeek =
+    feedbackResult !== null &&
+    feedbackResult.success === true &&
+    feedbackResult.data.isPreviousWeek;
+  const feedbackWeekStart =
+    feedbackResult !== null && feedbackResult.success === true
+      ? feedbackResult.data.weekStart
+      : null;
 
   async function handleApprove() {
     if (approving) return;
@@ -406,15 +414,23 @@ export function WeeklyTargetsPanel() {
               Dönüt
             </span>
             <h2 className="text-sm font-bold text-blue-900">
-              Danışman Öğretmeninin Bu Haftaki Notu
+              Danışman Öğretmeninin{" "}
+              {feedbackFromPreviousWeek ? "Geçen Haftaki" : "Bu Haftaki"} Notu
             </h2>
           </div>
           {feedbackResult === null ? (
             <div className="mt-2.5 h-4 w-2/3 animate-pulse rounded bg-blue-100" />
           ) : coachComment ? (
-            <p className="mt-2.5 text-sm leading-relaxed whitespace-pre-wrap text-blue-950">
-              {coachComment}
-            </p>
+            <>
+              {feedbackFromPreviousWeek && feedbackWeekStart ? (
+                <p className="mt-1 text-[11px] font-semibold text-blue-700/80">
+                  {formatRange(feedbackWeekStart)} haftası için yazıldı.
+                </p>
+              ) : null}
+              <p className="mt-2.5 text-sm leading-relaxed whitespace-pre-wrap text-blue-950">
+                {coachComment}
+              </p>
+            </>
           ) : (
             <p className="mt-2.5 text-sm italic text-gray-400">
               Danışman öğretmeniniz bu hafta için henüz bir değerlendirme notu

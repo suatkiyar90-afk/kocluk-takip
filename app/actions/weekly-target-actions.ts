@@ -888,28 +888,52 @@ export async function getMyWeeklyTargets(
 
 export async function getMyWeeklyFeedback(
   weekStartArg?: string,
-): Promise<WeeklyTargetActionResult<{ comment: string | null }>> {
+): Promise<
+  WeeklyTargetActionResult<{
+    comment: string | null;
+    weekStart: string;
+    /** Dönüt seçilen haftada yoksa bir önceki haftadan gösteriliyor mu? */
+    isPreviousWeek: boolean;
+  }>
+> {
   const ctx = await getStudentId();
   if (ctx.ok === false) {
     return { success: false, status: ctx.status, message: ctx.message };
   }
 
   const weekStart = parseMonday(weekStartArg);
+  const previousWeekStart = addDaysISO(weekStart, -7);
 
   try {
+    // Seçili haftada dönüt yoksa bir önceki haftanın dönütünü göster.
     const rows = await db
-      .select({ comment: coachingFeedbacks.comment })
+      .select({
+        comment: coachingFeedbacks.comment,
+        weekStart: coachingFeedbacks.weekStart,
+      })
       .from(coachingFeedbacks)
       .where(
         and(
           eq(coachingFeedbacks.studentId, ctx.studentId),
-          eq(coachingFeedbacks.weekStart, weekStart),
+          gte(coachingFeedbacks.weekStart, previousWeekStart),
+          lte(coachingFeedbacks.weekStart, weekStart),
         ),
       )
-      .orderBy(desc(coachingFeedbacks.createdAt))
+      .orderBy(
+        desc(coachingFeedbacks.weekStart),
+        desc(coachingFeedbacks.createdAt),
+      )
       .limit(1);
 
-    return { success: true, data: { comment: rows[0]?.comment ?? null } };
+    const row = rows[0];
+    return {
+      success: true,
+      data: {
+        comment: row?.comment ?? null,
+        weekStart: row?.weekStart ?? weekStart,
+        isPreviousWeek: row ? row.weekStart !== weekStart : false,
+      },
+    };
   } catch (err) {
     return {
       success: false,

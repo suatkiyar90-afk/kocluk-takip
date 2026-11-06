@@ -73,6 +73,12 @@ interface StudyPlanPlannerProps {
   recommendations: SmartTargetRecommendation[];
   recommendationsLoading: boolean;
   onSaved?: () => void;
+  /** Haftalık değerlendirme pop-up'ından "Planı Oluşturalım" seçildiğinde true. */
+  autoOpenPlanner?: boolean;
+  /** Geçen haftanın eksiklerini otomatik şablona devret. */
+  carryOverPreviousWeek?: boolean;
+  /** Aynı istek tekrar tetiklendiğinde efekti yeniden çalıştıran sayaç. */
+  autoOpenToken?: number;
 }
 
 function createSlotId(dayIndex: number): string {
@@ -93,6 +99,9 @@ export function StudyPlanPlanner({
   recommendations,
   recommendationsLoading,
   onSaved,
+  autoOpenPlanner = false,
+  carryOverPreviousWeek = false,
+  autoOpenToken = 0,
 }: StudyPlanPlannerProps) {
   const [slots, setSlots] = useState<StudyPlanSlot[]>([]);
   const [teacherNote, setTeacherNote] = useState("");
@@ -131,16 +140,26 @@ export function StudyPlanPlanner({
     useState<WorkloadRecommendation | null>(null);
   const [recommendationLoading, setRecommendationLoading] = useState(true);
   const [includeDailyRoutine, setIncludeDailyRoutine] = useState(true);
+  /** Geçen haftanın tamamlanmayan etüt ve konularını önceliklendir. */
+  const [carryOver, setCarryOver] = useState(true);
   const [lastGenerated, setLastGenerated] = useState<GeneratedStudyPlan | null>(
     null,
   );
   const printRef = useRef<HTMLDivElement>(null);
+  /** Pop-up'tan gelen "planlayıcıyı aç" isteği; yükleme bitince de açık kalsın. */
+  const forceOpenRef = useRef(false);
+  /** Aynı istek için otomatik şablonun iki kez üretilmesini engeller. */
+  const autoPlanTokenRef = useRef<number | null>(null);
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: `Haftalik_Calisma_Plani_${weekStart}`,
     pageStyle: "@page { size: A4 landscape; margin: 8mm; }",
   });
+
+  useEffect(() => {
+    forceOpenRef.current = false;
+  }, [studentId, weekStart]);
 
   const loadPlan = useCallback(async () => {
     setLoading(true);
@@ -160,7 +179,7 @@ export function StudyPlanPlanner({
     }
     // Kaydedilmiş program varsa planlayıcı kapalı (takip modu), yoksa açık gelir.
     setPlanSaved(hasSavedPlan);
-    setEditorOpen(!hasSavedPlan);
+    setEditorOpen(forceOpenRef.current ? true : !hasSavedPlan);
     setTrackDay(0);
     setLoading(false);
   }, [studentId, weekStart]);
@@ -169,6 +188,25 @@ export function StudyPlanPlanner({
     setActiveDay(0);
     void loadPlan();
   }, [loadPlan]);
+
+  // Haftalık değerlendirme pop-up'ından gelen istek: planlayıcıyı aç,
+  // devir seçeneği işaretliyse eksikleri önceliklendir.
+  useEffect(() => {
+    if (!autoOpenPlanner) return;
+    forceOpenRef.current = true;
+    setEditorOpen(true);
+    if (carryOverPreviousWeek) setCarryOver(true);
+  }, [autoOpenPlanner, carryOverPreviousWeek, autoOpenToken]);
+
+  // Bu hafta için kayıtlı plan yoksa otomatik şablonu bir kez üret.
+  useEffect(() => {
+    if (!autoOpenPlanner || loading) return;
+    if (planSaved) return;
+    if (autoPlanTokenRef.current === autoOpenToken) return;
+    autoPlanTokenRef.current = autoOpenToken;
+    void handleGenerate(carryOverPreviousWeek || carryOver);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenPlanner, loading, planSaved, autoOpenToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -363,7 +401,8 @@ export function StudyPlanPlanner({
     });
   }
 
-  async function handleGenerate() {
+  async function handleGenerate(carryOverride?: boolean) {
+    const useCarryOver = carryOverride ?? carryOver;
     setGenerating(true);
     try {
       const result = await generateAutoStudyPlan({
@@ -377,6 +416,7 @@ export function StudyPlanPlanner({
         intensity,
         focusMode,
         mockExamDayIndex,
+        carryOver: useCarryOver,
       });
       if (result.success === true) {
         setSlots(result.data.slots);
@@ -387,6 +427,11 @@ export function StudyPlanPlanner({
         toast.success(
           `${result.data.slots.length} etüt ve ${result.data.summary.totalQuestions} soruluk taslak oluşturuldu.`,
         );
+        if ((result.data.carryOverCount ?? 0) > 0) {
+          toast.info(
+            `Geçen haftanın ${result.data.carryOverCount} eksik konusu önceliklendirildi.`,
+          );
+        }
         for (const warning of result.data.warnings) {
           toast.warning(warning);
         }
@@ -990,6 +1035,15 @@ export function StudyPlanPlanner({
                 className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
               />
               Her günün ilk etüdüne Paragraf + Problem rutini ekle
+            </label>
+            <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 sm:col-span-2 lg:col-span-4 touch-manipulation">
+              <input
+                type="checkbox"
+                checked={carryOver}
+                onChange={(e) => setCarryOver(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              Geçen haftanın tamamlanmayan etüt ve konularını önceliklendir
             </label>
           </div>
         ) : null}

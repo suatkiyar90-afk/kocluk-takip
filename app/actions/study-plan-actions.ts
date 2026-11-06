@@ -95,6 +95,8 @@ export interface GeneratedStudyPlan {
   summary: StudyPlanSummary;
   denemeAnalysis: DenemeSubjectAnalysis[];
   warnings: string[];
+  /** Önceliklendirilen (geçen haftadan devreden) konu sayısı. */
+  carryOverCount?: number;
 }
 
 export interface WorkloadRecommendation {
@@ -139,6 +141,8 @@ const generatePlanSchema = z.object({
     .enum(["topic_heavy", "balanced", "question_heavy"])
     .optional(),
   mockExamDayIndex: z.number().int().min(0).max(6).nullable().optional(),
+  /** Geçen haftanın tamamlanmayan etüt/konularını önceliklendir. */
+  carryOver: z.boolean().optional(),
 });
 
 const slotSchema = z
@@ -695,6 +699,7 @@ export async function generateAutoStudyPlan(
     intensity = "medium",
     focusMode = "balanced",
     mockExamDayIndex = null,
+    carryOver = true,
   } = parsed.data;
   const weekStart = parseMonday(parsed.data.weekStart);
   const profile = INTENSITY_PROFILES[intensity];
@@ -741,6 +746,7 @@ export async function generateAutoStudyPlan(
       examRows,
       previousTargetRows,
       previousEntryRows,
+      previousPlanRows,
       analysisPlan,
     ] = await Promise.all([
         db
@@ -795,6 +801,16 @@ export async function generateAutoStudyPlan(
           .having(
             sql`coalesce(sum(${dailyQuestionEntries.correct} + ${dailyQuestionEntries.wrong} + ${dailyQuestionEntries.blank}), 0) > 0`,
           ),
+        db
+          .select({ slots: weeklyStudyPlans.slots })
+          .from(weeklyStudyPlans)
+          .where(
+            and(
+              eq(weeklyStudyPlans.studentId, studentId),
+              eq(weeklyStudyPlans.weekStartDate, previousWeekStart),
+            ),
+          )
+          .limit(1),
         loadLatestAnalysisPlan(studentId),
       ]);
 
@@ -887,8 +903,17 @@ export async function generateAutoStudyPlan(
       solvedPreviousWeek.add(row.topicId);
     }
     const carriedTopicIds = new Set<number>();
-    for (const topicId of previousTargetTopicIds) {
-      if (!solvedPreviousWeek.has(topicId)) carriedTopicIds.add(topicId);
+    if (carryOver) {
+      for (const topicId of previousTargetTopicIds) {
+        if (!solvedPreviousWeek.has(topicId)) carriedTopicIds.add(topicId);
+      }
+      // Geçen haftanın planında tamamlanmayan etütlerin konuları da devredilir.
+      for (const slot of previousPlanRows[0]?.slots ?? []) {
+        if (slot.isCompleted) continue;
+        if (slot.topicId === null) continue;
+        if (solvedPreviousWeek.has(slot.topicId)) continue;
+        carriedTopicIds.add(slot.topicId);
+      }
     }
 
     const candidates = buildTaskCandidates({
@@ -1258,6 +1283,7 @@ export async function generateAutoStudyPlan(
         summary,
         denemeAnalysis,
         warnings,
+        carryOverCount: carryOver ? carriedTopicIds.size : 0,
       },
     };
   } catch (err) {

@@ -7,17 +7,22 @@ import { db } from "@/db";
 import { logActivity } from "@/lib/activity-log";
 import {
   coachingFeedbacks,
+  curriculumTopics,
   dailyQuestionEntries,
   qaThreads,
   studentDenemeAttempts,
   teacherStudents,
   users,
+  weeklyStudyPlans,
+  weeklyTargets,
 } from "@/db/schema";
 import {
+  addDaysISO,
   getCurrentWeekMonday,
   parseMonday,
   todayInIstanbul,
 } from "@/lib/week-utils";
+import { DAY_LONG_LABELS } from "@/lib/study-plan-meta";
 import {
   aggregateWeekEntries,
   weekEndOf,
@@ -713,6 +718,252 @@ export async function saveCoachingFeedback(
         id: saved[0].id,
         comment: saved[0].comment,
         weekStart,
+      },
+    };
+  } catch (err) {
+    return {
+      success: false,
+      status: "DATABASE_ERROR",
+      message: errorMessage(err),
+    };
+  }
+}
+
+export interface PreviousWeekReviewItem {
+  kind: "etut" | "hedef";
+  label: string;
+  detail: string;
+}
+
+export interface PreviousWeekReviewData {
+  studentName: string;
+  currentWeekStart: string;
+  previousWeekStart: string;
+  /** Geçen hafta hedef, soru kaydı veya çalışma planı var mı? */
+  hasActivity: boolean;
+  /** Pop-up otomatik açılmalı mı? (kayıt var + dönüt yok) */
+  shouldPrompt: boolean;
+  feedback: { comment: string; updatedAt: string } | null;
+  questions: { solved: number; target: number; percent: number };
+  accuracy: { correct: number; wrong: number; percent: number };
+  activeDays: number;
+  plan: { completed: number; total: number; percent: number };
+  unfinished: PreviousWeekReviewItem[];
+  unfinishedTotal: number;
+}
+
+function percentOf(part: number, whole: number): number {
+  return whole > 0 ? Math.round((part / whole) * 100) : 0;
+}
+
+function subjectLabelOf(subjectId: string): string {
+  for (const examType of examTypes) {
+    const match = ALL_SUBJECTS[examType].find((s) => s.id === subjectId);
+    if (match) return match.name;
+  }
+  return subjectId;
+}
+
+/**
+ * Öğrenci detay ekranı açıldığında bir önceki haftanın performansını özetler.
+ * Dönüt henüz girilmemişse ve geçen hafta kaydı varsa pop-up açılmalıdır.
+ */
+export async function getPreviousWeekReviewStatus(
+  studentId: string,
+): Promise<TeacherActionResult<PreviousWeekReviewData>> {
+  const ctx = await getTeacherId();
+  if (ctx.ok === false) {
+    return { success: false, status: ctx.status, message: ctx.message };
+  }
+
+  try {
+    if (!(await canStaffAccessStudent(ctx, studentId))) {
+      return {
+        success: false,
+        status: "FORBIDDEN",
+        message: "Bu öğrenci size atanmamış.",
+      };
+    }
+
+    const currentWeekStart = getCurrentWeekMonday();
+    const previousWeekStart = addDaysISO(currentWeekStart, -7);
+    const previousWeekEnd = addDaysISO(previousWeekStart, 6);
+
+    const [profileRows, targetRows, entryRows, planRows, feedbackRows] =
+      await Promise.all([
+        db
+          .select({ name: users.name })
+          .from(users)
+          .where(eq(users.id, studentId))
+          .limit(1),
+        db
+          .select({
+            subjectId: weeklyTargets.subjectId,
+            targetQuestionCount: weeklyTargets.targetQuestionCount,
+            targetTopics: weeklyTargets.targetTopics,
+          })
+          .from(weeklyTargets)
+          .where(
+            and(
+              eq(weeklyTargets.studentId, studentId),
+              eq(weeklyTargets.weekStartDate, previousWeekStart),
+            ),
+          ),
+        db
+          .select({
+            date: dailyQuestionEntries.date,
+            topicId: dailyQuestionEntries.topicId,
+            correct: dailyQuestionEntries.correct,
+            wrong: dailyQuestionEntries.wrong,
+            blank: dailyQuestionEntries.blank,
+          })
+          .from(dailyQuestionEntries)
+          .where(
+            and(
+              eq(dailyQuestionEntries.studentId, studentId),
+              gte(dailyQuestionEntries.date, previousWeekStart),
+              lte(dailyQuestionEntries.date, previousWeekEnd),
+            ),
+          ),
+        db
+          .select({ slots: weeklyStudyPlans.slots })
+          .from(weeklyStudyPlans)
+          .where(
+            and(
+              eq(weeklyStudyPlans.studentId, studentId),
+              eq(weeklyStudyPlans.weekStartDate, previousWeekStart),
+            ),
+          )
+          .limit(1),
+        db
+          .select({
+            comment: coachingFeedbacks.comment,
+            updatedAt: coachingFeedbacks.createdAt,
+          })
+          .from(coachingFeedbacks)
+          .where(
+            ctx.role === "admin"
+              ? and(
+                  eq(coachingFeedbacks.studentId, studentId),
+                  eq(coachingFeedbacks.weekStart, previousWeekStart),
+                )
+              : and(
+                  eq(coachingFeedbacks.studentId, studentId),
+                  eq(coachingFeedbacks.teacherId, ctx.teacherId),
+                  eq(coachingFeedbacks.weekStart, previousWeekStart),
+                ),
+          )
+          .orderBy(desc(coachingFeedbacks.createdAt))
+          .limit(1),
+      ]);
+
+    const planSlots = planRows[0]?.slots ?? [];
+    const solvedTopicIds = new Set<number>();
+    let correct = 0;
+    let wrong = 0;
+    let blank = 0;
+    const activeDates = new Set<string>();
+
+    for (const entry of entryRows) {
+      const solved = entry.correct + entry.wrong + entry.blank;
+      correct += entry.correct;
+      wrong += entry.wrong;
+      blank += entry.blank;
+      if (solved > 0) {
+        activeDates.add(entry.date);
+        solvedTopicIds.add(entry.topicId);
+      }
+    }
+
+    const solved = correct + wrong + blank;
+    const targetQuestions = targetRows.reduce(
+      (sum, row) => sum + row.targetQuestionCount,
+      0,
+    );
+    const completedSlots = planSlots.filter((slot) => slot.isCompleted).length;
+
+    const pendingTopicIds = new Set<number>();
+    for (const row of targetRows) {
+      for (const topicId of row.targetTopics ?? []) {
+        if (!solvedTopicIds.has(topicId)) pendingTopicIds.add(topicId);
+      }
+    }
+
+    const topicNameById = new Map<number, string>();
+    if (pendingTopicIds.size > 0) {
+      const topicRows = await db
+        .select({
+          id: curriculumTopics.id,
+          topicName: curriculumTopics.topicName,
+        })
+        .from(curriculumTopics)
+        .where(inArray(curriculumTopics.id, [...pendingTopicIds]));
+      for (const row of topicRows) {
+        topicNameById.set(row.id, row.topicName);
+      }
+    }
+
+    const unfinished: PreviousWeekReviewItem[] = [];
+    for (const slot of planSlots) {
+      if (slot.isCompleted) continue;
+      unfinished.push({
+        kind: "etut",
+        label: `${DAY_LONG_LABELS[slot.dayIndex] ?? "Gün"} · ${slot.subjectName}${
+          slot.topicName ? ` · ${slot.topicName}` : ""
+        }`,
+        detail: `${slot.startTime}–${slot.endTime}`,
+      });
+    }
+    for (const row of targetRows) {
+      const subjectName = subjectLabelOf(row.subjectId);
+      for (const topicId of row.targetTopics ?? []) {
+        if (solvedTopicIds.has(topicId)) continue;
+        unfinished.push({
+          kind: "hedef",
+          label: `${subjectName} · ${
+            topicNameById.get(topicId) ?? `Konu #${topicId}`
+          }`,
+          detail: "Hedef konu",
+        });
+      }
+    }
+
+    const feedback = feedbackRows[0]
+      ? {
+          comment: feedbackRows[0].comment,
+          updatedAt: feedbackRows[0].updatedAt.toJSON(),
+        }
+      : null;
+    const hasActivity =
+      targetRows.length > 0 || entryRows.length > 0 || planSlots.length > 0;
+
+    return {
+      success: true,
+      data: {
+        studentName: profileRows[0]?.name || "İsimsiz Öğrenci",
+        currentWeekStart,
+        previousWeekStart,
+        hasActivity,
+        shouldPrompt: hasActivity && feedback === null,
+        feedback,
+        questions: {
+          solved,
+          target: targetQuestions,
+          percent: percentOf(solved, targetQuestions),
+        },
+        accuracy: {
+          correct,
+          wrong,
+          percent: percentOf(correct, correct + wrong),
+        },
+        activeDays: activeDates.size,
+        plan: {
+          completed: completedSlots,
+          total: planSlots.length,
+          percent: percentOf(completedSlots, planSlots.length),
+        },
+        unfinished,
+        unfinishedTotal: unfinished.length,
       },
     };
   } catch (err) {

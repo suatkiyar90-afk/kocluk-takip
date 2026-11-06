@@ -2,7 +2,10 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Toaster } from "sonner";
 import { auth } from "@/auth";
-import { getStudentWeeklySummary } from "@/app/actions/teacher-actions";
+import {
+  getPreviousWeekReviewStatus,
+  getStudentWeeklySummary,
+} from "@/app/actions/teacher-actions";
 import {
   getWeeklyReportByStudent,
   getStudentDenemeAttempts,
@@ -43,6 +46,7 @@ export default async function StudentDetailPage({
   const session = await auth();
 
   const result = await getStudentWeeklySummary(id, weekStart);
+  const previousWeekReview = await getPreviousWeekReviewStatus(id);
   const reportResult = await getWeeklyReportByStudent(id, weekStart);
   const qaResult = await listStudentThreads(id);
   const curriculumResult = await getStudentCurriculumProgress(id);
@@ -69,7 +73,7 @@ export default async function StudentDetailPage({
     );
   }
 
-  const { student, feedback } = result.data;
+  const { student } = result.data;
 
   return (
     <main className="min-h-dvh bg-gray-50 px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))]">
@@ -106,7 +110,9 @@ export default async function StudentDetailPage({
           weekStart={weekStart}
           studentId={student.id}
           studentName={student.name}
-          initialComment={feedback?.comment}
+          previousWeekReview={
+            previousWeekReview.success === true ? previousWeekReview.data : null
+          }
           initialTab={initialTab}
           reportResult={reportResult}
           examsResult={examsResult}

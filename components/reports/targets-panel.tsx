@@ -50,6 +50,11 @@ interface TargetsPanelProps {
   studentName: string;
   weekStart: string;
   snapshot: CurriculumSnapshot | null;
+  /**
+   * Haftalık değerlendirme pop-up'ından "Planı Oluşturalım" seçildiğinde
+   * planlayıcıyı açmak için kullanılan istek.
+   */
+  plannerRequest?: { token: number; carryOver: boolean } | null;
 }
 
 const TOPIC_STATUS_META: Record<
@@ -74,6 +79,7 @@ export function TargetsPanel({
   studentName,
   weekStart,
   snapshot,
+  plannerRequest = null,
 }: TargetsPanelProps) {
   const [targets, setTargets] = useState<WeeklyTargetView[]>([]);
   const [mode, setMode] = useState<"ders" | "deneme">("ders");
@@ -382,6 +388,9 @@ export function TargetsPanel({
         recommendations={recommendations}
         recommendationsLoading={loadingList}
         onSaved={refresh}
+        autoOpenPlanner={plannerRequest !== null}
+        carryOverPreviousWeek={plannerRequest?.carryOver ?? false}
+        autoOpenToken={plannerRequest?.token ?? 0}
       />
 
       <section>

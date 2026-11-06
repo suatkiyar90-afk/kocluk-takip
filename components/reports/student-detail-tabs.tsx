@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 import { WeekPicker } from "@/components/ui/week-picker";
 import { TopicAnalysis } from "@/components/reports/topic-analysis";
-import { FeedbackForm } from "@/components/coaching/feedback-form";
+import { WeeklyFeedbackBand } from "@/components/coaching/weekly-feedback-band";
+import { WeeklyReviewModal } from "@/components/reports/weekly-review-modal";
 import { MockExamHistory } from "@/components/exams/mock-exam-history";
 import { MyDenemeAttempts } from "@/components/exams/my-deneme-attempts";
 import { CurriculumProgress } from "@/components/curriculum/curriculum-progress";
@@ -49,6 +50,7 @@ import type {
   QaActionResult,
   QaThreadSummary,
 } from "@/app/actions/qa-actions";
+import type { PreviousWeekReviewData } from "@/app/actions/teacher-actions";
 
 const TargetComparisonChart = dynamic(
   () => import("@/components/charts/target-comparison-chart"),
@@ -93,11 +95,27 @@ function formatSelectedDay(iso: string): string {
   });
 }
 
+function formatWeekRangeShort(mondayIso: string): string {
+  const [y, m, d] = mondayIso.split("-").map(Number);
+  const start = new Date(y, (m || 1) - 1, d || 1);
+  const end = new Date(
+    start.getFullYear(),
+    start.getMonth(),
+    start.getDate() + 6,
+  );
+  const opts = { day: "numeric", month: "long" } as const;
+  return `${start.toLocaleDateString("tr-TR", opts)} – ${end.toLocaleDateString(
+    "tr-TR",
+    opts,
+  )}`;
+}
+
 interface StudentDetailTabsProps {
   weekStart: string;
   studentId: string;
   studentName: string;
-  initialComment: string | undefined;
+  /** Geçen haftanın performans özeti (pop-up + dönüt bandı için). */
+  previousWeekReview?: PreviousWeekReviewData | null;
   initialTab?: string;
   reportResult: WeeklyReportResult;
   examsResult: MockExamsResult;
@@ -120,7 +138,7 @@ export function StudentDetailTabs({
   weekStart,
   studentId,
   studentName,
-  initialComment,
+  previousWeekReview = null,
   initialTab,
   reportResult,
   examsResult,
@@ -139,6 +157,14 @@ export function StudentDetailTabs({
   );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewComment, setReviewComment] = useState<string | null>(
+    previousWeekReview?.feedback?.comment ?? null,
+  );
+  const [plannerRequest, setPlannerRequest] = useState<{
+    token: number;
+    carryOver: boolean;
+  } | null>(null);
 
   useEffect(() => {
     setSelectedDate(null);
@@ -161,6 +187,49 @@ export function StudentDetailTabs({
       cancelled = true;
     };
   }, [studentId]);
+
+  // Geçen hafta kaydı var, dönüt girilmemiş ve bu oturumda kapatılmamışsa
+  // değerlendirme pop-up'ı otomatik açılır.
+  useEffect(() => {
+    if (!previousWeekReview?.shouldPrompt) return;
+    const key = `dismissed_weekly_review_${studentId}_${previousWeekReview.currentWeekStart}`;
+    let dismissed = false;
+    try {
+      dismissed = window.sessionStorage.getItem(key) === "1";
+    } catch {
+      dismissed = false;
+    }
+    if (!dismissed) setReviewOpen(true);
+  }, [
+    previousWeekReview?.shouldPrompt,
+    previousWeekReview?.currentWeekStart,
+    studentId,
+  ]);
+
+  useEffect(() => {
+    if (previousWeekReview?.feedback) {
+      setReviewComment(previousWeekReview.feedback.comment);
+    }
+  }, [previousWeekReview?.feedback]);
+
+  function handleReviewDismiss() {
+    setReviewOpen(false);
+    if (!previousWeekReview) return;
+    try {
+      window.sessionStorage.setItem(
+        `dismissed_weekly_review_${studentId}_${previousWeekReview.currentWeekStart}`,
+        "1",
+      );
+    } catch {
+      // sessionStorage erişilemezse pop-up sonraki açılışta tekrar gösterilir.
+    }
+  }
+
+  function handleStartPlanning(carryOver: boolean) {
+    setReviewOpen(false);
+    setActiveTab("targets");
+    setPlannerRequest({ token: Date.now(), carryOver });
+  }
 
   const report = reportResult.success === true ? reportResult.data : null;
   const reportError =
@@ -202,6 +271,14 @@ export function StudentDetailTabs({
       <div role="tabpanel" id="detail-panel-report" aria-labelledby="detail-tab-report" hidden={activeTab !== "report"}>
         <div className="space-y-6">
           <WeekPicker monday={weekStart} compact />
+
+          {previousWeekReview ? (
+            <WeeklyFeedbackBand
+              comment={reviewComment}
+              weekLabel={formatWeekRangeShort(previousWeekReview.previousWeekStart)}
+              onOpen={() => setReviewOpen(true)}
+            />
+          ) : null}
 
           {reportError !== null ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
@@ -538,12 +615,6 @@ export function StudentDetailTabs({
             </>
           ) : null}
 
-          <FeedbackForm
-            key={weekStart}
-            studentId={studentId}
-            initialComment={initialComment}
-            weekStart={weekStart}
-          />
         </div>
       </div>
 
@@ -553,6 +624,7 @@ export function StudentDetailTabs({
           studentName={studentName}
           weekStart={weekStart}
           snapshot={curriculumResult.success === true ? curriculumResult.data : null}
+          plannerRequest={plannerRequest}
         />
       </div>
 
@@ -652,6 +724,18 @@ export function StudentDetailTabs({
               : undefined,
         }))}
       />
+
+      {previousWeekReview ? (
+        <WeeklyReviewModal
+          open={reviewOpen}
+          studentId={studentId}
+          review={previousWeekReview}
+          initialComment={reviewComment ?? ""}
+          onClose={handleReviewDismiss}
+          onSaved={(comment) => setReviewComment(comment)}
+          onStartPlanning={handleStartPlanning}
+        />
+      ) : null}
     </div>
   );
 }
